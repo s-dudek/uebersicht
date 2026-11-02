@@ -1,0 +1,14 @@
+{
+  "name": "uebersicht",
+  "private": true,
+  "type": "module",
+  "description": "Übersicht – persönliche Web-App für Todos, Notizen, Kalender und Wochenplan",
+  "scripts": {
+    "vorschau": "node demo/build.mjs",
+    "supabase": "esbuild tools/supabase-entry.js --bundle --format=esm --minify --platform=browser --outfile=js/vendor/supabase.js"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "2.118.0",
+    "esbuild": "0.24.0"
+  }
+}

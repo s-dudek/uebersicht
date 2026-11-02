@@ -1,7 +1,34 @@
 // Speichert die App-Dateien, damit sie auch bei schlechtem Netz schnell startet.
 // Bei jeder neuen Version die Nummer erhöhen.
-const CACHE = 'uebersicht-v8';
-const FILES = ['./', 'index.html', 'style.css', 'app.js', 'config.js', 'manifest.json', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
+const CACHE = 'uebersicht-v9';
+const FILES = [
+  './', 'index.html', 'style.css', 'config.js', 'manifest.json',
+  'icons/icon-192.png', 'icons/apple-touch-icon.png',
+  'js/actions.js',
+  'js/auth.js',
+  'js/calendar.js',
+  'js/categories.js',
+  'js/control.js',
+  'js/core.js',
+  'js/data.js',
+  'js/dates.js',
+  'js/drag.js',
+  'js/events.js',
+  'js/folders.js',
+  'js/groups.js',
+  'js/home.js',
+  'js/icons.js',
+  'js/items.js',
+  'js/main.js',
+  'js/meals.js',
+  'js/notes.js',
+  'js/panels.js',
+  'js/reminders.js',
+  'js/render.js',
+  'js/sheet.js',
+  'js/todos.js',
+  'js/vendor/supabase.js',
+];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
@@ -23,19 +50,13 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(
       fetch(e.request)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(e.request, copy));
+          if (res.ok) {   // nur erfolgreiche Antworten merken
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(e.request, copy));
+          }
           return res;
         })
         .catch(() => caches.match(e.request).then((r) => r || caches.match('index.html')))
-    );
-  } else if (url.hostname === 'cdn.jsdelivr.net') {
-    e.respondWith(
-      caches.match(e.request).then((r) => r || fetch(e.request).then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, copy));
-        return res;
-      }))
     );
   }
 });

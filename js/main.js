@@ -1,0 +1,22 @@
+// Einstieg: alle Teile starten, sobald die Module geladen sind
+import { initActions } from './actions.js';
+import { initAuth } from './auth.js';
+import { initCalendarGestures } from './calendar.js';
+import { startControl } from './control.js';
+import { initSync } from './data.js';
+import { initCategorySort, initItemDrag } from './drag.js';
+import { initReminders } from './reminders.js';
+
+startControl();          // Steuerknopf anlegen (wird von der Ansicht benutzt)
+initActions();           // Tippen und Absenden in der Hauptansicht
+initItemDrag();          // Einträge ziehen, sortieren, gruppieren
+initCategorySort();      // Ordner umsortieren
+initCalendarGestures();  // Kalender: antippen und wischen
+initSync();              // beim Zurückkehren in die App neu laden
+initReminders();         // Erinnerungen prüfen
+initAuth();              // Anmeldung prüfen, dann Daten laden
+
+// Offline-Zwischenspeicher und Push-Mitteilungen
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
