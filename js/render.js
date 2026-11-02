@@ -5,7 +5,7 @@ import { ctl } from './control.js';
 import { $app, catById, cfg, esc, state } from './core.js';
 import { addDays, isoWeek, ymd } from './dates.js';
 import { folderIc } from './folders.js';
-import { renderHome } from './home.js';
+import { renderHome, resetHomeIntro } from './home.js';
 import { ICON } from './icons.js';
 import { renderMeals } from './meals.js';
 import { notesIn, renderNotes } from './notes.js';
@@ -26,6 +26,7 @@ export function render() {
   const sameTab = render.lastTab === state.tab;
   render.lastTab = state.tab;
   if (!sameTab && !state.keepList) state.list = null;
+  if (!sameTab) resetHomeIntro();
   state.keepList = false;
 
   const openTodos = state.items.filter((i) => i.type === 'todo' && !i.done).length;

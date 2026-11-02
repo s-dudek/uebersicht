@@ -18,7 +18,13 @@ function homeEvents() {
   return `<div class="home-ev">${list.map(([e, w]) => `<button class="hev ${isBday(e) ? 'bday' : ''}" data-act="open" data-id="${e.id}">${isBday(e) ? ICON.cake : ICON.calendar}<span><em>${w}</em> ${esc(isBday(e) ? (e.title || 'Geburtstag') : e.title || 'Termin')}${!isBday(e) && e.meta?.time ? ' · ' + esc(e.meta.time) : ''}</span></button>`).join('')}</div>`;
 }
 
+// Das Lesezeichen-Logo fällt nur beim Betreten der Startseite herunter, nicht bei jedem Neuzeichnen
+let introShown = false;
+export function resetHomeIntro() { introShown = false; }
+
 export function renderHome() {
+  const settled = introShown;
+  introShown = true;
   const d = new Date();
   return `
   <div class="home">
@@ -26,7 +32,7 @@ export function renderHome() {
       <div class="home-day"><b>${d.toLocaleDateString('de-AT', { weekday: 'long' })}</b><span>${d.toLocaleDateString('de-AT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
         ${homeEvents()}</div>
     </header>
-    <div class="bookmark">${LOGO_PORTRAIT}</div>
+    <div class="bookmark ${settled ? 'settled' : ''}">${LOGO_PORTRAIT}</div>
     <div class="home-plate" aria-hidden="true"><i></i><i></i></div>
     <div class="home-foot">
       ${HOME_BTNS.map((b) => `<button class="hb ${b.key === 'logout' ? 'out' : ''}" data-home="${b.key}" aria-label="${b.label}">

@@ -26,8 +26,7 @@ export let ctl = null;
 
 function createControl() {
   const R = 160;          // Radius des Rads
-  const CHARGE = 480;     // ms gedrückt halten = aufladen, dann zurück zum Menü
-  const MOVE = 24;        // px Bewegung bricht das Aufladen ab
+  const MOVE = 24;        // px Bewegung: kein Tippen, sondern Wischen -> nichts tun
   const SIZE = 64, EDGE = 16;
 
   const el = document.createElement('div');
@@ -38,14 +37,14 @@ function createControl() {
     <div class="ctl-label" aria-live="polite"></div>
     ${WHEEL.map((w, i) => `<button class="wi ${w.soon ? 'soon' : ''}" data-go="${w.key}" style="--d:${i * 28}ms" tabindex="-1" aria-label="${w.label}">${ICON[w.icon]}</button>`).join('')}
     <div class="ctl-burst">${Array.from({ length: 10 }, (_, i) => `<i style="--a:${i * 36}deg"></i>`).join('')}</div>
-    <button class="ctl-btn" aria-label="Gedrückt halten: zurück zum Menü">${LOGO_MARK}</button>`;
+    <button class="ctl-btn" aria-label="Zurück zum Menü">${LOGO_MARK}</button>`;
   document.body.appendChild(el);
 
   const btn = el.querySelector('.ctl-btn');
   const label = el.querySelector('.ctl-label');
   const items = [...el.querySelectorAll('.wi')];
   let pos = [];
-  let holdT = 0, mode = 'idle', hovered = null, start = null;
+  let mode = 'idle', hovered = null, start = null;
   let anchorEl = null;   // 'center' auf der Home-Seite: Knopf groß in der Bildschirmmitte
   let active = WHEEL;    // aktuell sichtbare Ziele
 
@@ -176,37 +175,21 @@ function createControl() {
     pos.forEach((p, i) => { const d = Math.hypot(dx - p.x, dy - p.y); if (d < bd) { bd = d; best = active[i].key; } });
     return bd < 40 ? best : null;
   };
-  const stopTimers = () => { clearTimeout(holdT); el.classList.remove('charging'); };
 
   btn.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     if (mode === 'open') return;
     try { btn.setPointerCapture(e.pointerId); } catch {}
     start = { x: e.clientX, y: e.clientY };
-    if (anchorEl) { mode = 'press'; return; }          // Home: Bereiche stehen schon, kein Halten nötig
-    mode = 'press';
-    // Aufladen: Ring läuft voll, dann zurück zum Menü
-    void el.offsetWidth;
-    el.classList.add('charging');
-    navigator.vibrate?.([8, 60, 8, 60, 8, 60, 8]);
-    holdT = setTimeout(() => {
-      mode = 'charged';
-      el.classList.remove('charging');
-      el.classList.add('charged');
-      setTimeout(() => el.classList.remove('charged'), 400);
-      navigator.vibrate?.(20);
-      go('home');
-    }, CHARGE);
+    mode = 'press';   // Startseite: Ziel beim Loslassen; Unterseiten: kurz tippen = zurück zum Menü
   });
   btn.addEventListener('pointermove', (e) => {
     if (mode === 'open' || (anchorEl && mode === 'press')) return setHover(nearest(e));
     if (mode === 'press' && !anchorEl && Math.hypot(e.clientX - start.x, e.clientY - start.y) > MOVE) {
-      stopTimers();                    // weggezogen -> abbrechen
-      mode = 'idle';
+      mode = 'idle';                   // weggezogen -> abbrechen
     }
   });
   btn.addEventListener('pointerup', (e) => {
-    stopTimers();
     if (mode === 'press' && anchorEl) {
       const k = nearest(e);
       if (k) return go(k);
@@ -214,11 +197,10 @@ function createControl() {
       el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse');
       return;
     }
-    if (mode === 'press') { mode = 'idle'; return; }   // kurz tippen: nichts
-    if (mode === 'charged') { mode = 'idle'; return; }
+    if (mode === 'press') { mode = 'idle'; navigator.vibrate?.(10); return go('home'); }
     if (mode === 'open') { const k = nearest(e); if (k) go(k); else label.textContent = 'Ziel antippen'; }
   });
-  btn.addEventListener('pointercancel', () => { stopTimers(); if (mode !== 'open') close(); });
+  btn.addEventListener('pointercancel', () => { if (mode !== 'open') close(); });
   btn.addEventListener('contextmenu', (e) => e.preventDefault());
   btn.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); if (!anchorEl) go('home'); }

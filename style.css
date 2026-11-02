@@ -176,7 +176,15 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 .home-day b { font-family: var(--font-head); font-weight: 700; font-size: clamp(40px, 11vw, 56px); line-height: 1.05; }
 .home-day span { color: var(--grey); font-size: 19px; margin-top: 4px; }
 .home-foot { display: flex; justify-content: flex-end; gap: 10px; padding-top: 12px; margin-top: auto; }
+.bookmark.settled { animation: none; }
 .bookmark::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 200px; background: var(--ink); }
+/* Smartphone: Lesezeichen-Logo und die Knöpfe unten mittig; Beschriftung über dem Knopf */
+@media (max-width: 600px) {
+  .bookmark { right: auto; left: 50%; margin-left: -42px; }
+  .home-foot { justify-content: center; gap: 16px; }
+  .hb-l { top: auto; bottom: calc(100% + 8px); right: auto; left: 50%; margin-top: 0; translate: -50% 4px; }
+  .hb:hover .hb-l, .hb:focus-visible .hb-l, .hb:active .hb-l { translate: -50% 0; }
+}
 .home-ev { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 12px; pointer-events: auto; }
 .hev { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 6px 14px 6px 10px; border-radius: 999px; background: var(--white); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--soft), 0 4px 12px rgba(12,55,65,.08); font-size: 15px; }
 .hev svg { width: 17px; height: 17px; flex: none; }
@@ -243,8 +251,6 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 .ctl.revealing { opacity: 0; }
 .ctl { transition: opacity .25s; }
 body.is-dragging .ctl { opacity: 0; pointer-events: none; }
-.ctl.charging .ctl-btn { animation: chargeUp .48s cubic-bezier(.4,0,.6,1) forwards; }
-.ctl.charged .ctl-btn { animation: pulse .35s ease; }
 
 /* ==========================================================================
    Seitengerüst – Kopfleiste, Inhalt, Leiste unten, kleine Knöpfe
@@ -974,10 +980,6 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
    ========================================================================== */
 @keyframes up { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes wob {
-  0% { transform: rotate(0) scale(1); } 15% { transform: rotate(-9deg) scale(1.03); } 30% { transform: rotate(8deg) scale(1.05); }
-  45% { transform: rotate(-7deg) scale(1.07); } 60% { transform: rotate(6deg) scale(1.09); } 75% { transform: rotate(-4deg) scale(1.11); } 100% { transform: rotate(0) scale(1.12); }
-}
 @keyframes pop {
   0% { opacity: 1; transform: rotate(var(--a)) translateX(18px) scale(1); }
   100% { opacity: 0; transform: rotate(var(--a)) translateX(46px) scale(.3); }
@@ -987,15 +989,3 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 @keyframes pulse { 0% { scale: 1; } 40% { scale: 1.07; } 100% { scale: 1; } }
 @keyframes landed { 0% { background: var(--pale); } 100% { background: transparent; } }
 @keyframes rbIn { from { translate: -50% -30px; opacity: 0; } to { translate: -50% 0; opacity: 1; } }
-@keyframes charge { to { stroke-dashoffset: 0; } }
-@keyframes chargeUp {
-  0%   { transform: scale(1) rotate(0); }
-  12%  { transform: scale(1.05) rotate(-4deg); }
-  24%  { transform: scale(1.1) rotate(4deg); }
-  36%  { transform: scale(1.15) rotate(-5deg); }
-  48%  { transform: scale(1.2) rotate(5deg); }
-  60%  { transform: scale(1.25) rotate(-6deg); }
-  72%  { transform: scale(1.3) rotate(6deg); }
-  84%  { transform: scale(1.35) rotate(-4deg); }
-  100% { transform: scale(1.4) rotate(0); box-shadow: 0 0 0 6px var(--green-l), 0 14px 34px rgba(12,55,65,.4); }
-}
