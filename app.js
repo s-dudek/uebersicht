@@ -1656,7 +1656,7 @@ async function importPlan(plan) {
   // 1. Kategorie "Wocheneinkauf" sicherstellen (Liste, als Kachel)
   let cat = shopCat();
   if (!cat) {
-    const { data, error } = await sb.from('categories').insert({ name: SHOP_NAME, color: '#7FA08A', todo_list: true }).select().single();
+    const { data, error } = await insertCategory({ name: SHOP_NAME, color: '#7FA08A', todo_list: true });
     if (error) throw error;
     state.categories.push(data); cat = data;
     toast('Kategorie „Wocheneinkauf“ angelegt. Teile sie unter Kategorien mit deiner Freundin.', 5000);
@@ -2102,6 +2102,14 @@ async function toggleTodo(id) {
   if (error) { i.done = !i.done; render(); toast('Fehler: ' + error.message); }
 }
 
+// Kategorie anlegen ohne Rückgabe aus der Datenbank (die Zugriffsregel würde die neue Zeile sonst ablehnen):
+// ID selbst erzeugen, einfügen, dann lokal ergänzen
+async function insertCategory(fields) {
+  const row = { id: crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => (Math.random() * 16 | 0).toString(16)), owner_id: state.me, color: '#0C3741', todo_list: false, created_at: new Date().toISOString(), ...fields };
+  const { error } = await sb.from('categories').insert(row);
+  if (error) return { error };
+  return { data: row };
+}
 async function createTodo(cat = null) {
   const { data, error } = await sb.from('items').insert({ type: 'todo', title: '', category_id: cat }).select().single();
   if (error) return toast('Fehler: ' + error.message);
@@ -2568,7 +2576,7 @@ function openNewList({ mode = 'list' } = {}) {
     e.preventDefault();
     const name = sheet.querySelector('#nl-name').value.trim();
     if (!name) return;
-    const { data, error } = await sb.from('categories').insert({ name, color, todo_list: isList }).select().single();
+    const { data, error } = await insertCategory({ name, color, todo_list: isList });
     if (error) return toast('Fehler: ' + error.message);
     state.categories.push(data);
     state.categories.sort((a, b) => a.name.localeCompare(b.name, 'de'));
