@@ -64,6 +64,7 @@ const ICON = {
   list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.5" cy="6.5" r="1.2" fill="currentColor"/><circle cx="4.5" cy="12" r="1.2" fill="currentColor"/><circle cx="4.5" cy="17.5" r="1.2" fill="currentColor"/></svg>',
   grip: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
   calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+  stack: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M7 5h10M9.5 2.5h5"/></svg>',
   down: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>',
 };
 
@@ -145,6 +146,7 @@ const state = {
   doneOpen: new Set(),   // Todo-Listen, deren erledigte Einträge aufgeklappt sind
   views: (() => { try { return JSON.parse(store('views')) || {}; } catch { return {}; } })(),   // je Bereich 'detail' oder 'list'
   folded: new Set(),    // zugeklappte Ordner in der Listenansicht
+  list: null,           // geöffnete Todo-Liste (null = Übersicht, '' = Allgemein)
   loaded: false,
 };
 
@@ -337,6 +339,7 @@ let lastIndLeft = null;
 
 function render() {
   if (!state.me || !state.loaded) return;
+  if (render.hold) { render.pending = true; return; }
   // Eingabe im "Neues Todo"-Feld und Scrollposition bei Live-Updates behalten
   const typedMap = {};
   document.querySelectorAll('.addrow[data-list] input').forEach((i) => { if (i.value) typedMap[i.closest('form').dataset.list] = i.value; });
@@ -344,6 +347,8 @@ function render() {
   const prevScroll = document.querySelector('.main')?.scrollTop || 0;
   const sameTab = render.lastTab === state.tab;
   render.lastTab = state.tab;
+  if (!sameTab && !state.keepList) state.list = null;
+  state.keepList = false;
 
   const openTodos = state.items.filter((i) => i.type === 'todo' && !i.done).length;
   const noteCount = state.items.filter((i) => i.type === 'note').length;
@@ -424,43 +429,72 @@ function tileHead(title, count, act, label) {
   </div>`;
 }
 
+// Todos: zuerst die Ordner (Listen), geöffnet eine Liste groß mit Titeln, Tippen = Details
+const todoLists = () => [
+  ...state.categories.filter(isTodoList).map((c) => ({ id: c.id, name: c.name, color: c.color, shared: isCatShared(c) })),
+  { id: '', name: 'Allgemein', color: null, shared: false },
+];
+const todosIn = (lid) => state.items.filter((i) => i.type === 'todo' && (lid ? i.category_id === lid : !i.category_id || !catById(i.category_id)));
+const byDue = (a, b) => {
+  if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date);
+  if (a.due_date) return -1;
+  if (b.due_date) return 1;
+  return b.created_at.localeCompare(a.created_at);
+};
+
 function renderTodos() {
-  const todos = state.items.filter((i) => i.type === 'todo');
-  const lists = [
-    ...state.categories.filter(isTodoList).map((c) => ({ id: c.id, name: c.name, color: c.color, shared: isCatShared(c) })),
-    { id: '', name: 'Allgemein', color: null, shared: false },
-  ];
-  const openAll = todos.filter((i) => !i.done).length;
-  const byDue = (a, b) => {
-    if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date);
-    if (a.due_date) return -1;
-    if (b.due_date) return 1;
-    return b.created_at.localeCompare(a.created_at);
+  if (state.list !== null && (state.list === '' || catById(state.list))) return renderTodoList(state.list);
+  state.list = null;
+  const card = (l) => {
+    const mine = todosIn(l.id);
+    const open = mine.filter((i) => !i.done);
+    const due = open.filter((i) => i.due_date && dueLabel(i.due_date).overdue).length;
+    return `<button class="fcard" data-act="open-list" data-id="${l.id}" data-drop="${l.id}">
+      <span class="fc-ic" style="--fc:${esc(l.color || '#9AABA6')}">${ICON.folder}</span>
+      <span class="fc-n">${esc(l.name)}</span>
+      <span class="fc-s">${open.length ? `${open.length} offen` : mine.length ? 'alles erledigt' : 'leer'}${due ? ` · <em>${due} überfällig</em>` : ''}</span>
+      ${l.shared ? `<span class="fc-sh" title="gemeinsam">${ICON.share}</span>` : ''}
+      <span class="fc-c ${open.length ? '' : 'zero'}">${open.length}</span>
+    </button>`;
   };
-  const row = krow;
-  const tile = (l) => {
-    const mine = todos.filter((i) => (l.id ? i.category_id === l.id : !i.category_id || !catById(i.category_id)));
-    const open = mine.filter((i) => !i.done).sort(byDue);
-    const done = mine.filter((i) => i.done).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-    const showDone = state.doneOpen.has(l.id);
-    return `<section class="tile tlist" data-drop="${l.id}">
-      <div class="th">
-        ${l.color ? `<i class="ldot" style="background:${esc(l.color)}"></i>` : '<i class="ldot none"></i>'}
-        <b>${esc(l.name)}</b>
-        ${l.shared ? `<small class="lshared">${ICON.share}gemeinsam</small>` : ''}
-        <span class="th-sp"></span>
-        ${tileToggle('todos', l.id, true)}
-        ${l.id ? `<button class="lgear" data-act="list-edit" data-id="${l.id}" aria-label="Liste bearbeiten">${ICON.dots}</button>` : ''}
-        <span class="cnt ${open.length ? '' : 'zero'}">${open.length}</span>
-      </div>
-      <form class="addrow kadd" data-list="${l.id}"><span class="xic">${ICON.plus}</span><input name="title" placeholder="Hinzufügen …" autocomplete="off" enterkeyhint="done"></form>
-      ${open.length ? (open.some((i) => i.meta?.section) ? groupBySection(open, row) : `<div class="krows">${open.map(row).join('')}</div>`) : '<p class="kempty">Alles erledigt.</p>'}
-      ${done.length ? `<button class="done-toggle" data-act="toggle-done" data-id="${l.id}" aria-expanded="${showDone}">
-        <span class="chev ${showDone ? 'open' : ''}">${ICON.chevron}</span>${done.length} erledigt</button>
-        ${showDone ? `<div class="krows">${done.map(row).join('')}</div>` : ''}` : ''}
-    </section>`;
-  };
-  return mixed('todos', lists, tile);
+  return `<div class="fgrid">${todoLists().map(card).join('')}
+    <button class="fcard fnew" data-act="new-list"><span class="fc-ic">${ICON.plus}</span><span class="fc-n">Neue Liste</span></button>
+  </div>`;
+}
+
+// Beim Ziehen erscheinen die anderen Ordner als Ablageziele
+function dropTray(folders, current) {
+  const others = folders.filter((f) => f.id !== current);
+  if (!others.length) return '';
+  return `<div class="droptray" aria-hidden="true">
+    <div class="dt-h">Verschieben nach …</div>
+    <div class="dt-list">${others.map((f) => `<div class="dt" data-drop="${f.id}"><span class="dt-ic" style="--fc:${esc(f.color || '#9AABA6')}">${ICON.folder}</span><span>${esc(f.name)}</span></div>`).join('')}</div>
+  </div>`;
+}
+
+function renderTodoList(lid) {
+  const mine = todosIn(lid);
+  const open = mine.filter((i) => !i.done).sort(byDue);
+  const done = mine.filter((i) => i.done).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  const showDone = state.doneOpen.has(lid);
+  const row = (i) => `
+    <div class="trow ${i.done ? 'done' : ''}" data-drag="${i.id}">
+      <button class="tcheck ${i.done ? 'on' : ''}" data-act="toggle" data-id="${i.id}" aria-label="${i.done ? 'Wieder öffnen' : 'Erledigt'}">${i.done ? ICON.check : ''}</button>
+      <button class="tname" data-act="open" data-id="${i.id}">${i.icon ? `<span class="tic-in">${itemIcon(i)}</span>` : ''}<span>${esc(i.title) || '<span class="muted">Ohne Titel</span>'}</span></button>
+      ${i.meta?.amount ? `<span class="kamt">${esc(i.meta.amount)}</span>` : ''}
+      ${!i.done && i.remind_at && !i.reminded ? `<span class="tbell" title="Erinnerung">${ICON.bell}</span>` : ''}
+      ${!i.done ? dueTag(i) : ''}
+    </div>`;
+  const rows = (list) => `<div class="trows">${list.map(row).join('')}</div>`;
+  return `<section class="tbig" data-drop="${lid}">
+    <form class="addrow tadd" data-list="${lid}"><span class="xic">${ICON.plus}</span><input name="title" placeholder="Neues Todo …" autocomplete="off" enterkeyhint="done"></form>
+    ${open.length ? (open.some((i) => i.meta?.section) ? groupBySection(open, row).replaceAll('class="krows"', 'class="trows"') : rows(open)) : '<p class="kempty">Alles erledigt.</p>'}
+    ${done.length ? `<button class="done-toggle" data-act="toggle-done" data-id="${lid}" aria-expanded="${showDone}">
+      <span class="chev ${showDone ? 'open' : ''}">${ICON.chevron}</span>${done.length} erledigt</button>
+      ${showDone ? rows(done) : ''}` : ''}
+  </section>
+  ${dropTray(todoLists(), lid)}
+  <p class="hint xhint">Todo lange drücken, um es in eine andere Liste zu ziehen.</p>`;
 }
 
 function groupBySection(items, row) {
@@ -473,29 +507,118 @@ function groupBySection(items, row) {
     </div>`).join('');
 }
 
+// Notizen: wie Todos – Ordner-Übersicht, geöffnet groß mit Titeln, Tippen = Notiz
+const noteFolders = () => [
+  ...state.categories.map((c) => ({ id: c.id, name: c.name, color: c.color, shared: isCatShared(c) })),
+  { id: '', name: 'Ohne Kategorie', color: null, shared: false },
+];
+// Reihenfolge: eigene Sortierung (meta.sort); neue, noch nicht sortierte Notizen oben
+const noteKey = (n) => (typeof n.meta?.sort === 'number' ? n.meta.sort : -1e9);
+const notesIn = (fid) => state.items.filter((i) => i.type === 'note' && (fid ? i.category_id === fid : !i.category_id || !catById(i.category_id)))
+  .sort((a, b) => noteKey(a) - noteKey(b) || b.updated_at.localeCompare(a.updated_at));
+// Blöcke: einzelne Notizen und Gruppen (meta.group), Gruppe steht an der Stelle ihres ersten Mitglieds
+function noteBlocks(fid) {
+  const list = notesIn(fid), seen = new Set(), out = [];
+  for (const n of list) {
+    const g = n.meta?.group;
+    if (!g) { out.push({ note: n }); continue; }
+    if (seen.has(g)) continue;
+    seen.add(g);
+    const items = list.filter((x) => x.meta?.group === g);
+    out.push({ group: g, name: items.find((x) => x.meta?.gname)?.meta.gname || 'Gruppe', items });
+  }
+  return out;
+}
+
 function renderNotes() {
-  const folders = [
-    ...state.categories.map((c) => ({ id: c.id, name: c.name, color: c.color, shared: isCatShared(c) })),
-    { id: '', name: 'Ohne Kategorie', color: null, shared: false },
-  ];
-  const notes = state.items.filter((i) => i.type === 'note').sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-  const tile = (f) => {
-    const list = notes.filter((n) => (f.id ? n.category_id === f.id : !n.category_id || !catById(n.category_id)));
-    return `<section class="tile ntile" data-drop="${f.id}">
-      <div class="th">
-        ${f.color ? `<i class="ldot" style="background:${esc(f.color)}"></i>` : '<i class="ldot none"></i>'}
-        <b>${esc(f.name)}</b>
-        ${f.shared ? `<small class="lshared">${ICON.share}gemeinsam</small>` : ''}
-        <span class="th-sp"></span>
-        <button class="lgear" data-act="new-note-in" data-id="${f.id}" aria-label="Neue Notiz">${ICON.plus}</button>
-        ${tileToggle('notes', f.id, true)}
-        ${f.id ? `<button class="lgear" data-act="list-edit" data-id="${f.id}" aria-label="Bearbeiten">${ICON.dots}</button>` : ''}
-        <span class="cnt ${list.length ? '' : 'zero'}">${list.length}</span>
-      </div>
-      ${list.length ? `<div class="krows">${list.map(krow).join('')}</div>` : '<p class="ng-empty">Leer. Notizen hierher ziehen.</p>'}
-    </section>`;
+  if (state.list !== null && (state.list === '' || catById(state.list))) return renderNoteList(state.list);
+  state.list = null;
+  const card = (f) => {
+    const list = notesIn(f.id);
+    return `<button class="fcard" data-act="open-list" data-id="${f.id}">
+      <span class="fc-ic" style="--fc:${esc(f.color || '#9AABA6')}">${ICON.folder}</span>
+      <span class="fc-n">${esc(f.name)}</span>
+      <span class="fc-s">${list.length ? `${list.length} ${list.length === 1 ? 'Notiz' : 'Notizen'}` : 'leer'}</span>
+      ${f.shared ? `<span class="fc-sh" title="gemeinsam">${ICON.share}</span>` : ''}
+      <span class="fc-c ${list.length ? '' : 'zero'}">${list.length}</span>
+    </button>`;
   };
-  return mixed('notes', folders, tile);
+  return `<div class="fgrid">${noteFolders().map(card).join('')}
+    <button class="fcard fnew" data-act="new-cat"><span class="fc-ic">${ICON.plus}</span><span class="fc-n">Neuer Ordner</span></button>
+  </div>`;
+}
+
+function renderNoteList(fid) {
+  const blocks = noteBlocks(fid);
+  const row = (n) => `
+    <div class="trow" data-drag="${n.id}" data-gid="${esc(n.meta?.group || '')}">
+      <span class="nic ${n.icon ? 'has' : ''}">${itemIcon(n)}</span>
+      <button class="tname" data-act="open" data-id="${n.id}"><span>${esc(n.title) || '<span class="muted">Ohne Titel</span>'}</span></button>
+      ${n.remind_at && !n.reminded ? `<span class="tbell" title="Erinnerung">${ICON.bell}</span>` : ''}
+      ${n.owner_id !== state.me ? `<span class="tby">${esc(nameOf(n.owner_id))}</span>` : ''}
+    </div>`;
+  const group = (b) => {
+    const key = 'g:' + b.group, folded = state.folded.has(key);
+    return `<div class="ngrp ${folded ? 'folded' : ''}">
+      <div class="ngrp-h" data-ghead="${esc(b.group)}">
+        <button class="xtoggle" data-act="fold" data-id="${esc(key)}" aria-label="${folded ? 'Aufklappen' : 'Zuklappen'}">${ICON.chevron}</button>
+        <span class="ngrp-ic">${ICON.stack}</span>
+        <button class="ngrp-n" data-act="group-edit" data-id="${esc(b.group)}" data-f="${fid}">${esc(b.name)}</button>
+        <span class="ngrp-c">${b.items.length}</span>
+      </div>
+      ${folded ? '' : `<div class="ngrp-b">${b.items.map(row).join('')}</div>`}
+    </div>`;
+  };
+  return `<section class="tbig" data-drop="${fid}">
+    <button class="addrow tadd tnew" data-act="new-note-in" data-id="${fid}"><span class="xic">${ICON.plus}</span><span>Neue Notiz …</span></button>
+    ${blocks.length ? `<div class="trows" data-sortable="${fid}">${blocks.map((b) => (b.group ? group(b) : row(b.note))).join('')}<div class="tend" data-end="1"></div></div>` : '<p class="kempty">Noch keine Notizen.</p>'}
+  </section>
+  ${dropTray(noteFolders(), fid)}
+  ${blocks.length ? '<p class="hint xhint">Lange drücken und ziehen: nach oben oder unten verschieben, auf eine andere Notiz halten für eine Gruppe, unten in einen anderen Ordner.</p>' : ''}`;
+}
+
+// Neue Reihenfolge / Gruppen speichern (ein Render, Speichern im Hintergrund)
+async function applyNoteOrder(fid, flat) {
+  // flat: [{id, group}] in neuer Reihenfolge; Gruppen mit nur einer Notiz lösen sich auf
+  const cnt = {}; flat.forEach((f) => { if (f.group) cnt[f.group] = (cnt[f.group] || 0) + 1; });
+  const jobs = [];
+  flat.forEach((f, idx) => {
+    const n = itemById(f.id); if (!n) return;
+    const group = f.group && cnt[f.group] > 1 ? f.group : null;
+    const meta = { ...(n.meta || {}), sort: (idx + 1) * 10 };
+    if (group) { meta.group = group; meta.gname = f.gname || meta.gname || 'Gruppe'; } else { delete meta.group; delete meta.gname; }
+    if (JSON.stringify(meta) === JSON.stringify(n.meta || {})) return;
+    n.meta = meta;
+    jobs.push(sb.from('items').update({ meta }).eq('id', n.id));
+  });
+  render();
+  const res = await Promise.all(jobs);
+  const err = res.find((r) => r.error);
+  if (err) toast('Speichern fehlgeschlagen: ' + err.error.message, 4000);
+}
+const flatOrder = (fid) => noteBlocks(fid).flatMap((b) => (b.group ? b.items.map((n) => ({ id: n.id, group: b.group, gname: b.name })) : [{ id: b.note.id, group: null }]));
+
+function openGroupEdit(gid, fid) {
+  const b = noteBlocks(fid).find((x) => x.group === gid);
+  if (!b) return;
+  const sheet = openSheet(`
+    <div class="sheet-head"><h2>Gruppe</h2><button class="link-btn" data-close>Fertig</button></div>
+    <div class="field"><label for="g-name">Name</label><input class="input" id="g-name" value="${esc(b.name)}" autocomplete="off"></div>
+    <p class="hint">${b.items.length} Notizen: ${b.items.map((n) => esc(n.title || 'Ohne Titel')).join(', ')}</p>
+    <div class="divider"></div>
+    <button class="btn danger block" id="g-split">Gruppe auflösen</button>`, {
+    onClose: () => {
+      const v = sheet.querySelector('#g-name').value.trim() || 'Gruppe';
+      if (v !== b.name) applyNoteOrder(fid, flatOrder(fid).map((f) => (f.group === gid ? { ...f, gname: v } : f)));
+    },
+  });
+  sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
+  sheet.querySelector('#g-split').addEventListener('click', () => {
+    sheet.querySelector('#g-name').value = b.name;
+    closeSheet();
+    applyNoteOrder(fid, flatOrder(fid).map((f) => (f.group === gid ? { id: f.id, group: null } : f)));
+    toast('Gruppe aufgelöst');
+  });
 }
 
 // ---------- Kopfkachel (hängt am oberen Rand) ----------
@@ -508,6 +631,19 @@ function pageHead(tab) {
     calendar: { title: 'Kalender', act: 'week-today', label: 'Heute', count: 0, icon: 'calendar' },
   }[tab];
   if (!cfg) return '';
+  if ((tab === 'todos' || tab === 'notes') && state.list !== null) {
+    const c = catById(state.list);
+    const n = tab === 'todos' ? todosIn(state.list).filter((i) => !i.done).length : notesIn(state.list).length;
+    return `<header class="pagehead">
+    <div class="ph-in">
+      <button class="ph-back" data-act="close-list" aria-label="Zurück zu den Listen">${ICON.chevL}</button>
+      ${c ? `<i class="ldot" style="background:${esc(c.color)}"></i>` : ''}
+      <b class="ph-t">${esc(c ? c.name : tab === 'todos' ? 'Allgemein' : 'Ohne Kategorie')}</b>
+      <span class="cnt ${n ? '' : 'zero'}">${n}</span>
+      ${c ? `<button class="cbtn ph-add" data-act="list-edit" data-id="${c.id}" aria-label="Bearbeiten" title="Bearbeiten">${ICON.dots}</button>` : ''}
+    </div>
+  </header>`;
+  }
   return `<header class="pagehead">
     <div class="ph-in">
       <b>${cfg.title}</b>
@@ -634,23 +770,30 @@ function explorer(tab, folders) {
   const dropAt = (x, y) => document.elementFromPoint(x, y)?.closest('[data-drop]');
 
   const begin = (p) => {
-    const el = p.el;
+    // Falls inzwischen neu gezeichnet wurde: aktuelles Element suchen
+    const el = p.el.isConnected ? p.el : document.querySelector(`[data-drag="${p.el.dataset.drag}"]`);
+    if (!el) return;
     const r = el.getBoundingClientRect();
     const ghost = el.cloneNode(true);
     ghost.classList.add('drag-ghost');
     ghost.removeAttribute('data-drag');
-    ghost.style.width = r.width + 'px';
+    const gw = Math.min(r.width, 270);   // kompakter Geist, schwebt über dem Finger
+    ghost.style.width = gw + 'px';
     ghost.style.left = r.left + 'px';
     ghost.style.top = r.top + 'px';
     document.body.appendChild(ghost);
     el.classList.add('dragging');
     document.body.classList.add('is-dragging');
-    drag = { id: el.dataset.drag, el, ghost, dx: p.x - r.left, dy: p.y - r.top, from: el.closest('[data-drop]')?.dataset.drop ?? '', over: null, y: p.y, x: p.x, raf: 0 };
+    render.hold = true;   // während des Ziehens nicht neu zeichnen
+    const sortable = el.closest('[data-sortable]');
+    drag = { id: el.dataset.drag, el, ghost, dx: Math.min(p.x - r.left, gw - 30), dy: r.height + 14, from: el.closest('[data-drop]')?.dataset.drop ?? '', over: null, y: p.y, x: p.x, raf: 0,
+      sortable, ins: null, merge: null, mergeT: 0, mergeCand: null };
     navigator.vibrate?.(12);
     const loop = () => {
       if (!drag) return;
       const m = scroller(); const mr = m.getBoundingClientRect();
-      if (drag.y < mr.top + 70) m.scrollTop -= 12;
+      if (drag.over?.classList.contains('dt')) { /* über dem Ablagefeld nicht scrollen */ }
+      else if (drag.y < mr.top + 70) m.scrollTop -= 12;
       else if (drag.y > mr.bottom - 70) m.scrollTop += 12;
       move(drag.x, drag.y);
       drag.raf = requestAnimationFrame(loop);
@@ -667,14 +810,106 @@ function explorer(tab, folders) {
       drag.over = g;
       if (g && g.dataset.drop !== drag.from) g.classList.add('over');
     }
+    if (drag.sortable) sortMove(x, y);
+  };
+  // Innerhalb einer Notizliste: Einfügestelle (oben/unten) oder Gruppe bilden (in der Mitte halten)
+  const MERGE_HOLD = 550;
+  const clearMarks = () => {
+    drag.ins?.el.classList.remove('ins-before', 'ins-after');
+    drag.ins = null;
+  };
+  const setMerge = (el) => {
+    if (drag.merge === el) return;
+    drag.merge?.classList.remove('merge');
+    drag.merge = el;
+    if (el) { el.classList.add('merge'); navigator.vibrate?.(8); }
+  };
+  const sortMove = (x, y) => {
+    const hit = document.elementFromPoint(x, y);
+    const inList = hit && drag.sortable.contains(hit);
+    const t = inList ? hit.closest('.trow[data-drag], .ngrp-h, .tend') : null;
+    if (!t || t === drag.el) {
+      clearMarks(); setMerge(null); clearTimeout(drag.mergeT); drag.mergeCand = null;
+      return;
+    }
+    const r = t.getBoundingClientRect();
+    const rel = (y - r.top) / r.height;
+    const center = !t.classList.contains('tend') && rel > 0.28 && rel < 0.72;
+    if (center) {
+      clearMarks();
+      if (drag.mergeCand !== t) {
+        clearTimeout(drag.mergeT); setMerge(null); drag.mergeCand = t;
+        drag.mergeT = setTimeout(() => { if (drag && drag.mergeCand === t) setMerge(t); }, MERGE_HOLD);
+      }
+      return;
+    }
+    clearTimeout(drag.mergeT); drag.mergeCand = null; setMerge(null);
+    const after = t.classList.contains('tend') ? false : rel >= 0.5;
+    if (drag.ins?.el === t && drag.ins.after === after) return;
+    clearMarks();
+    drag.ins = { el: t, after };
+    t.classList.add(after ? 'ins-after' : 'ins-before');
+  };
+  const sortFinish = (d) => {
+    const fid = d.sortable.dataset.sortable;
+    const flat = flatOrder(fid);
+    const me = flat.find((f) => f.id === d.id);
+    if (!me) return false;
+    const rest = flat.filter((f) => f.id !== d.id);
+    const idxOf = (id) => rest.findIndex((f) => f.id === id);
+    if (d.merge) {
+      const m = d.merge;
+      if (m.classList.contains('ngrp-h')) {           // auf Gruppenkopf: ans Ende der Gruppe
+        const gid = m.dataset.ghead;
+        const last = rest.map((f) => f.group).lastIndexOf(gid);
+        const gname = rest.find((f) => f.group === gid)?.gname;
+        rest.splice(last + 1, 0, { id: d.id, group: gid, gname });
+      } else {
+        const tid = m.dataset.drag, ti = idxOf(tid), tf = rest[ti];
+        let gid = tf.group, gname = tf.gname;
+        if (!gid) { gid = 'g' + Date.now().toString(36); gname = 'Gruppe'; rest[ti] = { ...tf, group: gid, gname }; }
+        rest.splice(ti + 1, 0, { id: d.id, group: gid, gname });
+      }
+      applyNoteOrder(fid, rest);
+      toast('Gruppe gebildet – Namen antippen zum Umbenennen');
+      return true;
+    }
+    if (!d.ins) return false;
+    const { el, after } = d.ins;
+    let at, group = null, gname;
+    if (el.classList.contains('tend')) at = rest.length;
+    else if (el.classList.contains('ngrp-h')) {        // vor/nach einem Gruppenkopf
+      const gid = el.dataset.ghead;
+      const first = rest.findIndex((f) => f.group === gid);
+      if (after) { at = first; group = gid; gname = rest[first]?.gname; }   // als erste Notiz in die Gruppe
+      else at = first;                                                       // vor die Gruppe
+    } else {
+      const ti = idxOf(el.dataset.drag), tf = rest[ti];
+      at = after ? ti + 1 : ti;
+      if (tf.group) {
+        const firstOfGroup = rest.findIndex((f) => f.group === tf.group) === ti;
+        if (after || !firstOfGroup) { group = tf.group; gname = tf.gname; }
+      }
+    }
+    rest.splice(at, 0, { id: d.id, group, gname });
+    const changed = rest.some((f, i) => f.id !== flat[i].id || (f.group || null) !== (flat[i].group || null));
+    if (changed) applyNoteOrder(fid, rest);
+    return changed;
   };
   const finish = async (cancel) => {
     const d = drag; drag = null;
+    render.hold = false;
+    const redo = render.pending; render.pending = false;
+    if (redo) setTimeout(render, 0);
     cancelAnimationFrame(d.raf);
     document.body.classList.remove('is-dragging');
     d.over?.classList.remove('over');
     d.el.classList.remove('dragging');
+    clearTimeout(d.mergeT);
+    d.merge?.classList.remove('merge');
+    d.ins?.el.classList.remove('ins-before', 'ins-after');
     const target = !cancel && d.over ? d.over.dataset.drop : null;
+    if (!cancel && d.sortable && !d.over?.classList.contains('dt') && sortFinish(d)) { d.ghost.remove(); return; }
     if (target === null || target === d.from) {
       d.ghost.classList.add('back');
       const r = d.el.getBoundingClientRect();
@@ -694,7 +929,7 @@ function explorer(tab, folders) {
   $app.addEventListener('pointerdown', (e) => {
     if (e.button > 0) return;
     const el = e.target.closest('[data-drag]');
-    if (!el || e.target.closest('.check, .xcheck, input')) return;
+    if (!el || e.target.closest('.check, .xcheck, .tcheck, input')) return;
     const p = { el, x: e.clientX, y: e.clientY, id: e.pointerId, t: 0 };
     if (e.target.closest('[data-grip]')) { e.preventDefault(); press = p; return begin(p); }
     p.t = setTimeout(() => { if (press === p) begin(p); }, HOLD);
@@ -1223,6 +1458,7 @@ const ctl = (() => {
     if (w.soon) return toast(`${w.label} kommt als Nächstes.`);
     if (k === 'quick') return openQuickNote();
     closeSheet();
+    if (state.tab === k && (k === 'todos' || k === 'notes') && state.list !== null) { state.list = null; return render(); }
     if (state.tab === k) return;
     reveal(() => {
       state.tab = k;
@@ -1326,6 +1562,9 @@ $app.addEventListener('click', async (e) => {
   const id = t.dataset.id;
   switch (t.dataset.act) {
     case 'toggle': toggleTodo(id); break;
+    case 'group-edit': openGroupEdit(id, t.dataset.f); break;
+    case 'open-list': state.list = id || ''; render(); document.querySelector('.main')?.scrollTo({ top: 0 }); break;
+    case 'close-list': state.list = null; render(); break;
     case 'open': openItem(id); break;
     case 'toggle-done': state.doneOpen.has(id || '') ? state.doneOpen.delete(id || '') : state.doneOpen.add(id || ''); render(); break;
     case 'new-list': openNewList(); break;
@@ -1333,7 +1572,7 @@ $app.addEventListener('click', async (e) => {
     case 'week-prev': state.weekStart = addDays(state.weekStart, -7); render(); break;
     case 'week-next': state.weekStart = addDays(state.weekStart, 7); render(); break;
     case 'week-today': state.weekStart = mondayOf(new Date()); render(); break;
-    case 'goto-shop': state.tab = 'todos'; render(); setTimeout(() => (() => { const el = document.querySelector(`.tlist[data-drop="${shopCat()?.id}"]`), m = document.querySelector('.main'); if (el && m) m.scrollTo({ top: el.offsetTop - 12, behavior: 'smooth' }); })(), 50); break;
+    case 'goto-shop': state.tab = 'todos'; state.keepList = true; state.list = shopCat()?.id ?? null; render(); break;
     case 'demo-plan': importPlan(window.__DEMO_PLAN()).then((r) => { render(); toast(`${r.meals} Gerichte und ${r.added} Einkäufe übernommen`); }); break;
     case 'tile-toggle': toggleTile(t.dataset.tt, id); break;
     case 'fold': state.folded.has(id) ? state.folded.delete(id) : state.folded.add(id); render(); break;
