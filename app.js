@@ -65,6 +65,7 @@ const ICON = {
   grip: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
   calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
   stack: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M7 5h10M9.5 2.5h5"/></svg>',
+  cake: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16M5 20v-6.5A2.5 2.5 0 0 1 7.5 11h9a2.5 2.5 0 0 1 2.5 2.5V20"/><path d="M5 15.5c1.2 1 2.3 1 3.5 0s2.3-1 3.5 0 2.3 1 3.5 0 2.3-1 3.5 0"/><path d="M12 11V8M12 5.6c.8-.7.8-1.8 0-2.6-.8.8-.8 1.9 0 2.6z"/></svg>',
   down: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>',
 };
 
@@ -146,6 +147,8 @@ const state = {
   doneOpen: new Set(),   // Todo-Listen, deren erledigte Einträge aufgeklappt sind
   views: (() => { try { return JSON.parse(store('views')) || {}; } catch { return {}; } })(),   // je Bereich 'detail' oder 'list'
   folded: new Set(),    // zugeklappte Ordner in der Listenansicht
+  calView: store('calView') || 'week',   // 'day' | 'week' | 'month'
+  calDate: null,        // gezeigter Tag im Kalender (YYYY-MM-DD)
   list: null,           // geöffnete Todo-Liste (null = Übersicht, '' = Allgemein)
   loaded: false,
 };
@@ -357,9 +360,10 @@ function render() {
   $app.innerHTML = `
   <div class="app">
     ${state.tab === 'home' ? '' : pageHead(state.tab)}
-    <main class="main ${state.tab === 'home' ? 'is-home' : ''}">
+    <main class="main ${state.tab === 'home' ? 'is-home' : 'has-dock'}">
       ${({ home: renderHome, todos: renderTodos, notes: renderNotes, categories: renderCategoryPage, meals: renderMeals, calendar: renderCalendar })[state.tab]?.() ?? renderHome()}
     </main>
+    ${state.tab === 'home' ? '' : `<nav class="dock" aria-label="Aktionen">${dockFor(state.tab)}</nav>`}
   </div>`;
   ctl.show(true, state.tab === 'home' ? 'center' : null);
 
@@ -430,8 +434,30 @@ function tileHead(title, count, act, label) {
 }
 
 // Todos: zuerst die Ordner (Listen), geöffnet eine Liste groß mit Titeln, Tippen = Details
+// Reihenfolge der Ordner: je Person gespeichert (profiles.cat_order), sonst im Browser
+const CAT_ORDER_KEY = 'uebersicht-cat-order';
+const catOrder = (kind) => {
+  const p = state.profiles[state.me]?.cat_order;
+  if (p && Array.isArray(p[kind])) return p[kind];
+  try { return JSON.parse(localStorage.getItem(CAT_ORDER_KEY))?.[kind] || []; } catch { return []; }
+};
+const orderCats = (list, kind) => {
+  const o = catOrder(kind);
+  const idx = (c) => { const k = o.indexOf(c.id); return k < 0 ? 1e6 : k; };
+  return [...list].sort((a, b) => idx(a) - idx(b) || a.name.localeCompare(b.name, 'de'));
+};
+async function saveCatOrder(kind, ids) {
+  const me = state.profiles[state.me] || (state.profiles[state.me] = { id: state.me });
+  const all = { ...(me.cat_order || {}) };
+  try { const ls = JSON.parse(localStorage.getItem(CAT_ORDER_KEY)) || {}; ls[kind] = ids; localStorage.setItem(CAT_ORDER_KEY, JSON.stringify(ls)); } catch {}
+  all[kind] = ids;
+  me.cat_order = all;
+  render();
+  const { error } = await sb.from('profiles').update({ cat_order: all }).eq('id', state.me);
+  if (error && !/cat_order/.test(error.message)) toast('Reihenfolge nicht gespeichert: ' + error.message, 4000);
+}
 const todoLists = () => [
-  ...state.categories.filter(isTodoList).map((c) => ({ id: c.id, name: c.name, color: c.color, shared: isCatShared(c) })),
+  ...orderCats(state.categories.filter(isTodoList), 'todos').map((c) => ({ id: c.id, name: c.name, color: c.color, shared: isCatShared(c) })),
   { id: '', name: 'Allgemein', color: null, shared: false },
 ];
 const todosIn = (lid) => state.items.filter((i) => i.type === 'todo' && (lid ? i.category_id === lid : !i.category_id || !catById(i.category_id)));
@@ -449,17 +475,18 @@ function renderTodos() {
     const mine = todosIn(l.id);
     const open = mine.filter((i) => !i.done);
     const due = open.filter((i) => i.due_date && dueLabel(i.due_date).overdue).length;
-    return `<button class="fcard" data-act="open-list" data-id="${l.id}" data-drop="${l.id}">
-      <span class="fc-ic" style="--fc:${esc(l.color || '#9AABA6')}">${ICON.folder}</span>
+    return `<button class="fcard" data-act="open-list" data-id="${l.id}" data-drop="${l.id}" ${l.id ? `data-cdrag="${l.id}"` : ''}>
+      ${folderIc(l)}
       <span class="fc-n">${esc(l.name)}</span>
       <span class="fc-s">${open.length ? `${open.length} offen` : mine.length ? 'alles erledigt' : 'leer'}${due ? ` · <em>${due} überfällig</em>` : ''}</span>
       ${l.shared ? `<span class="fc-sh" title="gemeinsam">${ICON.share}</span>` : ''}
       <span class="fc-c ${open.length ? '' : 'zero'}">${open.length}</span>
     </button>`;
   };
-  return `<div class="fgrid">${todoLists().map(card).join('')}
+  return `<div class="fgrid" data-cgrid="todos">${todoLists().map(card).join('')}
     <button class="fcard fnew" data-act="new-list"><span class="fc-ic">${ICON.plus}</span><span class="fc-n">Neue Liste</span></button>
-  </div>`;
+  </div>
+  <p class="hint xhint">Liste lange drücken, um sie an eine andere Stelle zu ziehen.</p>`;
 }
 
 // Beim Ziehen erscheinen die anderen Ordner als Ablageziele
@@ -468,7 +495,7 @@ function dropTray(folders, current) {
   if (!others.length) return '';
   return `<div class="droptray" aria-hidden="true">
     <div class="dt-h">Verschieben nach …</div>
-    <div class="dt-list">${others.map((f) => `<div class="dt" data-drop="${f.id}"><span class="dt-ic" style="--fc:${esc(f.color || '#9AABA6')}">${ICON.folder}</span><span>${esc(f.name)}</span></div>`).join('')}</div>
+    <div class="dt-list">${others.map((f) => `<div class="dt" data-drop="${f.id}">${folderIc(f, 'dt-ic')}<span>${esc(f.name)}</span></div>`).join('')}</div>
   </div>`;
 }
 
@@ -478,9 +505,9 @@ function renderTodoList(lid) {
   const done = mine.filter((i) => i.done).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
   const showDone = state.doneOpen.has(lid);
   const row = (i) => `
-    <div class="trow ${i.done ? 'done' : ''}" data-drag="${i.id}">
+    <div class="trow ${i.done ? 'done' : ''} ${i.meta?.color ? 'tinted' : ''}" data-drag="${i.id}" data-gid="${esc(i.meta?.group || '')}"${itemTint(i)}>
       <button class="tcheck ${i.done ? 'on' : ''}" data-act="toggle" data-id="${i.id}" aria-label="${i.done ? 'Wieder öffnen' : 'Erledigt'}">${i.done ? ICON.check : ''}</button>
-      <button class="tname" data-act="open" data-id="${i.id}">${i.icon ? `<span class="tic-in">${itemIcon(i)}</span>` : ''}<span>${esc(i.title) || '<span class="muted">Ohne Titel</span>'}</span></button>
+      <button class="tname" data-act="open" data-id="${i.id}"><span>${esc(i.title) || '<span class="muted">Ohne Titel</span>'}</span></button>
       ${i.meta?.amount ? `<span class="kamt">${esc(i.meta.amount)}</span>` : ''}
       ${!i.done && i.remind_at && !i.reminded ? `<span class="tbell" title="Erinnerung">${ICON.bell}</span>` : ''}
       ${!i.done ? dueTag(i) : ''}
@@ -488,13 +515,13 @@ function renderTodoList(lid) {
   const rows = (list) => `<div class="trows">${list.map(row).join('')}</div>`;
   return `<section class="tbig" data-drop="${lid}">
     <form class="addrow tadd" data-list="${lid}"><span class="xic">${ICON.plus}</span><input name="title" placeholder="Neues Todo …" autocomplete="off" enterkeyhint="done"></form>
-    ${open.length ? (open.some((i) => i.meta?.section) ? groupBySection(open, row).replaceAll('class="krows"', 'class="trows"') : rows(open)) : '<p class="kempty">Alles erledigt.</p>'}
+    ${open.length ? (open.some((i) => i.meta?.section) ? groupBySection(open, row).replaceAll('class="krows"', 'class="trows"') : blocksHtml(lid, 'todo', row)) : '<p class="kempty">Alles erledigt.</p>'}
     ${done.length ? `<button class="done-toggle" data-act="toggle-done" data-id="${lid}" aria-expanded="${showDone}">
       <span class="chev ${showDone ? 'open' : ''}">${ICON.chevron}</span>${done.length} erledigt</button>
       ${showDone ? rows(done) : ''}` : ''}
   </section>
   ${dropTray(todoLists(), lid)}
-  <p class="hint xhint">Todo lange drücken, um es in eine andere Liste zu ziehen.</p>`;
+  <p class="hint xhint">Lange drücken und ziehen: nach oben oder unten verschieben, auf ein anderes Todo halten für eine Gruppe, unten in eine andere Liste.</p>`;
 }
 
 function groupBySection(items, row) {
@@ -509,7 +536,7 @@ function groupBySection(items, row) {
 
 // Notizen: wie Todos – Ordner-Übersicht, geöffnet groß mit Titeln, Tippen = Notiz
 const noteFolders = () => [
-  ...state.categories.map((c) => ({ id: c.id, name: c.name, color: c.color, shared: isCatShared(c) })),
+  ...orderCats(state.categories, 'notes').map((c) => ({ id: c.id, name: c.name, color: c.color, shared: isCatShared(c) })),
   { id: '', name: 'Ohne Kategorie', color: null, shared: false },
 ];
 // Reihenfolge: eigene Sortierung (meta.sort); neue, noch nicht sortierte Notizen oben
@@ -517,15 +544,19 @@ const noteKey = (n) => (typeof n.meta?.sort === 'number' ? n.meta.sort : -1e9);
 const notesIn = (fid) => state.items.filter((i) => i.type === 'note' && (fid ? i.category_id === fid : !i.category_id || !catById(i.category_id)))
   .sort((a, b) => noteKey(a) - noteKey(b) || b.updated_at.localeCompare(a.updated_at));
 // Blöcke: einzelne Notizen und Gruppen (meta.group), Gruppe steht an der Stelle ihres ersten Mitglieds
-function noteBlocks(fid) {
-  const list = notesIn(fid), seen = new Set(), out = [];
+// offene Todos bzw. Notizen eines Ordners in eigener Reihenfolge
+const itemsFor = (type, fid) => (type === 'todo'
+  ? todosIn(fid).filter((i) => !i.done).sort((a, b) => noteKey(a) - noteKey(b) || byDue(a, b))
+  : notesIn(fid));
+function noteBlocks(fid, type = 'note') {
+  const list = itemsFor(type, fid), seen = new Set(), out = [];
   for (const n of list) {
     const g = n.meta?.group;
     if (!g) { out.push({ note: n }); continue; }
     if (seen.has(g)) continue;
     seen.add(g);
     const items = list.filter((x) => x.meta?.group === g);
-    out.push({ group: g, name: items.find((x) => x.meta?.gname)?.meta.gname || 'Gruppe', items });
+    out.push({ group: g, name: items.find((x) => x.meta?.gname)?.meta.gname || 'Gruppe', color: items.find((x) => x.meta?.gcolor)?.meta.gcolor || '', items });
   }
   return out;
 }
@@ -535,31 +566,49 @@ function renderNotes() {
   state.list = null;
   const card = (f) => {
     const list = notesIn(f.id);
-    return `<button class="fcard" data-act="open-list" data-id="${f.id}">
-      <span class="fc-ic" style="--fc:${esc(f.color || '#9AABA6')}">${ICON.folder}</span>
+    return `<button class="fcard" data-act="open-list" data-id="${f.id}" ${f.id ? `data-cdrag="${f.id}"` : ''}>
+      ${folderIc(f)}
       <span class="fc-n">${esc(f.name)}</span>
       <span class="fc-s">${list.length ? `${list.length} ${list.length === 1 ? 'Notiz' : 'Notizen'}` : 'leer'}</span>
       ${f.shared ? `<span class="fc-sh" title="gemeinsam">${ICON.share}</span>` : ''}
       <span class="fc-c ${list.length ? '' : 'zero'}">${list.length}</span>
     </button>`;
   };
-  return `<div class="fgrid">${noteFolders().map(card).join('')}
+  return `<div class="fgrid" data-cgrid="notes">${noteFolders().map(card).join('')}
     <button class="fcard fnew" data-act="new-cat"><span class="fc-ic">${ICON.plus}</span><span class="fc-n">Neuer Ordner</span></button>
+  </div>
+  <p class="hint xhint">Ordner lange drücken, um ihn an eine andere Stelle zu ziehen.</p>`;
+}
+
+function groupHtml(b, fid, type, row) {
+  const key = 'g:' + b.group, folded = state.folded.has(key);
+  return `<div class="ngrp ${folded ? 'folded' : ''} ${b.color ? 'tinted' : ''}"${b.color ? ` style="--gc:${esc(b.color)}"` : ''}>
+    <div class="ngrp-h" data-ghead="${esc(b.group)}">
+      <button class="xtoggle" data-act="fold" data-id="${esc(key)}" aria-label="${folded ? 'Aufklappen' : 'Zuklappen'}">${ICON.chevron}</button>
+      <span class="ngrp-ic">${ICON.stack}</span>
+      <button class="ngrp-n" data-act="group-edit" data-id="${esc(b.group)}" data-f="${fid}" data-t="${type}">${esc(b.name)}</button>
+      <span class="ngrp-c">${b.items.length}</span>
+    </div>
+    ${folded ? '' : `<div class="ngrp-b">${b.items.map(row).join('')}</div>`}
   </div>`;
 }
+const blocksHtml = (fid, type, row) => {
+  const blocks = noteBlocks(fid, type);
+  return blocks.length ? `<div class="trows" data-sortable="${fid}" data-stype="${type}">${blocks.map((b) => (b.group ? groupHtml(b, fid, type, row) : row(b.note))).join('')}<div class="tend" data-end="1"></div></div>` : '';
+};
 
 function renderNoteList(fid) {
   const blocks = noteBlocks(fid);
   const row = (n) => `
-    <div class="trow" data-drag="${n.id}" data-gid="${esc(n.meta?.group || '')}">
-      <span class="nic ${n.icon ? 'has' : ''}">${itemIcon(n)}</span>
+    <div class="trow ${n.meta?.color ? 'tinted' : ''}" data-drag="${n.id}" data-gid="${esc(n.meta?.group || '')}"${itemTint(n)}>
+      <span class="ndot"></span>
       <button class="tname" data-act="open" data-id="${n.id}"><span>${esc(n.title) || '<span class="muted">Ohne Titel</span>'}</span></button>
       ${n.remind_at && !n.reminded ? `<span class="tbell" title="Erinnerung">${ICON.bell}</span>` : ''}
       ${n.owner_id !== state.me ? `<span class="tby">${esc(nameOf(n.owner_id))}</span>` : ''}
     </div>`;
   const group = (b) => {
     const key = 'g:' + b.group, folded = state.folded.has(key);
-    return `<div class="ngrp ${folded ? 'folded' : ''}">
+    return `<div class="ngrp ${folded ? 'folded' : ''} ${b.color ? 'tinted' : ''}"${b.color ? ` style="--gc:${esc(b.color)}"` : ''}>
       <div class="ngrp-h" data-ghead="${esc(b.group)}">
         <button class="xtoggle" data-act="fold" data-id="${esc(key)}" aria-label="${folded ? 'Aufklappen' : 'Zuklappen'}">${ICON.chevron}</button>
         <span class="ngrp-ic">${ICON.stack}</span>
@@ -571,7 +620,7 @@ function renderNoteList(fid) {
   };
   return `<section class="tbig" data-drop="${fid}">
     <button class="addrow tadd tnew" data-act="new-note-in" data-id="${fid}"><span class="xic">${ICON.plus}</span><span>Neue Notiz …</span></button>
-    ${blocks.length ? `<div class="trows" data-sortable="${fid}">${blocks.map((b) => (b.group ? group(b) : row(b.note))).join('')}<div class="tend" data-end="1"></div></div>` : '<p class="kempty">Noch keine Notizen.</p>'}
+    ${blocks.length ? blocksHtml(fid, 'note', row) : '<p class="kempty">Noch keine Notizen.</p>'}
   </section>
   ${dropTray(noteFolders(), fid)}
   ${blocks.length ? '<p class="hint xhint">Lange drücken und ziehen: nach oben oder unten verschieben, auf eine andere Notiz halten für eine Gruppe, unten in einen anderen Ordner.</p>' : ''}`;
@@ -586,7 +635,7 @@ async function applyNoteOrder(fid, flat) {
     const n = itemById(f.id); if (!n) return;
     const group = f.group && cnt[f.group] > 1 ? f.group : null;
     const meta = { ...(n.meta || {}), sort: (idx + 1) * 10 };
-    if (group) { meta.group = group; meta.gname = f.gname || meta.gname || 'Gruppe'; } else { delete meta.group; delete meta.gname; }
+    if (group) { meta.group = group; meta.gname = f.gname || meta.gname || 'Gruppe'; if (f.gcolor !== undefined) { if (f.gcolor) meta.gcolor = f.gcolor; else delete meta.gcolor; } } else { delete meta.group; delete meta.gname; delete meta.gcolor; }
     if (JSON.stringify(meta) === JSON.stringify(n.meta || {})) return;
     n.meta = meta;
     jobs.push(sb.from('items').update({ meta }).eq('id', n.id));
@@ -596,29 +645,64 @@ async function applyNoteOrder(fid, flat) {
   const err = res.find((r) => r.error);
   if (err) toast('Speichern fehlgeschlagen: ' + err.error.message, 4000);
 }
-const flatOrder = (fid) => noteBlocks(fid).flatMap((b) => (b.group ? b.items.map((n) => ({ id: n.id, group: b.group, gname: b.name })) : [{ id: b.note.id, group: null }]));
+const flatOrder = (fid, type = 'note') => noteBlocks(fid, type).flatMap((b) => (b.group ? b.items.map((n) => ({ id: n.id, group: b.group, gname: b.name, gcolor: b.color })) : [{ id: b.note.id, group: null }]));
 
-function openGroupEdit(gid, fid) {
-  const b = noteBlocks(fid).find((x) => x.group === gid);
+// Farbauswahl (leer = keine Farbe)
+const colorPick = (cur, id) => `<div class="colors" id="${id}">
+  <button type="button" class="color none ${!cur ? 'on' : ''}" data-col="" aria-label="Keine Farbe"></button>
+  ${COLORS.map((col) => `<button type="button" class="color ${col === cur ? 'on' : ''}" data-col="${col}" style="background:${col}" aria-label="Farbe"></button>`).join('')}</div>`;
+
+function openGroupEdit(gid, fid, type = 'note') {
+  const b = noteBlocks(fid, type).find((x) => x.group === gid);
   if (!b) return;
   const sheet = openSheet(`
     <div class="sheet-head"><h2>Gruppe</h2><button class="link-btn" data-close>Fertig</button></div>
     <div class="field"><label for="g-name">Name</label><input class="input" id="g-name" value="${esc(b.name)}" autocomplete="off"></div>
-    <p class="hint">${b.items.length} Notizen: ${b.items.map((n) => esc(n.title || 'Ohne Titel')).join(', ')}</p>
+    <div class="field"><label>Farbe</label>${colorPick(b.color, 'g-col')}</div>
+    <p class="hint">${b.items.length} ${type === 'todo' ? 'Todos' : 'Notizen'}: ${b.items.map((n) => esc(n.title || 'Ohne Titel')).join(', ')}</p>
     <div class="divider"></div>
     <button class="btn danger block" id="g-split">Gruppe auflösen</button>`, {
     onClose: () => {
       const v = sheet.querySelector('#g-name').value.trim() || 'Gruppe';
-      if (v !== b.name) applyNoteOrder(fid, flatOrder(fid).map((f) => (f.group === gid ? { ...f, gname: v } : f)));
+      if (v !== b.name) applyNoteOrder(fid, flatOrder(fid, type).map((f) => (f.group === gid ? { ...f, gname: v } : f)));
     },
   });
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
+  sheet.querySelectorAll('#g-col [data-col]').forEach((x) => x.addEventListener('click', () => {
+    sheet.querySelectorAll('#g-col [data-col]').forEach((y) => y.classList.toggle('on', y === x));
+    applyNoteOrder(fid, flatOrder(fid, type).map((f) => (f.group === gid ? { ...f, gcolor: x.dataset.col } : f)));
+  }));
   sheet.querySelector('#g-split').addEventListener('click', () => {
     sheet.querySelector('#g-name').value = b.name;
     closeSheet();
-    applyNoteOrder(fid, flatOrder(fid).map((f) => (f.group === gid ? { id: f.id, group: null } : f)));
+    applyNoteOrder(fid, flatOrder(fid, type).map((f) => (f.group === gid ? { id: f.id, group: null } : f)));
     toast('Gruppe aufgelöst');
   });
+}
+
+// ---------- Leiste unten neben dem Steuerknopf (je Bereich andere Knöpfe) ----------
+const dockBtn = (act, icon, label, { id = '', primary = false, text = true } = {}) =>
+  `<button class="dk ${primary ? 'pri' : ''}" data-act="${act}" ${id !== '' ? `data-id="${esc(id)}"` : ''} aria-label="${esc(label)}">${ICON[icon]}${text ? `<span>${esc(label)}</span>` : ''}</button>`;
+function dockFor(tab) {
+  if (tab === 'calendar') {
+    const v = state.calView;
+    return `${dockBtn('cal-move', 'chevL', 'Zurück', { id: '-1', text: false })}
+      <div class="seg-view cal-seg">${[['day', 'Tag'], ['week', 'Woche'], ['month', 'Monat']].map(([k, l]) => `<button class="${v === k ? 'on' : ''}" data-act="cal-view" data-id="${k}"><span>${l}</span></button>`).join('')}</div>
+      ${dockBtn('cal-move', 'chevR', 'Weiter', { id: '1', text: false })}`;
+  }
+  if (tab === 'todos') {
+    if (state.list === null) return dockBtn('new-todo', 'plus', 'Neues Todo', { primary: true });
+    return `${dockBtn('close-list', 'chevL', 'Listen')}${dockBtn('focus-add', 'plus', 'Todo', { primary: true })}${state.list ? dockBtn('list-edit', 'dots', 'Liste bearbeiten', { id: state.list, text: false }) : ''}`;
+  }
+  if (tab === 'notes') {
+    if (state.list === null) return dockBtn('new-note', 'plus', 'Neue Notiz', { primary: true });
+    return `${dockBtn('close-list', 'chevL', 'Ordner')}${dockBtn('new-note-in', 'plus', 'Notiz', { id: state.list, primary: true })}${state.list ? dockBtn('list-edit', 'dots', 'Ordner bearbeiten', { id: state.list, text: false }) : ''}`;
+  }
+  if (tab === 'meals') {
+    return `${dockBtn('week-prev', 'chevL', 'Vorige Woche', { text: false })}<button class="dk wk-now" data-act="week-today"><span>KW ${isoWeek(state.weekStart)}</span></button>${dockBtn('week-next', 'chevR', 'Nächste Woche', { text: false })}${dockBtn('import-plan', 'plus', 'Plan', { primary: true })}`;
+  }
+  if (tab === 'categories') return dockBtn('new-cat', 'plus', 'Neue Kategorie', { primary: true });
+  return '';
 }
 
 // ---------- Kopfkachel (hängt am oberen Rand) ----------
@@ -628,19 +712,28 @@ function pageHead(tab) {
     notes: { title: 'Notizen', act: 'new-note', label: 'Neue Notiz', count: state.items.filter((i) => i.type === 'note').length },
     categories: { title: 'Kategorien', act: 'new-cat', label: 'Neue Kategorie', count: state.categories.length },
     meals: { title: 'Gerichte', act: 'import-plan', label: 'Wochenplan einfügen', count: state.items.filter((i) => i.type === 'meal' && i.due_date >= state.weekStart && i.due_date <= addDays(state.weekStart, 6)).length },
-    calendar: { title: 'Kalender', act: 'week-today', label: 'Heute', count: 0, icon: 'calendar' },
+    calendar: { title: 'Kalender', act: 'new-event-menu', label: 'Neuer Termin', count: 0 },
   }[tab];
   if (!cfg) return '';
+  if (tab === 'calendar') {
+    const [t, sub] = calTitle(), isToday = calDay() === ymd(new Date());
+    return `<header class="pagehead">
+    <div class="ph-in">
+      <b class="ph-t cal-pt">${esc(t)}<small>${esc(sub)}</small></b>
+      <button class="chip ph-today ${isToday ? 'on' : ''}" data-act="cal-today">Heute</button>
+      <button class="cbtn ph-add" data-act="new-event-menu" aria-label="Neuer Termin" title="Neuer Termin">${ICON.plus}</button>
+    </div>
+  </header>`;
+  }
   if ((tab === 'todos' || tab === 'notes') && state.list !== null) {
     const c = catById(state.list);
     const n = tab === 'todos' ? todosIn(state.list).filter((i) => !i.done).length : notesIn(state.list).length;
     return `<header class="pagehead">
     <div class="ph-in">
       <button class="ph-back" data-act="close-list" aria-label="Zurück zu den Listen">${ICON.chevL}</button>
-      ${c ? `<i class="ldot" style="background:${esc(c.color)}"></i>` : ''}
+      ${c ? folderIc(c, 'ph-ic') : ''}
       <b class="ph-t">${esc(c ? c.name : tab === 'todos' ? 'Allgemein' : 'Ohne Kategorie')}</b>
       <span class="cnt ${n ? '' : 'zero'}">${n}</span>
-      ${c ? `<button class="cbtn ph-add" data-act="list-edit" data-id="${c.id}" aria-label="Bearbeiten" title="Bearbeiten">${ICON.dots}</button>` : ''}
     </div>
   </header>`;
   }
@@ -648,7 +741,6 @@ function pageHead(tab) {
     <div class="ph-in">
       <b>${cfg.title}</b>
       <span class="cnt ${cfg.count ? '' : 'zero'}">${cfg.count}</span>
-      <button class="cbtn ph-add" data-act="${cfg.act}" aria-label="${cfg.label}" title="${cfg.label}">${ICON[cfg.icon || 'plus']}</button>
     </div>
   </header>`;
 }
@@ -680,6 +772,16 @@ const isoWeek = (s) => { const d = parseYmd(s); d.setDate(d.getDate() + 3 - ((d.
 const dayName = (s, o = { weekday: 'long' }) => parseYmd(s).toLocaleDateString('de-AT', o);
 
 // Vorgefertigte Symbole für Notizen und Todos
+// Ordner-Symbol: eigenes Symbol der Kategorie in ihrer Farbe, sonst Ordner
+// Kategorie-Symbol (ohne gewähltes Symbol: Etikett); "Allgemein"/"Ohne Kategorie" bekommen eigene
+const catSym = (c) => (c?.icon && ICON[c.icon] ? ICON[c.icon] : ICON.tag);
+const folderIc = (f, cls = 'fc-ic') => {
+  const c = f.id ? catById(f.id) : null;
+  const sym = c ? catSym(c) : state.tab === 'todos' ? ICON.todos : ICON.notes;
+  return `<span class="${cls} sym" style="--fc:${esc(f.color || '#6E8582')}">${sym}</span>`;
+};
+// Farbe eines Eintrags (meta.color)
+const itemTint = (i) => (i.meta?.color ? ` style="--ic:${esc(i.meta.color)}"` : '');
 const ITEM_ICONS = [
   ['bulb', 'Idee'], ['star', 'Wichtig'], ['flag', 'Ziel'], ['alert', 'Achtung'], ['work', 'Arbeit'], ['home', 'Zuhause'],
   ['cart', 'Einkauf'], ['money', 'Geld'], ['phone', 'Anrufen'], ['car', 'Auto'], ['plane', 'Reise'], ['pin', 'Ort'],
@@ -706,7 +808,7 @@ const krow = (i) => `
     ${i.type === 'todo'
       ? `<button class="xcheck ${i.done ? 'on' : ''}" data-act="toggle" data-id="${i.id}" aria-label="${i.done ? 'Wieder öffnen' : 'Erledigt'}">${i.done ? ICON.check : ''}</button>`
       : `<span class="xic ${i.icon ? 'has' : ''}">${itemIcon(i)}</span>`}
-    <button class="kname" data-act="open" data-id="${i.id}">${i.type === 'todo' && i.icon ? `<span class="tic-in">${itemIcon(i)}</span>` : ''}${esc(i.title) || '<span class="muted">Ohne Titel</span>'}</button>
+    <button class="kname" data-act="open" data-id="${i.id}">${esc(i.title) || '<span class="muted">Ohne Titel</span>'}</button>
     ${i.meta?.amount ? `<span class="kamt">${esc(i.meta.amount)}</span>` : ''}
     ${remindTag(i)}
     ${i.type === 'todo' ? dueTag(i) : ''}
@@ -727,7 +829,7 @@ function explorer(tab, folders) {
       ${i.type === 'todo'
         ? `<button class="xcheck ${i.done ? 'on' : ''}" data-act="toggle" data-id="${i.id}" aria-label="${i.done ? 'Wieder öffnen' : 'Erledigt'}">${i.done ? ICON.check : ''}</button>`
         : `<span class="xic ${i.icon ? 'has' : ''}">${itemIcon(i)}</span>`}
-      <button class="xname" data-act="open" data-id="${i.id}">${i.type === 'todo' && i.icon ? `<span class="tic-in">${itemIcon(i)}</span>` : ''}${esc(i.title) || '<span class="muted">Ohne Titel</span>'}</button>
+      <button class="xname" data-act="open" data-id="${i.id}">${esc(i.title) || '<span class="muted">Ohne Titel</span>'}</button>
       <span class="xc2">${i.meta?.amount ? `<span class="kamt">${esc(i.meta.amount)}</span>` : ''}${remindTag(i)}${i.type === 'todo' && i.due_date ? col2(i) : ''}</span>
       <span class="grip" data-grip="${i.id}" aria-label="Verschieben" role="button" tabindex="0">${ICON.grip}</span>
     </div>`;
@@ -761,6 +863,77 @@ function explorer(tab, folders) {
     ${folders.map(folder).join('')}
   </section>`;
 }
+
+// ---------- Ordner in der Übersicht umsortieren: lange drücken und an eine andere Stelle ziehen ----------
+(() => {
+  const HOLD = 380, SLOP = 8;
+  let press = null, g = null, swallow = false;
+  const begin = () => {
+    const el = press.el.isConnected ? press.el : document.querySelector(`[data-cdrag="${press.el.dataset.cdrag}"]`);
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const ghost = el.cloneNode(true);
+    ghost.className = el.className + ' fghost';
+    ghost.removeAttribute('data-cdrag');
+    Object.assign(ghost.style, { width: r.width + 'px', height: r.height + 'px', left: r.left + 'px', top: r.top + 'px' });
+    document.body.appendChild(ghost);
+    el.classList.add('fdragging');
+    document.body.classList.add('is-dragging', 'cat-sorting');
+    render.hold = true;
+    g = { el, ghost, id: el.dataset.cdrag, kind: el.closest('[data-cgrid]').dataset.cgrid, dx: press.x - r.left, dy: press.y - r.top, target: null, after: false };
+    navigator.vibrate?.(12);
+  };
+  const mark = (t, after) => {
+    if (g.target === t && g.after === after) return;
+    g.target?.classList.remove('ins-l', 'ins-r');
+    g.target = t; g.after = after;
+    t?.classList.add(after ? 'ins-r' : 'ins-l');
+  };
+  const move = (x, y) => {
+    g.ghost.style.left = (x - g.dx) + 'px';
+    g.ghost.style.top = (y - g.dy) + 'px';
+    const t = document.elementFromPoint(x, y)?.closest('[data-cgrid] .fcard[data-cdrag]');
+    if (!t || t === g.el) return mark(null, false);
+    const r = t.getBoundingClientRect();
+    mark(t, x > r.left + r.width / 2);
+    const m = document.querySelector('.main'), mr = m.getBoundingClientRect();
+    if (y < mr.top + 60) m.scrollTop -= 10; else if (y > mr.bottom - 60) m.scrollTop += 10;
+  };
+  const finish = (cancel) => {
+    const d = g; g = null;
+    render.hold = false;
+    document.body.classList.remove('is-dragging', 'cat-sorting');
+    d.el.classList.remove('fdragging');
+    d.target?.classList.remove('ins-l', 'ins-r');
+    d.ghost.remove();
+    if (cancel || !d.target) { if (render.pending) { render.pending = false; render(); } return; }
+    const ids = [...document.querySelectorAll(`[data-cgrid="${d.kind}"] .fcard[data-cdrag]`)].map((x) => x.dataset.cdrag).filter((x) => x !== d.id);
+    let at = ids.indexOf(d.target.dataset.cdrag) + (d.after ? 1 : 0);
+    ids.splice(at, 0, d.id);
+    render.pending = false;
+    saveCatOrder(d.kind, ids);
+  };
+  $app.addEventListener('pointerdown', (e) => {
+    if (e.button > 0) return;
+    const el = e.target.closest('[data-cgrid] .fcard[data-cdrag]');
+    if (!el) return;
+    press = { el, x: e.clientX, y: e.clientY, t: setTimeout(() => { if (press) begin(); }, HOLD) };
+    el.classList.add('pressing');
+  });
+  document.addEventListener('pointermove', (e) => {
+    if (g) { e.preventDefault(); return move(e.clientX, e.clientY); }
+    if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > SLOP) { clearTimeout(press.t); press.el.classList.remove('pressing'); press = null; }
+  }, { passive: false });
+  const up = (cancel) => () => {
+    if (press) { clearTimeout(press.t); press.el.classList.remove('pressing'); press = null; }
+    if (g) { swallow = true; setTimeout(() => (swallow = false), 60); finish(cancel); }
+  };
+  document.addEventListener('pointerup', up(false));
+  document.addEventListener('pointercancel', up(true));
+  document.addEventListener('touchmove', (e) => { if (g) e.preventDefault(); }, { passive: false });
+  $app.addEventListener('contextmenu', (e) => { if (e.target.closest('.fcard[data-cdrag]')) e.preventDefault(); });
+  document.addEventListener('click', (e) => { if (swallow) { e.stopPropagation(); e.preventDefault(); swallow = false; } }, true);
+})();
 
 // ---------- Verschieben: Eintrag lange drücken (oder am Griff ziehen) und auf einen Ordner ziehen ----------
 (() => {
@@ -851,8 +1024,8 @@ function explorer(tab, folders) {
     t.classList.add(after ? 'ins-after' : 'ins-before');
   };
   const sortFinish = (d) => {
-    const fid = d.sortable.dataset.sortable;
-    const flat = flatOrder(fid);
+    const fid = d.sortable.dataset.sortable, type = d.sortable.dataset.stype || 'note';
+    const flat = flatOrder(fid, type);
     const me = flat.find((f) => f.id === d.id);
     if (!me) return false;
     const rest = flat.filter((f) => f.id !== d.id);
@@ -1060,7 +1233,7 @@ function renderMeals() {
   const lunches = weekMeals.filter((m) => m.meta?.slot === 'mittag');
   const kcal = lunches.map((m) => m.meta?.nutrition?.kcal).filter(Boolean);
   const summary = `<section class="tile wsum">
-      ${weekNav()}
+      <div class="wsum-h"><b>KW ${isoWeek(state.weekStart)}</b><span>${esc(parseYmd(state.weekStart).toLocaleDateString('de-AT', { day: 'numeric', month: 'short' }))} – ${esc(parseYmd(addDays(state.weekStart, 6)).toLocaleDateString('de-AT', { day: 'numeric', month: 'short', year: 'numeric' }))}</span></div>
       <div class="wsum-row">
         <div><b>${lunches.length}</b><span>Mittagessen</span></div>
         <div><b>${weekMeals.length - lunches.length}</b><span>Frühstück / Abend</span></div>
@@ -1086,25 +1259,304 @@ function renderMeals() {
   }).join('')}</div>`;
 }
 
+// ====================================================================
+// Termine + Geburtstage (type 'event'; meta.kind, meta.time, meta.repeat, meta.remind)
+// ====================================================================
+const EV_REMIND = [['', 'Keine'], ['0', 'Am Tag 8:00'], ['h', '1 Std. vorher'], ['1', 'Am Vortag 18:00'], ['7', '1 Woche vorher']];
+const isBday = (e) => e.meta?.kind === 'birthday';
+const isYearly = (e) => isBday(e) || e.meta?.repeat === 'yearly';
+// Datum des Termins im angegebenen Jahr (29.2. in Nicht-Schaltjahren = 28.2.)
+const evDateIn = (e, y) => {
+  let md = e.due_date.slice(5);
+  if (md === '02-29' && !(y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0))) md = '02-28';
+  return `${y}-${md}`;
+};
+const evOn = (e, d) => (e.due_date ? (isYearly(e) ? e.due_date <= d && evDateIn(e, +d.slice(0, 4)) === d : e.due_date === d) : false);
+const eventsOn = (d) => state.items.filter((i) => i.type === 'event' && evOn(i, d))
+  .sort((a, b) => (isBday(b) - isBday(a)) || (a.meta?.time || '').localeCompare(b.meta?.time || ''));
+const evAge = (e, d) => { const y0 = +e.due_date.slice(0, 4), y = +d.slice(0, 4); return isBday(e) && y0 > 1900 && y > y0 ? y - y0 : 0; };
+const evTitle = (e) => (isBday(e) ? `${e.title || 'Jemand'} hat Geburtstag` : e.title || 'Termin');
+// Erinnerungszeit für das Vorkommen am Tag occ
+function evRemindFor(e, occ) {
+  const r = e.meta?.remind;
+  if (!r) return null;
+  const at = (day, hm) => { const [h, m] = hm.split(':').map(Number); const x = parseYmd(day); x.setHours(h, m, 0, 0); return x; };
+  if (r === '0') return at(occ, '08:00');
+  if (r === 'h') { const t = at(occ, e.meta?.time || '09:00'); t.setHours(t.getHours() - 1); return t; }
+  if (r === '1') return at(addDays(occ, -1), '18:00');
+  if (r === '7') return at(addDays(occ, -7), '09:00');
+  return null;
+}
+// Nächste Erinnerung ab jetzt (jährlich: nächstes Jahr, wenn heuer schon vorbei)
+function evNextRemind(e) {
+  if (!e.due_date || !e.meta?.remind) return null;
+  const now = Date.now();
+  if (!isYearly(e)) { const t = evRemindFor(e, e.due_date); return t ? t.toISOString() : null; }
+  const y = new Date().getFullYear();
+  for (let k = 0; k < 3; k++) {
+    const occ = evDateIn(e, Math.max(y + k, +e.due_date.slice(0, 4)));
+    const t = evRemindFor(e, occ);
+    if (t && t.getTime() > now) return t.toISOString();
+  }
+  return null;
+}
+const evWhen = (e) => (isBday(e) ? 'ganztägig' : e.meta?.time ? `${e.meta.time}${e.meta.end ? '–' + e.meta.end : ''} Uhr` : 'ganztägig');
+const evRow = (e, d) => `
+  <button class="evrow ${isBday(e) ? 'bday' : ''}" data-act="open" data-id="${e.id}">
+    <span class="ev-ic">${isBday(e) ? ICON.cake : e.icon && ICON[e.icon] ? ICON[e.icon] : ICON.calendar}</span>
+    <span class="ev-t"><b>${esc(evTitle(e))}</b><small>${evAge(e, d) ? `wird ${evAge(e, d)} · ` : ''}${esc(evWhen(e))}${e.meta?.remind ? ' · ' + ICON.bell.replace('<svg', '<svg class="ev-bell"') : ''}</small></span>
+  </button>`;
+
+function openNewEventMenu() {
+  const sheet = openSheet(`
+    <div class="sheet-head"><h2>Neu im Kalender</h2><button class="link-btn" data-close>Fertig</button></div>
+    <div class="nev">
+      <button class="nev-b" data-k="event">${ICON.calendar}<b>Termin</b><small>einmalig oder jährlich</small></button>
+      <button class="nev-b" data-k="birthday">${ICON.cake}<b>Geburtstag</b><small>jedes Jahr mit Erinnerung</small></button>
+    </div>`);
+  sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
+  sheet.querySelectorAll('[data-k]').forEach((b) => b.addEventListener('click', () => { closeSheet(); createEvent(null, b.dataset.k); }));
+}
+
+async function createEvent(day, kind = 'event', time = '') {
+  if (createEvent.blocked) return toast('Für Termine muss die Datenbank noch erweitert werden (SQL in Supabase ausführen).', 5000);
+  const { data, error } = await sb.from('items').insert({ type: 'event', title: '', due_date: day || calDay(), meta: { kind, remind: kind === 'birthday' ? '0' : '', repeat: kind === 'birthday' ? 'yearly' : '', time: kind === 'birthday' ? '' : time, end: time ? hm(Math.min(toMin(time) + 60, 23 * 60 + 59)) : '' } }).select().single();
+  if (error) {
+    if (/items_type_check/.test(error.message)) { createEvent.blocked = true; return toast('Für Termine muss die Datenbank noch erweitert werden (SQL in Supabase ausführen).', 5000); }
+    return toast('Fehler: ' + error.message);
+  }
+  state.items.unshift(data);
+  render();
+  openEvent(data.id, { isNew: true });
+}
+
+function openEvent(id, { isNew = false } = {}) {
+  const e = itemById(id);
+  if (!e) return;
+  const draw = () => {
+    const ev = itemById(id); if (!ev) return closeSheet();
+    const b = isBday(ev), m = ev.meta || {};
+    const sheet = openSheet(`
+      <div class="sheet-head">
+        <div class="seg-view" id="ev-kind">
+          <button type="button" class="${b ? '' : 'on'}" data-kind="event">${ICON.calendar}<span>Termin</span></button>
+          <button type="button" class="${b ? 'on' : ''}" data-kind="birthday">${ICON.cake}<span>Geburtstag</span></button>
+        </div>
+        <button class="link-btn" data-close>Fertig</button>
+      </div>
+      <input class="title-input" id="ev-title" placeholder="${b ? 'Wer hat Geburtstag?' : 'Was steht an?'}" value="${esc(ev.title)}" autocomplete="off">
+      <div class="field" style="margin-top:12px"><label>${b ? 'Geburtsdatum' : 'Datum'}</label>
+        <div class="row-inline"><input class="input" type="date" id="ev-date" value="${esc(ev.due_date || '')}">
+        </div>
+        ${b ? '' : `<div class="row-inline ev-times"><label class="tl">von<input class="input" type="time" id="ev-time" value="${esc(m.time || '')}"></label><label class="tl">bis<input class="input" type="time" id="ev-end" value="${esc(m.end || '')}" ${m.time ? '' : 'disabled'}></label></div>
+        <div class="hint">Ohne Uhrzeit gilt der Termin ganztägig.</div>`}
+        ${b ? '<div class="hint">Mit Geburtsjahr zeigt der Kalender auch, wie alt die Person wird.</div>' : ''}
+      </div>
+      ${b ? '' : `<button class="menu-item" id="ev-rep" type="button">Jedes Jahr wiederholen<span class="sw ${m.repeat === 'yearly' ? 'on' : ''}"></span></button>`}
+      <div class="field" style="margin-top:12px"><label>Erinnerung</label>
+        <div class="remind-quick">${EV_REMIND.filter(([k]) => k !== 'h' || (!b && m.time)).map(([k, l]) => `<button type="button" class="chip ${String(m.remind || '') === k ? 'on' : ''}" data-rem="${k}">${l}</button>`).join('')}</div>
+        <div class="hint">${ev.remind_at ? `Nächste Erinnerung ${esc(remindLabel(ev.remind_at))}${new Date(ev.remind_at).getFullYear() !== new Date().getFullYear() ? ' ' + new Date(ev.remind_at).getFullYear() : ''}.${isYearly(ev) ? ' Danach jedes Jahr wieder.' : ''}` : m.remind ? 'Dieser Termin ist schon vorbei.' : 'Ohne Erinnerung.'}</div>
+      </div>
+      <div class="field"><label>Notiz</label><textarea class="textarea" id="ev-body" style="min-height:80px" placeholder="${b ? 'Geschenkidee, Adresse …' : 'Ort, Details …'}">${esc(ev.body)}</textarea></div>
+      <div class="field"><label>Kategorie</label><select class="select" id="ev-cat">${categoryOptions(ev.category_id)}</select></div>
+      <div class="field"><label>Geteilt</label><div id="share-area"></div></div>
+      ${canDeleteItem(ev) ? `<button class="btn danger block" id="ev-del">${b ? 'Geburtstag' : 'Termin'} löschen</button>` : ''}
+    `, { onClose: () => { saveText.flush(); if (isNew && !itemById(id)?.title) silentDelete(id); } });
+
+    const saveText = debounce(() => {
+      const cur = itemById(id); if (!cur) return;
+      const patch = {};
+      const t = sheet.querySelector('#ev-title').value, bd = sheet.querySelector('#ev-body').value;
+      if (t !== cur.title) patch.title = t;
+      if (bd !== cur.body) patch.body = bd;
+      if (Object.keys(patch).length) saveItem(id, patch);
+    }, 500);
+    // meta ändern und Erinnerung neu berechnen, dann Fenster neu zeichnen
+    const setMeta = async (patchMeta, extra = {}, redraw = true) => {
+      saveText.flush();
+      const cur = itemById(id);
+      const next = { ...cur, ...extra, meta: { ...(cur.meta || {}), ...patchMeta } };
+      const remind_at = evNextRemind(next);
+      onSheetClose = null;   // beim Neuzeichnen nicht löschen
+      await saveItem(id, { ...extra, meta: next.meta, remind_at, reminded: false });
+      if (redraw) { isNew = isNew && !itemById(id)?.title; draw(); }
+    };
+    sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
+    sheet.querySelector('#ev-title').addEventListener('input', saveText);
+    sheet.querySelector('#ev-body').addEventListener('input', saveText);
+    sheet.querySelectorAll('[data-kind]').forEach((x) => x.addEventListener('click', () => {
+      const k = x.dataset.kind;
+      if (k === (isBday(itemById(id)) ? 'birthday' : 'event')) return;
+      setMeta(k === 'birthday' ? { kind: k, repeat: 'yearly', time: '', remind: m.remind === 'h' ? '0' : m.remind || '0' } : { kind: k });
+    }));
+    sheet.querySelector('#ev-date').addEventListener('change', (x) => { if (x.target.value) setMeta({}, { due_date: x.target.value }); });
+    sheet.querySelector('#ev-time')?.addEventListener('change', (x) => {
+      const t = x.target.value;
+      const end = !t ? '' : m.end && toMin(m.end) > toMin(t) ? m.end : hm(Math.min(toMin(t) + 60, 23 * 60 + 59));
+      setMeta({ time: t, end, ...(t ? {} : m.remind === 'h' ? { remind: '0' } : {}) });
+    });
+    sheet.querySelector('#ev-end')?.addEventListener('change', (x) => setMeta({ end: x.target.value && toMin(x.target.value) > toMin(m.time) ? x.target.value : m.end }));
+    sheet.querySelector('#ev-rep')?.addEventListener('click', () => setMeta({ repeat: itemById(id).meta?.repeat === 'yearly' ? '' : 'yearly' }));
+    sheet.querySelectorAll('[data-rem]').forEach((x) => x.addEventListener('click', () => setMeta({ remind: x.dataset.rem })));
+    sheet.querySelector('#ev-cat').addEventListener('change', (x) => saveItem(id, { category_id: x.target.value || null }).then(() => renderShareArea(sheet, id)));
+    sheet.querySelector('#ev-del')?.addEventListener('click', async () => {
+      if (!(await askConfirm(`„${evTitle(itemById(id))}“ löschen?`, 'Löschen'))) return;
+      onSheetClose = null; closeSheet(); silentDelete(id);
+    });
+    renderShareArea(sheet, id);
+    if (isNew && !itemById(id).title) setTimeout(() => sheet.querySelector('#ev-title')?.focus(), 50);
+  };
+  draw();
+}
+
+// ---------- Kalender: Tag / Woche / Monat ----------
+const H0 = 6, H1 = 24, HPX = 52;   // sichtbare Stunden und Höhe pro Stunde
+const MEAL_AT = { fruehstueck: '07:30', mittag: '12:00', abend: '18:30' };
+const calDay = () => state.calDate || ymd(new Date());
+const toMin = (hm) => { const [h, m] = (hm || '0:0').split(':').map(Number); return h * 60 + (m || 0); };
+// Alles an einem Tag: zeitlich (mit Uhrzeit) und ganztägig
+function dayContent(d) {
+  const timed = [], allday = [];
+  for (const e of eventsOn(d)) {
+    if (!isBday(e) && e.meta?.time) timed.push({ kind: 'ev', item: e, start: toMin(e.meta.time), end: e.meta.end ? Math.max(toMin(e.meta.end), toMin(e.meta.time) + 20) : toMin(e.meta.time) + 60, label: e.title || 'Termin' });
+    else allday.push({ kind: isBday(e) ? 'bday' : 'ev', item: e, label: isBday(e) ? `${e.title || 'Geburtstag'}${evAge(e, d) ? ' (' + evAge(e, d) + ')' : ''}` : e.title || 'Termin' });
+  }
+  for (const m of mealsOn(d)) { const st = toMin(MEAL_AT[m.meta?.slot] || '12:00'); timed.push({ kind: 'meal', item: m, start: st, end: st + 45, label: m.title }); }
+  for (const t of state.items.filter((i) => i.type === 'todo' && i.due_date === d)) allday.push({ kind: 'todo', item: t, label: t.title || 'Todo' });
+  for (const r of state.items.filter((i) => i.type !== 'event' && i.type !== 'meal' && i.remind_at && !i.done && !i.reminded && ymd(new Date(i.remind_at)) === d)) {
+    const t = new Date(r.remind_at); const st = t.getHours() * 60 + t.getMinutes();
+    timed.push({ kind: 'rem', item: r, start: st, end: st + 30, label: r.title || 'Erinnerung' });
+  }
+  timed.sort((a, b) => a.start - b.start);
+  // überlappende Einträge nebeneinander
+  const cols = [];
+  for (const t of timed) {
+    let c = cols.findIndex((end) => end <= t.start);
+    if (c < 0) { c = cols.length; cols.push(0); }
+    cols[c] = t.end; t.col = c;
+  }
+  timed.forEach((t) => { t.cols = Math.max(1, ...timed.filter((o) => o.start < t.end && o.end > t.start).map((o) => o.col + 1)); });
+  return { timed, allday };
+}
+const chipIc = (k, item) => ({ bday: ICON.cake, ev: item?.icon && ICON[item.icon] ? ICON[item.icon] : ICON.calendar, todo: ICON.todos, meal: ICON.fork, rem: ICON.bell })[k];
+const allChip = (a) => `<button class="cchip k-${a.kind} ${a.item.done ? 'done' : ''}" data-act="open" data-id="${a.item.id}">${chipIc(a.kind, a.item)}<span>${esc(a.label)}</span></button>`;
+const hm = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+const timedBlock = (t, narrow = false) => {
+  const top = (Math.max(t.start, H0 * 60) - H0 * 60) / 60 * HPX, h = Math.max(22, (Math.min(t.end, H1 * 60) - Math.max(t.start, H0 * 60)) / 60 * HPX - 2);
+  return `<button class="cblk k-${t.kind}" data-act="open" data-id="${t.item.id}" style="top:${top}px;height:${h}px;left:calc(${(t.col / t.cols) * 100}% + 2px);width:calc(${100 / t.cols}% - 4px)">
+    ${narrow ? '' : `<small>${hm(t.start)}${t.kind === 'ev' && t.item.meta?.end ? '–' + esc(t.item.meta.end) : ''}</small>`}<b>${esc(t.label)}</b></button>`;
+};
+const hourLines = () => Array.from({ length: H1 - H0 }, (_, k) => `<div class="hl" style="top:${k * HPX}px"><span>${String(H0 + k).padStart(2, '0')}</span></div>`).join('');
+const nowLine = (d) => {
+  if (d !== ymd(new Date())) return '';
+  const n = new Date(), min = n.getHours() * 60 + n.getMinutes();
+  return min < H0 * 60 || min > H1 * 60 ? '' : `<i class="nowl" style="top:${(min - H0 * 60) / 60 * HPX}px"></i>`;
+};
+
+function calTitle() {
+  const d = calDay(), v = state.calView;
+  if (v === 'day') return [parseYmd(d).toLocaleDateString('de-AT', { weekday: 'long' }), parseYmd(d).toLocaleDateString('de-AT', { day: 'numeric', month: 'long', year: 'numeric' })];
+  if (v === 'week') { const ws = mondayOf(parseYmd(d)), we = addDays(ws, 6); return [`KW ${isoWeek(ws)}`, `${parseYmd(ws).toLocaleDateString('de-AT', { day: 'numeric', month: 'short' })} – ${parseYmd(we).toLocaleDateString('de-AT', { day: 'numeric', month: 'short', year: 'numeric' })}`]; }
+  return [parseYmd(d).toLocaleDateString('de-AT', { month: 'long' }), d.slice(0, 4)];
+}
+// Steuerung unten (Daumenbereich)
+function calBar() {
+  const v = state.calView;
+  return `<nav class="calbar-b" aria-label="Kalender-Steuerung">
+    <button class="cb-arrow" data-act="cal-move" data-id="-1" aria-label="Zurück">${ICON.chevL}</button>
+    <div class="seg-view cal-seg">${[['day', 'Tag'], ['week', 'Woche'], ['month', 'Monat']].map(([k, l]) => `<button class="${v === k ? 'on' : ''}" data-act="cal-view" data-id="${k}"><span>${l}</span></button>`).join('')}</div>
+    <button class="cb-arrow" data-act="cal-move" data-id="1" aria-label="Weiter">${ICON.chevR}</button>
+  </nav>`;
+}
+
+function calMove(n) {
+  const d = calDay(), v = state.calView;
+  if (v === 'day') state.calDate = addDays(d, n);
+  else if (v === 'week') state.calDate = addDays(d, 7 * n);
+  else { const x = parseYmd(d); x.setDate(1); x.setMonth(x.getMonth() + n); state.calDate = ymd(x); }
+  render();
+  if (v === 'day') scrollCal();
+}
+// Tagesraster auf ca. 7 Uhr bzw. jetzt scrollen
+function scrollCal() {
+  requestAnimationFrame(() => {
+    const g = document.querySelector('.tgridv'), m = document.querySelector('.main');
+    if (!g || !m) return;
+    const n = new Date(), h = calDay() === ymd(n) ? Math.max(H0, n.getHours() - 1) : 7;
+    m.scrollTop = g.offsetTop + (h - H0) * HPX - 10;
+  });
+}
+
 function renderCalendar() {
-  const days = Array.from({ length: 7 }, (_, k) => addDays(state.weekStart, k));
-  const today = ymd(new Date());
-  const remindOn = (d) => state.items.filter((i) => i.remind_at && !i.done && ymd(new Date(i.remind_at)) === d);
-  return `<section class="tile wsum">${weekNav()}</section>
-  <div class="tgrid days">${days.map((d) => {
-    const meals = mealsOn(d), cook = cookOn(d);
-    const todos = state.items.filter((i) => i.type === 'todo' && i.due_date === d);
-    const rem = remindOn(d).filter((i) => !todos.includes(i));
-    const any = meals.length || cook.length || todos.length || rem.length;
-    return `<section class="tile day ${d === today ? 'today' : ''} ${any ? '' : 'empty-day'}">
-      <div class="th"><b>${esc(dayName(d))}</b><small class="dd">${esc(dayName(d, { day: 'numeric', month: 'numeric' }))}</small>${d === today ? '<span class="utag">Heute</span>' : ''}</div>
-      ${!any ? '<p class="kempty">Nichts geplant.</p>' : ''}
-      ${meals.length ? `<div class="cal-h">${ICON.fork}Essen</div><div class="mrows">${meals.map((m) => mealRow(m, { compact: true })).join('')}</div>` : ''}
-      ${cook.length ? `<div class="cook">${ICON.pot}<span>Vorkochen: <b>${cook.map((m) => esc(m.title)).join(', ')}</b></span></div>` : ''}
-      ${todos.length ? `<div class="cal-h">${ICON.todos}Todos</div><div class="krows">${todos.map(krow).join('')}</div>` : ''}
-      ${rem.length ? `<div class="cal-h">${ICON.bell}Erinnerungen</div><div class="krows">${rem.map(krow).join('')}</div>` : ''}
-    </section>`;
-  }).join('')}</div>`;
+  const v = state.calView;
+  return `<div class="cal cal-${v}" data-swipe="cal">${v === 'day' ? calDayView() : v === 'month' ? calMonthView() : calWeekView()}</div>`;
+}
+
+function calDayView() {
+  const d = calDay(), { timed, allday } = dayContent(d);
+  return `<section class="tile cal-panel">
+    ${allday.length ? `<div class="allday">${allday.map(allChip).join('')}</div>` : ''}
+    <div class="tgridv" data-day="${d}" style="height:${(H1 - H0) * HPX}px">
+      ${hourLines()}
+      <div class="tcol" data-slotday="${d}">${timed.map((t) => timedBlock(t)).join('')}${nowLine(d)}</div>
+    </div>
+    <p class="hint cal-hint">Auf eine freie Stelle tippen für einen neuen Termin.</p>
+  </section>`;
+}
+
+function calWeekView() {
+  const ws = mondayOf(parseYmd(calDay())), days = Array.from({ length: 7 }, (_, k) => addDays(ws, k)), today = ymd(new Date());
+  const row = (d) => {
+    const { timed, allday } = dayContent(d);
+    const list = [...allday.map((a) => ({ ...a, t: '' })), ...timed.map((t) => ({ ...t, t: hm(t.start) + (t.kind === 'ev' && t.item.meta?.end ? '–' + t.item.meta.end : '') }))];
+    return `<div class="wr ${d === today ? 'today' : ''} ${d < today ? 'past' : ''} ${list.length ? '' : 'empty'}">
+      <button class="wr-d" data-act="cal-goto" data-id="${d}" aria-label="${esc(dayName(d, { weekday: 'long', day: 'numeric', month: 'long' }))} öffnen">
+        <small>${esc(dayName(d, { weekday: 'short' }))}</small><b>${+d.slice(8)}</b>
+      </button>
+      <div class="wr-l">
+        ${list.map((a) => `<button class="we k-${a.kind} ${a.item.done ? 'done' : ''}" data-act="open" data-id="${a.item.id}">
+          <span class="we-i">${chipIc(a.kind, a.item)}</span><span class="we-l">${esc(a.label)}</span>${a.t ? `<span class="we-t">${esc(a.t)}</span>` : ''}</button>`).join('')}
+        <button class="we-add" data-act="new-event" data-id="${d}" aria-label="Termin am ${esc(dayName(d, { day: 'numeric', month: 'long' }))}">${list.length ? ICON.plus : `${ICON.plus}<span>Frei</span>`}</button>
+      </div>
+    </div>`;
+  };
+  return `<section class="tile cal-panel wkl">${days.map(row).join('')}</section>`;
+}
+
+function calMonthView() {
+  const d = calDay(), first = d.slice(0, 8) + '01', start = mondayOf(parseYmd(first)), today = ymd(new Date());
+  const month = d.slice(0, 7);
+  const weeks = [];
+  for (let w = 0; w < 6; w++) {
+    const row = Array.from({ length: 7 }, (_, k) => addDays(start, w * 7 + k));
+    if (w > 3 && row[0].slice(0, 7) !== month) break;
+    weeks.push(row);
+  }
+  const cell = (x) => {
+    const { timed, allday } = dayContent(x);
+    const list = [...allday.filter((a) => a.kind === 'bday'), ...allday.filter((a) => a.kind === 'ev'), ...timed.filter((t) => t.kind === 'ev'), ...allday.filter((a) => a.kind === 'todo')];
+    const meals = timed.filter((t) => t.kind === 'meal').length;
+    return `<button class="mc ${x.slice(0, 7) !== month ? 'out' : ''} ${x === today ? 'today' : ''} ${x === d ? 'sel' : ''}" data-act="cal-goto" data-id="${x}">
+      <span class="mc-n">${+x.slice(8)}</span>
+      ${list.slice(0, 3).map((a) => `<span class="mc-e k-${a.kind}">${a.kind === 'bday' ? ICON.cake : ''}${esc(a.label)}</span>`).join('')}
+      ${list.length > 3 ? `<span class="mc-more">+${list.length - 3}</span>` : ''}
+      ${meals ? `<span class="mc-meal">${ICON.fork}${meals}</span>` : ''}
+    </button>`;
+  };
+  return `<section class="tile cal-panel mon">
+    <div class="mon-h">${['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((x) => `<span>${x}</span>`).join('')}</div>
+    <div class="mon-g">${weeks.flat().map(cell).join('')}</div>
+  </section>
+  ${calAgenda(d)}`;
+}
+// Unter dem Monat: der gewählte Tag als Liste
+function calAgenda(d) {
+  const { timed, allday } = dayContent(d);
+  const items = [...allday.map((a) => ({ ...a, t: '' })), ...timed.map((t) => ({ ...t, t: hm(t.start) }))];
+  return `<section class="tile cal-agenda">
+    <div class="th"><b>${esc(parseYmd(d).toLocaleDateString('de-AT', { weekday: 'long', day: 'numeric', month: 'long' }))}</b><span class="th-sp"></span><button class="lgear" data-act="new-event" data-id="${d}" aria-label="Neuer Termin">${ICON.plus}</button></div>
+    ${items.length ? `<div class="agl">${items.map((a) => `<button class="ag k-${a.kind}" data-act="open" data-id="${a.item.id}"><span class="ag-t">${a.t || 'ganztägig'}</span><span class="ag-i">${chipIc(a.kind, a.item)}</span><span class="ag-l">${esc(a.label)}</span></button>`).join('')}</div>` : '<p class="kempty">Nichts geplant.</p>'}
+  </section>`;
 }
 
 // ---------- Gericht ansehen ----------
@@ -1264,12 +1716,20 @@ const HOME_BTNS = [
   { key: 'logout', label: 'Abmelden', icon: 'power' },
 ];
 
+function homeEvents() {
+  const t = ymd(new Date()), m = addDays(t, 1);
+  const list = [...eventsOn(t).map((e) => [e, 'Heute']), ...eventsOn(m).map((e) => [e, 'Morgen'])].slice(0, 3);
+  if (!list.length) return '';
+  return `<div class="home-ev">${list.map(([e, w]) => `<button class="hev ${isBday(e) ? 'bday' : ''}" data-act="open" data-id="${e.id}">${isBday(e) ? ICON.cake : ICON.calendar}<span><em>${w}</em> ${esc(isBday(e) ? (e.title || 'Geburtstag') : e.title || 'Termin')}${!isBday(e) && e.meta?.time ? ' · ' + esc(e.meta.time) : ''}</span></button>`).join('')}</div>`;
+}
+
 function renderHome() {
   const d = new Date();
   return `
   <div class="home">
     <header class="home-head">
-      <div class="home-day"><b>${d.toLocaleDateString('de-AT', { weekday: 'long' })}</b><span>${d.toLocaleDateString('de-AT', { day: 'numeric', month: 'long', year: 'numeric' })}</span></div>
+      <div class="home-day"><b>${d.toLocaleDateString('de-AT', { weekday: 'long' })}</b><span>${d.toLocaleDateString('de-AT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+        ${homeEvents()}</div>
     </header>
     <div class="bookmark">${LOGO_PORTRAIT}</div>
     <div class="home-plate" aria-hidden="true"><i></i><i></i></div>
@@ -1309,10 +1769,9 @@ const WHEEL = [
 const ctl = (() => {
   const R = 160;          // Radius des Rads
   const SPAN = 100;       // Öffnungswinkel in Grad
-  const HOLD = 280;       // ms still halten bis zum Wackeln
-  const WOBBLE = 380;     // ms Wackeln bis das Rad aufgeht
-  const MOVE = 8;         // px Bewegung = Verschieben statt Menü
-  const SIZE = 64, EDGE = 12;
+  const CHARGE = 480;     // ms gedrückt halten = aufladen, dann zurück zum Menü
+  const MOVE = 24;        // px Bewegung bricht das Aufladen ab
+  const SIZE = 64, EDGE = 16;
   const POS_KEY = 'uebersicht-ctl-pos';
 
   const el = document.createElement('div');
@@ -1323,7 +1782,8 @@ const ctl = (() => {
     <div class="ctl-label" aria-live="polite"></div>
     ${WHEEL.map((w, i) => `<button class="wi ${w.soon ? 'soon' : ''}" data-go="${w.key}" style="--d:${i * 28}ms" tabindex="-1" aria-label="${w.label}">${ICON[w.icon]}</button>`).join('')}
     <div class="ctl-burst">${Array.from({ length: 10 }, (_, i) => `<i style="--a:${i * 36}deg"></i>`).join('')}</div>
-    <button class="ctl-btn" aria-label="Steuerung: tippen für Home, gedrückt halten für Auswahl, ziehen zum Verschieben">${LOGO_MARK}</button>`;
+    <svg class="ctl-ring" viewBox="0 0 72 72" aria-hidden="true"><circle cx="36" cy="36" r="33"/></svg>
+    <button class="ctl-btn" aria-label="Gedrückt halten: zurück zum Menü">${LOGO_MARK}</button>`;
   document.body.appendChild(el);
 
   const btn = el.querySelector('.ctl-btn');
@@ -1350,11 +1810,8 @@ const ctl = (() => {
       return;
     }
     const insetB = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--safe-bottom')) || 0;
-    let x, y;
-    if (place) { x = place.fx * vw() - SIZE / 2; y = place.fy * vh() - SIZE / 2; }
-    else { x = vw() - SIZE - 20; y = vh() - SIZE - 120 - insetB; }   // Standard: rechts, etwas höher
-    x = clamp(x, EDGE, vw() - SIZE - EDGE);
-    y = clamp(y, EDGE, vh() - SIZE - EDGE);
+    // Unterseiten: fest unten rechts im Eck, neben der Leiste
+    const x = vw() - SIZE - EDGE, y = vh() - SIZE - 14 - insetB;
     el.style.left = x + 'px';
     el.style.top = y + 'px';
   };
@@ -1369,13 +1826,14 @@ const ctl = (() => {
   const layout = () => {
     const r = btn.getBoundingClientRect();
     const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-    const base = anchorEl ? 90 : Math.atan2(vh() / 2 - cy, vw() / 2 - cx) * 180 / Math.PI;
-    const span = anchorEl ? 170 : SPAN;
+    const base = anchorEl ? 90 : 225;
+    const span = anchorEl ? 170 : 92;
     active = anchorEl ? WHEEL.filter((w) => w.key !== 'home') : WHEEL;
     items.forEach((b) => { b.hidden = !active.some((w) => w.key === b.dataset.go); });
+    // Unterseiten: Viertelkreis vom Eck unten rechts nach links oben
+    const rr = anchorEl ? Math.min(R, vw() / 2 - 44) : Math.min(250, cx - 40, cy - 60);
     const arc = (d) => active.map((w, i) => {
       const a = (d - span / 2 + i * span / (active.length - 1)) * Math.PI / 180;
-      const rr = anchorEl ? Math.min(R, vw() / 2 - 44) : R;
       return { x: Math.round(rr * Math.cos(a)), y: Math.round(rr * Math.sin(a)) };
     });
     // Rad so weit drehen, bis alle Ziele auf dem Bildschirm liegen
@@ -1396,7 +1854,7 @@ const ctl = (() => {
     hovered = k;
     items.forEach((b) => b.classList.toggle('hot', b.dataset.go === k));
     const w = WHEEL.find((x) => x.key === k);
-    label.textContent = w ? (w.soon ? `${w.label} (bald)` : w.label) : (anchorEl ? '' : 'Ziehen oder tippen');
+    label.textContent = w ? (w.soon ? `${w.label} (bald)` : w.label) : (anchorEl ? '' : 'Bereich antippen');
     el.classList.toggle('has-hot', !!w);
     if (k) navigator.vibrate?.(8);
   };
@@ -1464,6 +1922,7 @@ const ctl = (() => {
       state.tab = k;
       render();
       document.querySelector('.main')?.scrollTo({ top: 0 });
+      if (k === 'calendar') scrollCal();
     });
   };
   const nearest = (e) => {
@@ -1473,7 +1932,7 @@ const ctl = (() => {
     pos.forEach((p, i) => { const d = Math.hypot(dx - p.x, dy - p.y); if (d < bd) { bd = d; best = active[i].key; } });
     return bd < 40 ? best : null;
   };
-  const stopTimers = () => { clearTimeout(holdT); clearTimeout(wobT); };
+  const stopTimers = () => { clearTimeout(holdT); clearTimeout(wobT); el.classList.remove('charging'); };
 
   btn.addEventListener('pointerdown', (e) => {
     e.preventDefault();
@@ -1482,24 +1941,24 @@ const ctl = (() => {
     start = { x: e.clientX, y: e.clientY };
     if (anchorEl) { mode = 'press'; return; }          // Home: Bereiche stehen schon, kein Halten nötig
     mode = 'press';
-    const r = el.getBoundingClientRect();
-    origin = { x: r.left, y: r.top };
+    // Aufladen: Ring läuft voll, dann zurück zum Menü
+    void el.offsetWidth;
+    el.classList.add('charging');
+    navigator.vibrate?.([8, 60, 8, 60, 8, 60, 8]);
     holdT = setTimeout(() => {
-      mode = 'wobble';
-      el.classList.add('wobble');
-      wobT = setTimeout(open, WOBBLE);
-    }, HOLD);
+      mode = 'charged';
+      el.classList.remove('charging');
+      el.classList.add('charged');
+      setTimeout(() => el.classList.remove('charged'), 400);
+      navigator.vibrate?.(20);
+      go('home');
+    }, CHARGE);
   });
   btn.addEventListener('pointermove', (e) => {
     if (mode === 'open' || (anchorEl && mode === 'press')) return setHover(nearest(e));
     if (mode === 'press' && !anchorEl && Math.hypot(e.clientX - start.x, e.clientY - start.y) > MOVE) {
-      stopTimers();                    // gleich bewegt -> verschieben, kein Menü
-      mode = 'drag';
-      el.classList.add('drag');
-    }
-    if (mode === 'drag') {
-      el.style.left = clamp(origin.x + e.clientX - start.x, EDGE, vw() - SIZE - EDGE) + 'px';
-      el.style.top = clamp(origin.y + e.clientY - start.y, EDGE, vh() - SIZE - EDGE) + 'px';
+      stopTimers();                    // weggezogen -> abbrechen
+      mode = 'idle';
     }
   });
   btn.addEventListener('pointerup', (e) => {
@@ -1511,15 +1970,15 @@ const ctl = (() => {
       el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse');
       return;
     }
-    if (mode === 'press') { close(); return go('home'); }
-    if (mode === 'drag') { savePos(); close(); return; }
-    if (mode === 'wobble') { close(); return; }
+    if (mode === 'press') { mode = 'idle'; return; }   // kurz tippen: nichts
+    if (mode === 'charged') { mode = 'idle'; return; }
     if (mode === 'open') { const k = nearest(e); if (k) go(k); else label.textContent = 'Ziel antippen'; }
   });
-  btn.addEventListener('pointercancel', () => { stopTimers(); if (mode === 'drag') savePos(); if (mode !== 'open') close(); });
+  btn.addEventListener('pointercancel', () => { stopTimers(); if (mode !== 'open') close(); });
   btn.addEventListener('contextmenu', (e) => e.preventDefault());
   btn.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); if (!anchorEl) go('home'); }
+    if (e.key === 'Escape' && !anchorEl) { e.preventDefault(); go('home'); }
     if (e.key === ' ' || e.key === 'ArrowUp') { e.preventDefault(); open(); items[0].focus(); }
   });
   btn.addEventListener('click', (e) => e.preventDefault());
@@ -1548,6 +2007,25 @@ const ctl = (() => {
   };
 })();
 
+// Kalender: freie Stelle im Raster antippen = neuer Termin zu dieser Uhrzeit
+$app.addEventListener('click', (e) => {
+  const col = e.target.closest('.tcol[data-slotday]');
+  if (!col || e.target.closest('.cblk')) return;
+  const r = col.getBoundingClientRect();
+  const min = Math.round(((e.clientY - r.top) / HPX * 60 + H0 * 60) / 30) * 30;
+  createEvent(col.dataset.slotday, 'event', hm(Math.min(min, 23 * 60 + 30)));
+});
+// Kalender: links/rechts wischen = vor/zurück
+(() => {
+  let sx = 0, sy = 0, on = false;
+  $app.addEventListener('touchstart', (e) => { if (!e.target.closest('[data-swipe="cal"]')) return; on = true; sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+  $app.addEventListener('touchend', (e) => {
+    if (!on) return; on = false;
+    const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+    if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.6) calMove(dx < 0 ? 1 : -1);
+  }, { passive: true });
+})();
+
 // Klicks in der Hauptansicht
 $app.addEventListener('click', async (e) => {
   const hb = e.target.closest('[data-home]');
@@ -1562,7 +2040,15 @@ $app.addEventListener('click', async (e) => {
   const id = t.dataset.id;
   switch (t.dataset.act) {
     case 'toggle': toggleTodo(id); break;
-    case 'group-edit': openGroupEdit(id, t.dataset.f); break;
+    case 'group-edit': openGroupEdit(id, t.dataset.f, t.dataset.t || 'note'); break;
+    case 'new-event': createEvent(id); break;
+    case 'new-todo': createTodo(); break;
+    case 'focus-add': { const inp = document.querySelector('.tadd input'); if (inp) { document.querySelector('.main')?.scrollTo({ top: 0, behavior: 'smooth' }); inp.focus(); } break; }
+    case 'cal-view': state.calView = id; store('calView', id); render(); scrollCal(); break;
+    case 'cal-today': state.calDate = ymd(new Date()); render(); scrollCal(); break;
+    case 'cal-goto': if (state.calView === 'month' && state.calDate !== id) { state.calDate = id; render(); } else { state.calDate = id; state.calView = 'day'; store('calView', 'day'); render(); scrollCal(); } break;
+    case 'cal-move': calMove(+id); break;
+    case 'new-event-menu': openNewEventMenu(); break;
     case 'open-list': state.list = id || ''; render(); document.querySelector('.main')?.scrollTo({ top: 0 }); break;
     case 'close-list': state.list = null; render(); break;
     case 'open': openItem(id); break;
@@ -1616,6 +2102,14 @@ async function toggleTodo(id) {
   if (error) { i.done = !i.done; render(); toast('Fehler: ' + error.message); }
 }
 
+async function createTodo(cat = null) {
+  const { data, error } = await sb.from('items').insert({ type: 'todo', title: '', category_id: cat }).select().single();
+  if (error) return toast('Fehler: ' + error.message);
+  state.items.unshift(data);
+  render();
+  openItem(data.id, { isNew: true });
+  setTimeout(() => document.querySelector('#f-title')?.focus(), 60);
+}
 async function createNote(cat) {
   const category_id = cat !== undefined ? cat : (state.filter !== 'all' && state.filter !== 'none' ? state.filter : null);
   const { data, error } = await sb.from('items').insert({ type: 'note', title: '', category_id }).select().single();
@@ -1676,6 +2170,7 @@ function openItem(id, { isNew = false } = {}) {
   const i = itemById(id);
   if (!i) return;
   if (i.type === 'meal') return openMeal(id);
+  if (i.type === 'event') return openEvent(id);
   const isNote = i.type === 'note';
   const mine = i.owner_id === state.me;
 
@@ -1685,13 +2180,9 @@ function openItem(id, { isNew = false } = {}) {
       <button class="link-btn" data-close>Fertig</button>
     </div>
     <div class="title-row">
-      <button class="icon-pick ${i.icon ? 'has' : ''}" id="f-icon-btn" type="button" aria-label="Symbol wählen" aria-expanded="false">${i.icon ? itemIcon(i) : ICON.plus}</button>
       <input class="title-input" id="f-title" placeholder="${isNote ? 'Titel' : 'Todo'}" value="${esc(i.title)}">
     </div>
-    <div class="icon-grid" id="f-icons" hidden>
-      <button type="button" class="ig ${!i.icon ? 'on' : ''}" data-icon="" aria-label="Kein Symbol"><span class="ig-none"></span></button>
-      ${ITEM_ICONS.map(([k, l]) => `<button type="button" class="ig ${i.icon === k ? 'on' : ''}" data-icon="${k}" aria-label="${l}" title="${l}">${ICON[k]}</button>`).join('')}
-    </div>
+    <div class="f-colrow">${colorPick(i.meta?.color || '', 'f-col')}</div>
     ${isNote
       ? `<textarea class="note-body" id="f-body" placeholder="Notiz …">${esc(i.body)}</textarea>`
       : `<div class="field" style="margin-top:12px"><label>Notiz</label><textarea class="textarea" id="f-body" style="min-height:90px" placeholder="Details (optional)">${esc(i.body)}</textarea></div>
@@ -1730,17 +2221,6 @@ function openItem(id, { isNew = false } = {}) {
   $title.addEventListener('input', saveText);
   $body.addEventListener('input', saveText);
   sheet.querySelector('#f-due')?.addEventListener('change', (e) => saveItem(id, { due_date: e.target.value || null }));
-  // Symbol
-  const $iconBtn = sheet.querySelector('#f-icon-btn'), $icons = sheet.querySelector('#f-icons');
-  $iconBtn.addEventListener('click', () => { $icons.hidden = !$icons.hidden; $iconBtn.setAttribute('aria-expanded', String(!$icons.hidden)); });
-  $icons.querySelectorAll('[data-icon]').forEach((b) => b.addEventListener('click', async () => {
-    const icon = b.dataset.icon || null;
-    $icons.querySelectorAll('.ig').forEach((x) => x.classList.toggle('on', x === b));
-    $iconBtn.innerHTML = icon ? ICON[icon] : ICON.plus;
-    $iconBtn.classList.toggle('has', !!icon);
-    $icons.hidden = true;
-    await saveItem(id, { icon });
-  }));
   // Erinnerung
   const $remind = sheet.querySelector('#f-remind'), $rClear = sheet.querySelector('#f-remind-clear'), $rHint = sheet.querySelector('#f-remind-hint');
   const setRemind = async (date) => {
@@ -1759,6 +2239,12 @@ function openItem(id, { isNew = false } = {}) {
     else if (v === 'tom8') { d.setDate(d.getDate() + 1); d.setHours(8, 0, 0, 0); }
     else d.setMinutes(d.getMinutes() + Number(v), 0, 0);
     setRemind(d);
+  }));
+  sheet.querySelectorAll('#f-col [data-col]').forEach((x) => x.addEventListener('click', () => {
+    sheet.querySelectorAll('#f-col [data-col]').forEach((y) => y.classList.toggle('on', y === x));
+    const meta = { ...(itemById(id)?.meta || {}) };
+    if (x.dataset.col) meta.color = x.dataset.col; else delete meta.color;
+    saveItem(id, { meta });
   }));
   sheet.querySelector('#f-cat').addEventListener('change', (e) => {
     saveItem(id, { category_id: e.target.value || null }).then(() => renderShareArea(sheet, id));
@@ -1830,9 +2316,26 @@ function remindHint(i) {
 function askNotifyPermission() {
   try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch {}
 }
+// Text einer Erinnerung (gleich wie in der Server-Funktion)
+function remindText(i) {
+  if (i.type === 'event') {
+    const r = i.meta?.remind;
+    const when = r === '1' ? 'Morgen' : r === '7' ? 'In einer Woche' : r === 'h' ? 'In einer Stunde' : 'Heute';
+    return { title: evTitle(i), body: `${when}${!isBday(i) && i.meta?.time ? ' um ' + i.meta.time + ' Uhr' : ''}${i.body ? ' · ' + i.body.slice(0, 80) : ''}` };
+  }
+  return { title: i.title || (i.type === 'note' ? 'Notiz' : 'Todo'), body: i.type === 'note' ? (i.body || '').slice(0, 120) : 'Erinnerung zu deinem Todo' };
+}
+// Nach dem Erinnern: jährliche Termine aufs nächste Jahr stellen, sonst als erledigt markieren
+function afterRemind(i) {
+  if (i.type === 'event' && isYearly(i)) {
+    const t = new Date(i.remind_at);
+    while (t.getTime() <= Date.now()) t.setFullYear(t.getFullYear() + 1);
+    return { remind_at: t.toISOString(), reminded: false };
+  }
+  return { reminded: true };
+}
 async function fireReminder(i) {
-  const title = i.title || (i.type === 'note' ? 'Notiz' : 'Todo');
-  const body = i.type === 'note' ? (i.body || '').slice(0, 120) : 'Erinnerung zu deinem Todo';
+  const { title, body } = remindText(i);
   let shown = false;
   try {
     if ('Notification' in window && Notification.permission === 'granted') {
@@ -1843,12 +2346,13 @@ async function fireReminder(i) {
     }
   } catch {}
   if (!shown || document.visibilityState === 'visible') showReminderBanner(i);
-  saveItem(i.id, { reminded: true });
+  saveItem(i.id, afterRemind(i));
 }
 function showReminderBanner(i) {
   const el = document.createElement('div');
   el.className = 'rbanner';
-  el.innerHTML = `<span class="rb-ic">${ICON.bell}</span><span class="rb-t"><b>${esc(i.title || 'Erinnerung')}</b><small>Erinnerung</small></span>
+  const rt = remindText(i);
+  el.innerHTML = `<span class="rb-ic">${i.type === 'event' && isBday(i) ? ICON.cake : ICON.bell}</span><span class="rb-t"><b>${esc(rt.title)}</b><small>${esc(i.type === 'event' ? rt.body : 'Erinnerung')}</small></span>
     <button class="btn secondary" data-rb="open">Öffnen</button><button class="x-btn" data-rb="x" aria-label="Schließen">×</button>`;
   document.body.appendChild(el);
   el.querySelector('[data-rb=open]').addEventListener('click', () => { el.remove(); openItem(i.id); });
@@ -1862,7 +2366,7 @@ function checkReminders() {
   const due = state.items.filter((i) => i.remind_at && !i.reminded && !i.done && (i.owner_id === state.me || isItemShared(i)) && new Date(i.remind_at).getTime() <= now);
   if (pushOn()) {
     // Server verschickt die Mitteilung; in der offenen App nur einmal den Hinweis zeigen
-    due.filter((i) => !bannerShown.has(i.id)).forEach((i) => { bannerShown.add(i.id); if (document.visibilityState === 'visible') showReminderBanner(i); });
+    due.filter((i) => !bannerShown.has(i.id + i.remind_at)).forEach((i) => { bannerShown.add(i.id + i.remind_at); if (document.visibilityState === 'visible') showReminderBanner(i); });
     return;
   }
   due.forEach(fireReminder);
@@ -1874,6 +2378,23 @@ async function silentDelete(id) {
   state.items = state.items.filter((x) => x.id !== id);
   render();
   await sb.from('items').delete().eq('id', id);
+}
+
+// Alle Personen mit Konto als Auswahl (Tippen = teilen / nicht mehr teilen)
+const otherPeople = (exclude = []) => Object.values(state.profiles).filter((p) => p.id !== state.me && !exclude.includes(p.id))
+  .sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email, 'de'));
+function personPicker(selected, exclude = []) {
+  const people = otherPeople(exclude);
+  // Ohne sichtbare Konten (Datenbank noch nicht erweitert): wie früher per E-Mail
+  if (!people.length) return `<form class="row-inline pp-mail"><input class="input" type="email" name="email" placeholder="E-Mail der Person" autocomplete="email" required><button class="btn secondary" type="submit">Teilen</button></form>`;
+  return `<div class="ppick">${people.map((p) => {
+    const on = selected.includes(p.id);
+    return `<button type="button" class="pp ${on ? 'on' : ''}" data-person="${p.id}" aria-pressed="${on}">
+      <span class="pp-av">${esc((p.name || p.email || '?').trim().charAt(0).toUpperCase())}</span>
+      <span class="pp-t"><b>${esc(p.name || p.email)}</b><small>${esc(p.email || '')}</small></span>
+      <span class="pp-ck">${on ? ICON.check : ''}</span>
+    </button>`;
+  }).join('')}</div>`;
 }
 
 function renderShareArea(sheet, id) {
@@ -1890,34 +2411,36 @@ function renderShareArea(sheet, id) {
     html += `<div class="hint" style="margin:0 2px 8px">Sichtbar für alle in „${esc(cat.name)}“: ${esc(people.join(', '))}</div>`;
   }
   if (mine) {
-    const shared = sharesOf(id);
-    html += `<div class="people">${shared.map((u) => `
-      <div class="person"><div>${esc(nameOf(u))}<small>${esc(state.profiles[u]?.email || '')}</small></div>
-      <button class="x-btn" data-unshare="${u}" aria-label="Entfernen">×</button></div>`).join('')}</div>
-      <form class="row-inline" id="share-form">
-        <input class="input" type="email" name="email" placeholder="E-Mail der Person" autocomplete="email" required>
-        <button class="btn secondary" type="submit">Teilen</button>
-      </form>`;
+    const inCat = cat && isCatShared(cat) ? [cat.owner_id, ...membersOf(cat.id)] : [];
+    html += personPicker(sharesOf(id), inCat);
   } else if (!(cat && isCatShared(cat))) {
     html += `<div class="hint" style="margin:0 2px">Direkt mit dir geteilt.</div>`;
   }
   area.innerHTML = html;
 
-  area.querySelectorAll('[data-unshare]').forEach((b) => b.addEventListener('click', async () => {
-    const { error } = await sb.from('item_shares').delete().eq('item_id', id).eq('user_id', b.dataset.unshare);
-    if (error) return toast('Fehler: ' + error.message);
-    state.shares = state.shares.filter((s) => !(s.item_id === id && s.user_id === b.dataset.unshare));
+  area.querySelectorAll('[data-person]').forEach((b) => b.addEventListener('click', async () => {
+    const uid = b.dataset.person, p = state.profiles[uid];
+    b.disabled = true;
+    if (sharesOf(id).includes(uid)) {
+      const { error } = await sb.from('item_shares').delete().eq('item_id', id).eq('user_id', uid);
+      if (error) { b.disabled = false; return toast('Fehler: ' + error.message); }
+      state.shares = state.shares.filter((s) => !(s.item_id === id && s.user_id === uid));
+      toast(`Nicht mehr mit ${p?.name || 'dieser Person'} geteilt`);
+    } else {
+      const { data, error } = await sb.rpc('share_item', { iid: id, target_email: p?.email || '' });
+      if (error) { b.disabled = false; return toast('Fehler: ' + error.message); }
+      if (data !== 'ok') { b.disabled = false; return toast(shareMessage(data), 3500); }
+      state.shares.push({ item_id: id, user_id: uid });
+      toast(`Mit ${p?.name || 'Person'} geteilt`);
+    }
     renderShareArea(sheet, id); render();
   }));
-  area.querySelector('#share-form')?.addEventListener('submit', async (e) => {
+  area.querySelector('.pp-mail')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const email = e.target.email.value;
-    const { data, error } = await sb.rpc('share_item', { iid: id, target_email: email });
+    const { data, error } = await sb.rpc('share_item', { iid: id, target_email: e.target.email.value });
     if (error) return toast('Fehler: ' + error.message);
     if (data !== 'ok') return toast(shareMessage(data), 3500);
-    await loadAll();
-    renderShareArea(sheet, id);
-    toast('Geteilt');
+    await loadAll(); renderShareArea(sheet, id); toast('Geteilt');
   });
 }
 
@@ -2071,14 +2594,12 @@ function openCategory(cid) {
     <div class="sheet-head"><h2>${esc(c.name)}</h2><button class="link-btn" data-close>Fertig</button></div>
     <div class="field"><label>Name</label><input class="input" id="c-name" value="${esc(c.name)}"></div>
     <div class="field"><label>Farbe</label><div class="colors">${COLORS.map((col) => `<button type="button" class="color ${col === c.color ? 'on' : ''}" data-color="${col}" style="background:${col}"></button>`).join('')}</div></div>
+    <div class="field"><label>Symbol</label><div class="icon-grid cat-icons" id="c-icons" style="--fc:${esc(c.color)}">
+      <button type="button" class="ig ${!c.icon ? 'on' : ''}" data-cicon="" aria-label="Standard">${ICON.tag}</button>
+      ${ITEM_ICONS.map(([k, l]) => `<button type="button" class="ig ${c.icon === k ? 'on' : ''}" data-cicon="${k}" aria-label="${l}" title="${l}">${ICON[k]}</button>`).join('')}
+    </div></div>
     <div class="field"><label>Gemeinsam mit</label>
-      <div class="people">${membersOf(cid).map((u) => `
-        <div class="person"><div>${esc(nameOf(u))}<small>${esc(state.profiles[u]?.email || '')}</small></div>
-        <button class="x-btn" data-remove="${u}" aria-label="Entfernen">×</button></div>`).join('')}</div>
-      <form class="row-inline" id="c-share">
-        <input class="input" type="email" name="email" placeholder="E-Mail der Person" required>
-        <button class="btn secondary">Einladen</button>
-      </form>
+      ${personPicker(membersOf(cid))}
       <div class="hint">Alle Todos und Notizen in dieser Kategorie sehen und bearbeiten dann beide.</div>
     </div>
     <div class="field"><label>Todo-Liste</label>
@@ -2105,18 +2626,35 @@ function openCategory(cid) {
       if (error) return toast('Fehler: ' + error.message);
       c.name = name; render();
     });
+    sheet.querySelectorAll('[data-cicon]').forEach((b) => b.addEventListener('click', async () => {
+      sheet.querySelectorAll('[data-cicon]').forEach((x) => x.classList.toggle('on', x === b));
+      const icon = b.dataset.cicon || null;
+      const { error } = await sb.from('categories').update({ icon }).eq('id', cid);
+      if (error) return toast(/icon/.test(error.message) ? 'Für Symbole muss die Datenbank noch erweitert werden (SQL).' : 'Fehler: ' + error.message, 4000);
+      c.icon = icon; render();
+    }));
     sheet.querySelectorAll('[data-color]').forEach((b) => b.addEventListener('click', async () => {
       sheet.querySelectorAll('[data-color]').forEach((x) => x.classList.toggle('on', x === b));
       const { error } = await sb.from('categories').update({ color: b.dataset.color }).eq('id', cid);
       if (error) return toast('Fehler: ' + error.message);
       c.color = b.dataset.color; render();
     }));
-    sheet.querySelectorAll('[data-remove]').forEach((b) => b.addEventListener('click', async () => {
-      const { error } = await sb.from('category_members').delete().eq('category_id', cid).eq('user_id', b.dataset.remove);
-      if (error) return toast('Fehler: ' + error.message);
+    sheet.querySelectorAll('[data-person]').forEach((b) => b.addEventListener('click', async () => {
+      const uid = b.dataset.person, p = state.profiles[uid];
+      b.disabled = true;
+      if (membersOf(cid).includes(uid)) {
+        if (!(await askConfirm(`${p?.name || 'Person'} aus „${c.name}“ entfernen?`, 'Entfernen', 'Die Einträge darin sieht sie dann nicht mehr.'))) { b.disabled = false; return; }
+        const { error } = await sb.from('category_members').delete().eq('category_id', cid).eq('user_id', uid);
+        if (error) { b.disabled = false; return toast('Fehler: ' + error.message); }
+      } else {
+        const { data, error } = await sb.rpc('share_category', { cid, target_email: p?.email || '' });
+        if (error) { b.disabled = false; return toast('Fehler: ' + error.message); }
+        if (data !== 'ok') { b.disabled = false; return toast(shareMessage(data), 3500); }
+        toast(`${p?.name || 'Person'} sieht jetzt „${c.name}“`);
+      }
       await loadAll(); openCategory(cid);
     }));
-    sheet.querySelector('#c-share').addEventListener('submit', async (e) => {
+    sheet.querySelector('.pp-mail')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const { data, error } = await sb.rpc('share_category', { cid, target_email: e.target.email.value });
       if (error) return toast('Fehler: ' + error.message);
