@@ -8,6 +8,7 @@ import { createEvent, openNewEventMenu } from './events.js';
 import { openGroupEdit } from './groups.js';
 import { homeAction } from './home.js';
 import { openItem } from './items.js';
+import { navigate } from './nav.js';
 import { importPlan, openImport, shopCat } from './meals.js';
 import { render } from './render.js';
 
@@ -21,6 +22,7 @@ export function initActions() {
     const id = t.dataset.id;
     switch (t.dataset.act) {
       case 'toggle': toggleTodo(id); break;
+      case 'nav': navigate(id); break;
       case 'group-edit': openGroupEdit(id, t.dataset.f, t.dataset.t || 'note'); break;
       case 'new-event': createEvent(id); break;
       case 'new-todo': createTodo(); break;

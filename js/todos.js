@@ -1,7 +1,7 @@
 // Bereich Todos: Übersicht und geöffnete Liste
 import { catById, esc, state } from './core.js';
 import { dueLabel } from './dates.js';
-import { dropTray, folderIc, itemTint, todoLists } from './folders.js';
+import { folderIc, itemTint, listLayout, todoLists } from './folders.js';
 import { blocksHtml } from './groups.js';
 import { ICON } from './icons.js';
 import { groupBySection } from './meals.js';
@@ -50,19 +50,18 @@ function renderTodoList(lid) {
       ${!i.done ? dueTag(i) : ''}
     </div>`;
   const rows = (list) => `<div class="trows">${list.map(row).join('')}</div>`;
-  return `<section class="tbig" data-drop="${lid}">
+  const body = `<section class="tbig" data-drop="${lid}">
     <form class="addrow tadd" data-list="${lid}"><span class="xic">${ICON.plus}</span><input name="title" placeholder="Neues Todo …" autocomplete="off" enterkeyhint="done"></form>
     ${open.length ? (open.some((i) => i.meta?.section) ? groupBySection(open, row).replaceAll('class="krows"', 'class="trows"') : blocksHtml(lid, 'todo', row)) : '<p class="kempty">Alles erledigt.</p>'}
     ${done.length ? `<button class="done-toggle" data-act="toggle-done" data-id="${lid}" aria-expanded="${showDone}">
       <span class="chev ${showDone ? 'open' : ''}">${ICON.chevron}</span>${done.length} erledigt</button>
       ${showDone ? rows(done) : ''}` : ''}
-  </section>
-  ${dropTray(todoLists(), lid)}
-  <p class="hint xhint">Lange drücken und ziehen: nach oben oder unten verschieben, auf ein anderes Todo halten für eine Gruppe, unten in eine andere Liste.</p>`;
+  </section>`;
+  return listLayout(todoLists(), lid, body, 'Lange drücken und ziehen: nach oben oder unten verschieben, auf ein anderes Todo halten für eine Gruppe, unten in eine andere Liste.');
 }
 
 // Kompakte Zeile in Kacheln: etwas luftiger als die Liste, aber gleiche Infos
-const dueTag = (i) => {
+export const dueTag = (i) => {
   if (!i.due_date) return '';
   const d = dueLabel(i.due_date);
   return `<span class="kdue ${d.overdue && !i.done ? 'overdue' : ''}">${esc(d.text)}</span>`;

@@ -39,7 +39,7 @@ export const mealsOn = (day) => state.items.filter((i) => i.type === 'meal' && i
 
 const cookOn = (day) => state.items.filter((i) => i.type === 'meal' && i.meta?.cook_date === day && i.due_date !== day);
 
-function mealRow(m, { compact = false } = {}) {
+export function mealRow(m, { compact = false } = {}) {
   const n = m.meta?.nutrition || {};
   const pre = m.meta?.cook_date && m.meta.cook_date !== m.due_date;
   return `<button class="mrow slot-${esc(m.meta?.slot || '')}" data-act="open" data-id="${m.id}">

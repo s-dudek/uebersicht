@@ -15,7 +15,7 @@ const itemsFor = (type, fid) => (type === 'todo'
   ? todosIn(fid).filter((i) => !i.done).sort((a, b) => noteKey(a) - noteKey(b) || byDue(a, b))
   : notesIn(fid));
 
-export function noteBlocks(fid, type = 'note') {
+function noteBlocks(fid, type = 'note') {
   const list = itemsFor(type, fid), seen = new Set(), out = [];
   for (const n of list) {
     const g = n.meta?.group;

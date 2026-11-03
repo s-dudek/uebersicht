@@ -5,16 +5,18 @@ import {
   debounce,
   esc,
   isCatShared,
+  isItemShared,
   itemById,
   membersOf,
   nameOf,
+  safeColor,
   sb,
   sharesOf,
   state,
   toast,
 } from './core.js';
 import { deleteItem, loadAll, saveItem, silentDelete } from './data.js';
-import { toLocalInput } from './dates.js';
+import { remindLabel, toLocalInput } from './dates.js';
 import { openEvent } from './events.js';
 import { ICON } from './icons.js';
 import { openMeal } from './meals.js';
@@ -23,11 +25,40 @@ import { render } from './render.js';
 import { categoryOptions, closeSheet, colorPick, openSheet } from './sheet.js';
 
 // ---------- Todo / Notiz öffnen ----------
-export function openItem(id, { isNew = false } = {}) {
+// Text einer Notiz zum Lesen: maskiert, Zeilenumbrüche bleiben, Web-Adressen werden zu Links
+const readable = (text) => esc(text).replace(/\bhttps?:\/\/[^\s<>"']+/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
+
+// Bestehende Notiz: zuerst lesen, „Bearbeiten“ öffnet das Bearbeitungsfenster
+function openNoteView(id) {
+  const n = itemById(id);
+  if (!n) return;
+  const c = catById(n.category_id);
+  const info = [
+    c ? esc(c.name) : 'Ohne Kategorie',
+    n.owner_id !== state.me ? `von ${esc(nameOf(n.owner_id))}` : isItemShared(n) ? 'geteilt' : '',
+    n.remind_at && !n.reminded ? `Erinnerung ${esc(remindLabel(n.remind_at))}` : '',
+  ].filter(Boolean).join(' · ');
+  const sheet = openSheet(`
+    <div class="sheet-head">
+      <span class="status">${info}</span>
+      <span class="sh-btns"><button class="link-btn ghost" id="v-edit">${ICON.pen}Bearbeiten</button><button class="link-btn" data-close>Fertig</button></span>
+    </div>
+    <article class="note-view"${n.meta?.color ? ` style="--ic:${safeColor(n.meta.color)}"` : ''}>
+      <h2 class="nv-title">${esc(n.title) || '<span class="muted">Ohne Titel</span>'}</h2>
+      ${n.body.trim() ? `<div class="nv-body">${readable(n.body)}</div>` : '<p class="muted">Kein Text.</p>'}
+    </article>`, { full: n.body.length > 400 });   // lange Notizen bekommen das ganze Fenster
+  sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
+  const edit = () => openItem(id, { edit: true });
+  sheet.querySelector('#v-edit').addEventListener('click', edit);
+  sheet.querySelector('.note-view').addEventListener('dblclick', edit);   // Doppelklick am Desktop
+}
+
+export function openItem(id, { isNew = false, edit = false } = {}) {
   const i = itemById(id);
   if (!i) return;
   if (i.type === 'meal') return openMeal(id);
   if (i.type === 'event') return openEvent(id);
+  if (i.type === 'note' && !isNew && !edit) return openNoteView(id);
   const isNote = i.type === 'note';
   const mine = i.owner_id === state.me;
 

@@ -95,7 +95,8 @@ export async function saveItem(id, patch) {
 
 export async function deleteItem(id) {
   const i = itemById(id);
-  if (!i || !(await askConfirm(i.type === 'note' ? 'Notiz löschen?' : 'Todo löschen?', 'Löschen'))) return false;
+  const what = { note: 'Notiz', todo: 'Todo', event: 'Termin', meal: 'Gericht' }[i?.type] || 'Eintrag';
+  if (!i || !(await askConfirm(`${what} „${i.title || 'Ohne Titel'}“ löschen?`, 'Löschen'))) return false;
   const { error } = await sb.from('items').delete().eq('id', id);
   if (error) { toast('Fehler: ' + error.message); return false; }
   state.items = state.items.filter((x) => x.id !== id);

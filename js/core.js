@@ -16,6 +16,11 @@ export const COLORS = ['#0C3741', '#7FA08A', '#3E7CA8', '#7A5AA6', '#C2575A', '#
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// Desktop-Layout (Seitenleiste statt Steuerknopf) ab dieser Breite
+const DESKTOP = window.matchMedia('(min-width: 1024px)');
+export const isDesktop = () => DESKTOP.matches;
+export const onLayoutChange = (fn) => DESKTOP.addEventListener('change', fn);
+
 // Farben kommen aus der Datenbank und landen in style-Attributen: nur echte Hex-Farben zulassen
 export const safeColor = (c, fallback = '') => (/^#[0-9a-fA-F]{3,8}$/.test(c || '') ? c : fallback);
 

@@ -298,18 +298,26 @@ export function openCategory(cid) {
       if (!next) setLocalLists(localLists().filter((x) => x !== cid));
       render(); openCategory(cid);
     });
-    sheet.querySelector('#c-delete').addEventListener('click', async () => {
-      if (!(await askConfirm(`Kategorie „${c.name}“ löschen?`, 'Löschen', 'Die Einträge bleiben erhalten, nur ohne Kategorie.'))) return;
-      const { error } = await sb.from('categories').delete().eq('id', cid);
-      if (error) return toast('Fehler: ' + error.message);
-      closeSheet(); await loadAll();
-    });
+    sheet.querySelector('#c-delete').addEventListener('click', () => deleteCategory(cid));
   } else {
-    sheet.querySelector('#c-leave').addEventListener('click', async () => {
-      if (!(await askConfirm(`„${c.name}“ verlassen?`, 'Verlassen', 'Du siehst die Einträge darin dann nicht mehr.'))) return;
-      const { error } = await sb.from('category_members').delete().eq('category_id', cid).eq('user_id', state.me);
-      if (error) return toast('Fehler: ' + error.message);
-      await loadAll(); openCategories();
-    });
+    sheet.querySelector('#c-leave').addEventListener('click', () => leaveCategory(cid));
   }
+}
+
+// Kategorie löschen (nur Besitzer) bzw. eine geteilte Kategorie verlassen
+export async function deleteCategory(cid) {
+  const c = catById(cid);
+  if (!c || !(await askConfirm(`Kategorie „${c.name}“ löschen?`, 'Löschen', 'Die Einträge bleiben erhalten, nur ohne Kategorie.'))) return;
+  const { error } = await sb.from('categories').delete().eq('id', cid);
+  if (error) return toast('Fehler: ' + error.message);
+  if (state.list === cid) state.list = null;
+  closeSheet(); await loadAll();
+}
+export async function leaveCategory(cid) {
+  const c = catById(cid);
+  if (!c || !(await askConfirm(`„${c.name}“ verlassen?`, 'Verlassen', 'Du siehst die Einträge darin dann nicht mehr.'))) return;
+  const { error } = await sb.from('category_members').delete().eq('category_id', cid).eq('user_id', state.me);
+  if (error) return toast('Fehler: ' + error.message);
+  if (state.list === cid) state.list = null;
+  closeSheet(); await loadAll();
 }

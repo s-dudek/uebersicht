@@ -1,5 +1,15 @@
 // Ordner (Kategorien) in Todos und Notizen: Reihenfolge, Symbol, Ablageziele
-import { catById, esc, isCatShared, isTodoList, safeColor, sb, state, toast } from './core.js';
+import {
+  catById,
+  esc,
+  isCatShared,
+  isDesktop,
+  isTodoList,
+  safeColor,
+  sb,
+  state,
+  toast,
+} from './core.js';
 import { ICON } from './icons.js';
 import { render } from './render.js';
 
@@ -36,7 +46,18 @@ export const todoLists = () => [
 ];
 
 // Beim Ziehen erscheinen die anderen Ordner als Ablageziele
-export function dropTray(folders, current) {
+// Geöffnete Liste: am Desktop links die Ordner als Spalte (auch Ablageziel), am Smartphone die Ablage beim Ziehen
+export function listLayout(folders, current, body, hint) {
+  if (!isDesktop()) return `${body}${dropTray(folders, current)}${hint ? `<p class="hint xhint">${hint}</p>` : ''}`;
+  const btn = (f) => `<button class="fcol-i ${f.id === current ? 'on' : ''}" data-act="open-list" data-id="${f.id}" data-drop="${f.id}">
+      ${folderIc(f, 'fcol-ic')}<span>${esc(f.name)}</span></button>`;
+  return `<div class="split">
+    <nav class="fcol" aria-label="Ordner">${folders.map(btn).join('')}</nav>
+    <div class="split-main">${body}${hint ? `<p class="hint xhint">${hint.replace('unten in', 'links in')} Rechtsklick für weitere Funktionen.</p>` : ''}</div>
+  </div>`;
+}
+
+function dropTray(folders, current) {
   const others = folders.filter((f) => f.id !== current);
   if (!others.length) return '';
   return `<div class="droptray" aria-hidden="true">

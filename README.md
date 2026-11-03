@@ -20,7 +20,9 @@ js/
   icons.js          Symbole und Logos (SVG)
   sheet.js          Fenster von unten (Sheets)
   render.js         Hauptansicht: Kopfleiste, Inhalt, Leiste unten
-  control.js        Steuerknopf
+  control.js        Steuerknopf (Smartphone)
+  nav.js            Bereiche und Wechsel zwischen ihnen
+  menu.js           Rechtsklick-Menü (Maus)
   actions.js        Tippen und Absenden in der Hauptansicht
   drag.js           Ziehen und Ablegen
   auth.js           Anmeldung
@@ -54,3 +56,6 @@ js/
 3. Hochladen (GitHub Pages veröffentlicht nach 1–2 Minuten).
 
 Supabase-Bibliothek erneuern: `npm install`, dann `npm run supabase`.
+Code prüfen (Importe): `node tools/lint.mjs`. Vorschau mit Beispieldaten bauen: `npm run vorschau`.
+
+Layout: unter 1024 px Breite Smartphone-Ansicht mit Steuerknopf und Leiste unten, darüber Desktop mit Seitenleiste.

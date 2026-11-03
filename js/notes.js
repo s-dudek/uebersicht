@@ -1,7 +1,7 @@
 // Bereich Notizen: Übersicht und geöffneter Ordner
-import { catById, esc, nameOf, safeColor, state } from './core.js';
-import { dropTray, folderIc, itemTint, noteFolders } from './folders.js';
-import { blocksHtml, noteBlocks, noteKey } from './groups.js';
+import { catById, esc, nameOf, state } from './core.js';
+import { folderIc, itemTint, listLayout, noteFolders } from './folders.js';
+import { blocksHtml, noteKey } from './groups.js';
 import { ICON } from './icons.js';
 
 export const notesIn = (fid) => state.items.filter((i) => i.type === 'note' && (fid ? i.category_id === fid : !i.category_id || !catById(i.category_id)))
@@ -27,30 +27,16 @@ export function renderNotes() {
 }
 
 function renderNoteList(fid) {
-  const blocks = noteBlocks(fid);
+  const has = notesIn(fid).length > 0;
   const row = (n) => `
     <div class="trow ${n.meta?.color ? 'tinted' : ''}" data-drag="${n.id}" data-gid="${esc(n.meta?.group || '')}"${itemTint(n)}>
-      <span class="ndot"></span>
       <button class="tname" data-act="open" data-id="${n.id}"><span>${esc(n.title) || '<span class="muted">Ohne Titel</span>'}</span></button>
       ${n.remind_at && !n.reminded ? `<span class="tbell" title="Erinnerung">${ICON.bell}</span>` : ''}
       ${n.owner_id !== state.me ? `<span class="tby">${esc(nameOf(n.owner_id))}</span>` : ''}
     </div>`;
-  const group = (b) => {
-    const key = 'g:' + b.group, folded = state.folded.has(key);
-    return `<div class="ngrp ${folded ? 'folded' : ''} ${b.color ? 'tinted' : ''}"${b.color ? ` style="--gc:${safeColor(b.color)}"` : ''}>
-      <div class="ngrp-h" data-ghead="${esc(b.group)}">
-        <button class="xtoggle" data-act="fold" data-id="${esc(key)}" aria-label="${folded ? 'Aufklappen' : 'Zuklappen'}">${ICON.chevron}</button>
-        <span class="ngrp-ic">${ICON.stack}</span>
-        <button class="ngrp-n" data-act="group-edit" data-id="${esc(b.group)}" data-f="${fid}">${esc(b.name)}</button>
-        <span class="ngrp-c">${b.items.length}</span>
-      </div>
-      ${folded ? '' : `<div class="ngrp-b">${b.items.map(row).join('')}</div>`}
-    </div>`;
-  };
-  return `<section class="tbig" data-drop="${fid}">
+  const body = `<section class="tbig" data-drop="${fid}">
     <button class="addrow tadd tnew" data-act="new-note-in" data-id="${fid}"><span class="xic">${ICON.plus}</span><span>Neue Notiz …</span></button>
-    ${blocks.length ? blocksHtml(fid, 'note', row) : '<p class="kempty">Noch keine Notizen.</p>'}
-  </section>
-  ${dropTray(noteFolders(), fid)}
-  ${blocks.length ? '<p class="hint xhint">Lange drücken und ziehen: nach oben oder unten verschieben, auf eine andere Notiz halten für eine Gruppe, unten in einen anderen Ordner.</p>' : ''}`;
+    ${has ? blocksHtml(fid, 'note', row) : '<p class="kempty">Noch keine Notizen.</p>'}
+  </section>`;
+  return listLayout(noteFolders(), fid, body, has ? 'Lange drücken und ziehen: nach oben oder unten verschieben, auf eine andere Notiz halten für eine Gruppe, unten in einen anderen Ordner.' : '');
 }

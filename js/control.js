@@ -1,25 +1,7 @@
-// Steuerknopf: auf der Startseite mit Bereichen, sonst unten rechts (halten = zurück)
-import { scrollCal } from './calendar.js';
-import { $app, state, toast } from './core.js';
+// Steuerknopf (Smartphone/Tablet): auf der Startseite groß mit den Bereichen, sonst unten rechts (tippen = zurück)
+import { $app } from './core.js';
 import { ICON, LOGO_MARK } from './icons.js';
-import { openQuickNote } from './panels.js';
-import { render } from './render.js';
-import { closeSheet } from './sheet.js';
-
-// ====================================================================
-// Steuerknopf: tippen = Home (auf Home: neue Notiz), halten = Steuerrad, ziehen = verschieben
-// Auf der Home-Seite sitzt er groß in der Mitte und lässt sich nicht verschieben.
-// ====================================================================
-const WHEEL = [
-  { key: 'home', label: 'Home', icon: 'home' },
-  { key: 'todos', label: 'Todos', icon: 'todos' },
-  { key: 'notes', label: 'Notizen', icon: 'notes' },
-  { key: 'meals', label: 'Gerichte', icon: 'pot' },
-  { key: 'calendar', label: 'Kalender', icon: 'calendar' },
-  { key: 'training', label: 'Training', icon: 'dumbbell', soon: true },
-  { key: 'quick', label: 'Neue Notiz', icon: 'notePlus' },
-  { key: 'categories', label: 'Kategorien', icon: 'tag' },
-];
+import { NAV, navigate } from './nav.js';
 
 // Steuerknopf wird erst beim Start erzeugt (braucht das fertige DOM)
 export let ctl = null;
@@ -35,7 +17,7 @@ function createControl() {
   el.innerHTML = `
     <div class="ctl-veil"></div>
     <div class="ctl-label" aria-live="polite"></div>
-    ${WHEEL.map((w, i) => `<button class="wi ${w.soon ? 'soon' : ''}" data-go="${w.key}" style="--d:${i * 28}ms" tabindex="-1" aria-label="${w.label}">${ICON[w.icon]}</button>`).join('')}
+    ${NAV.map((w, i) => `<button class="wi ${w.soon ? 'soon' : ''}" data-go="${w.key}" style="--d:${i * 28}ms" tabindex="-1" aria-label="${w.label}">${ICON[w.icon]}</button>`).join('')}
     <div class="ctl-burst">${Array.from({ length: 10 }, (_, i) => `<i style="--a:${i * 36}deg"></i>`).join('')}</div>
     <button class="ctl-btn" aria-label="Zurück zum Menü">${LOGO_MARK}</button>`;
   document.body.appendChild(el);
@@ -46,7 +28,7 @@ function createControl() {
   let pos = [];
   let mode = 'idle', hovered = null, start = null;
   let anchorEl = null;   // 'center' auf der Home-Seite: Knopf groß in der Bildschirmmitte
-  let active = WHEEL;    // aktuell sichtbare Ziele
+  let active = NAV;    // aktuell sichtbare Ziele
 
   // ---- Position: Startseite mittig, sonst fest unten rechts ----
   const vw = () => document.documentElement.clientWidth;
@@ -72,7 +54,7 @@ function createControl() {
     const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     const base = anchorEl ? 90 : 225;
     const span = anchorEl ? 170 : 92;
-    active = anchorEl ? WHEEL.filter((w) => w.key !== 'home') : WHEEL;
+    active = anchorEl ? NAV.filter((w) => w.key !== 'home') : NAV;
     items.forEach((b) => { b.hidden = !active.some((w) => w.key === b.dataset.go); });
     // Unterseiten: Viertelkreis vom Eck unten rechts nach links oben
     const rr = anchorEl ? Math.min(R, vw() / 2 - 44) : Math.min(250, cx - 40, cy - 60);
@@ -97,7 +79,7 @@ function createControl() {
     if (hovered === k) return;
     hovered = k;
     items.forEach((b) => b.classList.toggle('hot', b.dataset.go === k));
-    const w = WHEEL.find((x) => x.key === k);
+    const w = NAV.find((x) => x.key === k);
     label.textContent = w ? (w.soon ? `${w.label} (bald)` : w.label) : (anchorEl ? '' : 'Bereich antippen');
     el.classList.toggle('has-hot', !!w);
     if (k) navigator.vibrate?.(8);
@@ -152,22 +134,7 @@ function createControl() {
       el.classList.remove('revealing');
     });
   };
-  const go = (k) => {
-    close();
-    const w = WHEEL.find((x) => x.key === k);
-    if (!w) return;
-    if (w.soon) return toast(`${w.label} kommt als Nächstes.`);
-    if (k === 'quick') return openQuickNote();
-    closeSheet();
-    if (state.tab === k && (k === 'todos' || k === 'notes') && state.list !== null) { state.list = null; return render(); }
-    if (state.tab === k) return;
-    reveal(() => {
-      state.tab = k;
-      render();
-      document.querySelector('.main')?.scrollTo({ top: 0 });
-      if (k === 'calendar') scrollCal();
-    });
-  };
+  const go = (k) => { close(); navigate(k, reveal); };
   const nearest = (e) => {
     const r = btn.getBoundingClientRect();
     const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
