@@ -29,7 +29,7 @@
   --gutter-l: max(16px, env(safe-area-inset-left, 0px));
   --gutter-r: max(16px, env(safe-area-inset-right, 0px));
   /* Hintergrund: Konturlinien des Gestaltungselements (Kreise), verteilt; als Datei eingebettet */
-  --pattern: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='1400' height='1400' viewBox='0 0 1400 1400' fill='none' stroke='%23A8BEA7' stroke-width='1.5' stroke-opacity='.45'><circle cx='1080' cy='236' r='170'/><circle cx='958' cy='406' r='162'/><circle cx='1202' cy='406' r='162'/><circle cx='260' cy='250' r='300'/><circle cx='420' cy='1060' r='220'/><circle cx='1180' cy='1150' r='120'/></svg>");
+  --pattern: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='2000' height='2000' viewBox='0 0 2000 2000' fill='none' stroke='%23A8BEA7' stroke-width='2.4' stroke-opacity='.7'><circle cx='420' cy='430' r='400'/><circle cx='1290' cy='300' r='300'/><circle cx='1560' cy='1160' r='420'/><circle cx='640' cy='1520' r='330'/></svg>");
   color-scheme: light;
 }
 body {
@@ -46,7 +46,7 @@ body {
   overscroll-behavior: none;
 }
 /* Smartphone: Muster verkleinert, damit mehrere Formen im Bild sind */
-@media (max-width: 600px) { body { background-size: 820px 820px, auto, auto, auto; } }
+@media (max-width: 600px) { body { background-size: 1300px 1300px, auto, auto, auto; } }
 button, input, textarea, select { font: inherit; color: inherit; }
 button { cursor: pointer; background: none; border: 0; padding: 0; }
 input, textarea, select { font-size: 16px; }
@@ -1015,7 +1015,8 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
   .main.is-home { overflow-y: auto; display: block; }
 
   /* Seitenleiste */
-  .side { display: flex; flex-direction: column; gap: 14px; padding: 22px 14px 18px; background: var(--ink); color: var(--white); overflow-y: auto; }
+  .side { display: flex; flex-direction: column; gap: 14px; padding: 22px 14px 18px; color: var(--white); overflow-y: auto;
+    background: rgba(12, 55, 65, .84); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: inset -1px 0 0 rgba(255,255,255,.12); }   /* leicht durchscheinend wie die Kacheln */
   .side-brand { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 8px 6px; color: var(--green-l); }
   .side-brand .logo-mark { height: 30px; }
   .side-brand .logo-word { height: 24px; }
