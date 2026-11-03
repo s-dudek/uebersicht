@@ -78,11 +78,10 @@ html, body { margin: 0; height: 100%; position: fixed; inset: 0; width: 100%; ov
 #app { position: relative; z-index: 1; height: 100%; }
 body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: var(--safe-top); background: var(--white); z-index: 4; pointer-events: none; }
 
-/* Wasserzeichen: das Dudek-Zeichen groß im Hintergrund, wie Milchglas */
+/* Wasserzeichen: das Dudek-Zeichen groß im Hintergrund, stark verschwommen (kaum sichtbar) */
 .watermark { position: fixed; inset: 0; z-index: -1; display: grid; place-items: center; pointer-events: none; overflow: hidden; }
 .watermark .logo-mark { height: min(78vh, 92vw); width: auto; translate: 18% 12%;
-  color: rgba(255, 255, 255, .55); stroke: rgba(255, 255, 255, .95); stroke-width: .5;
-  filter: drop-shadow(0 30px 50px rgba(12, 55, 65, .12)) drop-shadow(0 0 .6px rgba(12, 55, 65, .35)); }
+  color: rgba(255, 255, 255, .8); stroke: none; filter: blur(32px); }
 .app.desk .watermark { left: 248px; }
 
 /* ==========================================================================
