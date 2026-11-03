@@ -4,6 +4,7 @@ import { $app, esc, sb, state } from './core.js';
 import { loadAll, subscribe, unsubscribe } from './data.js';
 import { ICON, LOGO_MARK, LOGO_WORD } from './icons.js';
 import { closeSheet } from './sheet.js';
+import { splashReady } from './splash.js';
 
 // ====================================================================
 // Anmeldung
@@ -46,6 +47,7 @@ function renderAuth(message = '', isError = false) {
     <footer class="band lg-ftr"></footer>
   </div>`;
 
+  splashReady();
   $app.querySelector('.lg-switch').addEventListener('click', (e) => { authMode = e.currentTarget.dataset.mode; renderAuth(); });
   $app.querySelector('#demo-toggle')?.addEventListener('click', () => { const l = $app.querySelector('#demo-list'); l.hidden = !l.hidden; });
   $app.querySelectorAll('[data-demo]').forEach((b) => b.addEventListener('click', () => {

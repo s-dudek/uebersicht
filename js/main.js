@@ -9,7 +9,9 @@ import { initCategorySort, initItemDrag } from './drag.js';
 import { initContextMenu } from './menu.js';
 import { initReminders } from './reminders.js';
 import { render } from './render.js';
+import { initSplash } from './splash.js';
 
+initSplash();            // Startbild sofort zeigen
 startControl();          // Steuerknopf anlegen (wird von der Ansicht benutzt)
 initActions();           // Tippen und Absenden in der Hauptansicht
 initItemDrag();          // Einträge ziehen, sortieren, gruppieren

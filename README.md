@@ -19,6 +19,7 @@ js/
   dates.js          Datum und Uhrzeit
   icons.js          Symbole und Logos (SVG)
   sheet.js          Fenster von unten (Sheets)
+  splash.js         Startbild beim Öffnen der App
   render.js         Hauptansicht: Kopfleiste, Inhalt, Leiste unten
   control.js        Steuerknopf (Smartphone)
   nav.js            Bereiche und Wechsel zwischen ihnen

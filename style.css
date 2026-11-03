@@ -78,6 +78,14 @@ html, body { margin: 0; height: 100%; position: fixed; inset: 0; width: 100%; ov
 #app { position: relative; z-index: 1; height: 100%; }
 body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: var(--safe-top); background: var(--white); z-index: 4; pointer-events: none; }
 
+/* Startbild: Zeichen hell auf dunkel, wird zum Ball und gibt die Startseite frei (js/splash.js) */
+.splash { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: var(--ink); overflow: hidden; }
+.splash > * { grid-area: 1 / 1; }
+.splash .logo-mark { width: min(34vmin, 170px); height: auto; fill: var(--green-l); }
+.splash-ball { width: min(16vmin, 80px); aspect-ratio: 1; border-radius: 50%; background: var(--green-l); transform: scale(0); }
+/* Lesezeichen erst fallen lassen, wenn das Startbild weg ist */
+body.splashing .bookmark { animation-play-state: paused; }
+
 /* Wasserzeichen: das Dudek-Zeichen groß im Hintergrund, stark verschwommen (kaum sichtbar) */
 .watermark { position: fixed; inset: 0; z-index: -1; display: grid; place-items: center; pointer-events: none; overflow: hidden; }
 .watermark .logo-mark { height: min(78vh, 92vw); width: auto; translate: 0 34%;

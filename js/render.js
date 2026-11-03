@@ -10,6 +10,7 @@ import { ICON, LOGO_MARK, LOGO_WORD } from './icons.js';
 import { renderMeals } from './meals.js';
 import { NAV } from './nav.js';
 import { notesIn, renderNotes } from './notes.js';
+import { splashReady } from './splash.js';
 import { renderTodos, todosIn } from './todos.js';
 
 // Dudek-Zeichen als Wasserzeichen hinter allem
@@ -53,6 +54,7 @@ export function render() {
   if (sameTab) $app.querySelector('.main').scrollTop = prevScroll;
   for (const [k, v] of Object.entries(typedMap)) { const i = document.querySelector(`.addrow[data-list="${k}"] input`); if (i) i.value = v; }
   if (focusedList !== undefined) document.querySelector(`.addrow[data-list="${focusedList}"] input`)?.focus();
+  splashReady();
 }
 
 // ---------- Desktop: Seitenleiste mit allen Bereichen ----------
