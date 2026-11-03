@@ -1011,7 +1011,7 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 
   /* Seitenleiste */
   .side { display: flex; flex-direction: column; gap: 14px; padding: 22px 14px 18px; background: var(--ink); color: var(--white); overflow-y: auto; }
-  .side-brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 6px; color: var(--green-l); }
+  .side-brand { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 8px 6px; color: var(--green-l); }
   .side-brand .logo-mark { height: 30px; }
   .side-brand .logo-word { height: 24px; }
   .side-new { display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--green-l); color: var(--ink); border-color: var(--green-l); }
