@@ -81,7 +81,7 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 /* Wasserzeichen: das Dudek-Zeichen groß im Hintergrund, stark verschwommen (kaum sichtbar) */
 .watermark { position: fixed; inset: 0; z-index: -1; display: grid; place-items: center; pointer-events: none; overflow: hidden; }
 .watermark .logo-mark { height: min(78vh, 92vw); width: auto; translate: 18% 12%;
-  color: rgba(255, 255, 255, .8); stroke: none; filter: blur(32px); }
+  color: var(--ink); opacity: .09; stroke: none; filter: blur(28px); }
 .app.desk .watermark { left: 248px; }
 
 /* ==========================================================================
