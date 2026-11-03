@@ -5,6 +5,7 @@ import { deleteItem, saveItem, toggleTodo } from './data.js';
 import { noteFolders, todoLists } from './folders.js';
 import { ICON } from './icons.js';
 import { openItem } from './items.js';
+import { isPinned, pinKey, togglePin } from './pins.js';
 import { render } from './render.js';
 
 let menuEl = null;
@@ -25,14 +26,18 @@ function itemMenu(i) {
     const cur = i.category_id && catById(i.category_id) ? i.category_id : '';
     entries.push({ move: folders.map((f) => [f, f.id === cur]) });
   }
-  if (canDeleteItem(i)) entries.push('sep', ['trash', 'Löschen', () => deleteItem(i.id), { danger: true }]);
+  entries.push('sep', pinEntry(pinKey.item(i.id)));
+  if (canDeleteItem(i)) entries.push(['trash', 'Löschen', () => deleteItem(i.id), { danger: true }]);
   return entries;
 }
+
+const pinEntry = (key) => (isPinned(key) ? ['home', 'Von Home entfernen', () => togglePin(key)] : ['home', 'Zu Home hinzufügen', () => togglePin(key)]);
 
 function folderMenu(c) {
   const entries = [['eye', 'Öffnen', () => { state.list = c.id; render(); }]];
   entries.push(['pen', 'Bearbeiten', () => openCategory(c.id)]);
-  entries.push('sep', c.owner_id === state.me
+  entries.push('sep', pinEntry(pinKey.cat(c.id)));
+  entries.push(c.owner_id === state.me
     ? ['trash', 'Löschen', () => deleteCategory(c.id), { danger: true }]
     : ['trash', 'Verlassen', () => leaveCategory(c.id), { danger: true }]);
   return entries;
@@ -99,10 +104,16 @@ export function initContextMenu() {
 
   $app.addEventListener('contextmenu', (e) => {
     if (pointer !== 'mouse') return;
-    const folderEl = e.target.closest('[data-cdrag], .fcol-i[data-id]');
+    // innerster Treffer zählt: Eintrag vor Ordner vor Karte auf der Startseite
     const itemEl = e.target.closest('[data-drag], [data-act="open"][data-id]');
-    const c = folderEl && catById(folderEl.dataset.cdrag || folderEl.dataset.id);
-    const i = !c && itemEl && itemById(itemEl.dataset.drag || itemEl.dataset.id);
+    const folderEl = e.target.closest('.fcard[data-cdrag], .fcol-i[data-id]');
+    const pinEl = e.target.closest('[data-pin]');
+    let i = itemEl && itemById(itemEl.dataset.drag || itemEl.dataset.id);
+    let c = !i && folderEl && catById(folderEl.dataset.cdrag || folderEl.dataset.id);
+    if (!i && !c && pinEl) {
+      const key = pinEl.dataset.pin;
+      if (key.startsWith('i:')) i = itemById(key.slice(2)); else c = catById(key.slice(2));
+    }
     if (!c && !i) return;
     e.preventDefault();
     showMenu(e.clientX, e.clientY, c ? folderMenu(c) : itemMenu(i), i || null);

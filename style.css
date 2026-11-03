@@ -1059,26 +1059,73 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 
   /* Startseite als Übersicht */
   .dash-wrap { max-width: 1240px; margin: 0 auto; }
-  .dash-head { display: flex; align-items: baseline; gap: 14px; margin: 6px 4px 20px; }
-  .dash-head b { font-family: var(--font-head); font-size: 40px; line-height: 1; }
-  .dash-head span { font-size: 18px; color: var(--grey); }
-  .dash-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
-  .dash .th svg { width: 20px; height: 20px; }
+  .dash-head { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 4px 0 22px; text-align: center; }
+  .dash-head b { font-family: var(--font-head); font-size: 46px; line-height: 1; }
+  .dash-head span { font-size: 19px; color: var(--grey); }
+  .dash-wrap > .tile + .tile, .dash-wrap > .tile + .dash-pins { margin-top: 18px; }
+  .dash-day .th svg, .dash-meals .th svg { width: 20px; height: 20px; }
+  .link-more { display: inline-flex; align-items: center; gap: 4px; }
+  .link-more svg { width: 14px; height: 14px; }
+  .dash-day .allday { padding: 10px 0 0; }
+
+  /* Tagesleiste: Stunden 6–24 nebeneinander */
+  .ds { position: relative; margin-top: 10px; }
+  .ds-grid { position: relative; height: 20px; border-bottom: 1px solid var(--soft); }
+  .ds-h { position: absolute; top: 0; translate: -50% 0; font-size: 11px; color: var(--grey); font-variant-numeric: tabular-nums; }
+  .ds-h:first-child { translate: 0 0; }
+  .ds-h:last-child { translate: -100% 0; }
+  .ds-track { position: relative; height: calc(var(--rows) * 52px); margin-top: 6px;
+    background-image: repeating-linear-gradient(90deg, var(--pale) 0 1px, transparent 1px calc(100% / 9)); border-radius: 10px; }
+  .ds-b { min-width: 120px; position: absolute; display: flex; flex-direction: column; justify-content: center; padding: 4px 8px; border-radius: 10px; overflow: hidden; text-align: left;
+    background: var(--ink); color: var(--white); font-size: 13px; line-height: 1.2; box-shadow: 0 0 0 1.5px var(--white); }
+  .ds-b b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ds-b small { font-size: 11px; opacity: .75; }
+  .ds-b.k-meal { background: var(--green-l); color: var(--ink); }
+  .ds-b.k-rem { background: var(--pale); color: var(--ink); box-shadow: 0 0 0 1.5px var(--white), inset 3px 0 0 var(--mid); }
+  .ds-now { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--danger); border-radius: 1px; pointer-events: none; }
+
+  /* Essen heute: drei Spalten */
+  .dm { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 10px; }
+  .dm-h { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--grey); margin: 0 2px 6px; }
+  .dash-meals .cook { margin-top: 12px; }
+  .dm .m-slot { display: none; }   /* Spaltenkopf nennt die Mahlzeit schon */
+
+  /* Pinnwand */
+  .dash-pins { margin-top: 26px; }
+  .dp-h { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin: 0 4px 12px; }
+  .dp-h b { font-family: var(--font-head); font-size: 24px; }
+  .dp-h span { font-size: 13px; color: var(--grey); }
+  .pins { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; align-items: start; }
+  .pins-empty { padding: 34px; text-align: center; color: var(--grey); border: 1.5px dashed var(--soft); border-radius: 22px; }
+  .pin { position: relative; display: flex; flex-direction: column; padding: 12px 14px 12px; border-radius: 22px; background: var(--glass); border: 1px solid var(--glass-line); box-shadow: var(--tile-shadow); }
+  .pin.tinted { background: color-mix(in srgb, var(--ic) 12%, #fff); box-shadow: inset 4px 0 0 var(--ic), var(--tile-shadow); }
+  .pin-h { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 1.5px solid var(--soft); }
+  .pin-h b { flex: 1; min-width: 0; font-family: var(--font-head); font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pin-ic { flex: none; width: 22px; height: 22px; display: grid; place-items: center; color: var(--fc, var(--ink)); }
+  .pin-ic svg { width: 19px; height: 19px; }
+  .pin-x { flex: none; width: 26px; height: 26px; border-radius: 50%; font-size: 18px; line-height: 1; color: var(--grey); opacity: 0; transition: opacity .15s, background .15s; }
+  .pin:hover .pin-x, .pin-x:focus-visible { opacity: 1; }
+  .pin-x:hover { background: var(--pale); color: var(--ink); }
+  .pin-b { display: flex; flex-direction: column; margin-top: 6px; }
+  .pin-r { display: flex; align-items: center; gap: 10px; min-height: 40px; border-top: 1px solid var(--soft); text-align: left; }
+  .pin-b > .pin-r:first-child { border-top: 0; }
+  .pin-r .tcheck { width: 22px; height: 22px; }
+  .pin-t { flex: 1; min-width: 0; text-align: left; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 8px 0; }
+  .pin-r.done .pin-t { color: var(--grey); text-decoration: line-through; }
+  button.pin-r:hover, .pin-t:hover { color: var(--mid); }
+  .pin-text { text-align: left; font-size: 15px; font-weight: 400; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; }
+  .pin-add { margin: 6px 0 0; min-height: 38px; padding: 0 4px; border: 0; background: transparent; box-shadow: none; border-top: 1px solid var(--soft); border-radius: 0; }
+  .pin-add input { font-size: 15px; }
+  .pin-more { align-self: flex-start; margin-top: 8px; font-size: 13px; font-weight: 600; padding: 4px 12px; border-radius: 999px; box-shadow: inset 0 0 0 1.5px var(--soft); }
+  .pin-more:hover { background: var(--pale); }
+  .pin.fdragging { opacity: .3; }
+  .pin.ins-l, .pin.ins-r { position: relative; }
+  .pin.ins-l::before, .pin.ins-r::before { content: ''; position: absolute; top: 10px; bottom: 10px; width: 4px; border-radius: 2px; background: var(--ink); }
+  .pin.ins-l::before { left: -10px; }
+  .pin.ins-r::before { right: -10px; }
+  .pin.fghost { position: fixed; }
   .link-more { font-size: 14px; font-weight: 600; padding: 4px 12px; border-radius: 999px; box-shadow: inset 0 0 0 1.5px var(--soft); }
   .link-more:hover { background: var(--pale); }
-  .dl { display: flex; flex-direction: column; margin-top: 6px; }
-  .dr { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 46px; padding: 4px 6px; border-top: 1px solid var(--soft); text-align: left; }
-  .dl > .dr:first-child { border-top: 0; }
-  button.dr:hover, .dr:has(.dr-t:hover) { background: var(--pale); border-radius: 10px; }
-  .dr-i { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--pale); }
-  .dr-i svg { width: 16px; height: 16px; }
-  .dr.bday .dr-i { background: var(--ink); color: var(--green-l); }
-  .dr-t { flex: 1; min-width: 0; text-align: left; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dr-m { flex: none; font-size: 13px; color: var(--grey); }
-  .dr-c { flex: none; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; color: var(--fc); box-shadow: inset 0 0 0 1.5px currentColor; }
-  .dr .tcheck { width: 24px; height: 24px; }
-  .dr-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--soft); margin: 0 6px; }
-  .dr-dot.on { background: var(--ic); }
 
   /* Fenster etwas breiter */
   .sheet { max-width: 760px; }

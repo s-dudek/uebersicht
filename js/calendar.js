@@ -17,7 +17,7 @@ export const calDay = () => state.calDate || ymd(new Date());
 export const toMin = (hm) => { const [h, m] = (hm || '0:0').split(':').map(Number); return h * 60 + (m || 0); };
 
 // Alles an einem Tag: zeitlich (mit Uhrzeit) und ganztägig
-function dayContent(d) {
+export function dayContent(d) {
   const timed = [], allday = [];
   for (const e of eventsOn(d)) {
     if (!isBday(e) && e.meta?.time) timed.push({ kind: 'ev', item: e, start: toMin(e.meta.time), end: e.meta.end ? Math.max(toMin(e.meta.end), toMin(e.meta.time) + 20) : toMin(e.meta.time) + 60, label: e.title || 'Termin' });
@@ -43,7 +43,7 @@ function dayContent(d) {
 
 const chipIc = (k, item) => ({ bday: ICON.cake, ev: item?.icon && ICON[item.icon] ? ICON[item.icon] : ICON.calendar, todo: ICON.todos, meal: ICON.fork, rem: ICON.bell })[k];
 
-const allChip = (a) => `<button class="cchip k-${a.kind} ${a.item.done ? 'done' : ''}" data-act="open" data-id="${a.item.id}">${chipIc(a.kind, a.item)}<span>${esc(a.label)}</span></button>`;
+export const allChip = (a) => `<button class="cchip k-${a.kind} ${a.item.done ? 'done' : ''}" data-act="open" data-id="${a.item.id}">${chipIc(a.kind, a.item)}<span>${esc(a.label)}</span></button>`;
 
 export const hm = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 

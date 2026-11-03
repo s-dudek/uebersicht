@@ -33,7 +33,7 @@ export function initCategorySort() {
   const move = (x, y) => {
     g.ghost.style.left = (x - g.dx) + 'px';
     g.ghost.style.top = (y - g.dy) + 'px';
-    const t = document.elementFromPoint(x, y)?.closest('[data-cgrid] .fcard[data-cdrag]');
+    const t = document.elementFromPoint(x, y)?.closest('[data-cgrid] [data-cdrag]');
     if (!t || t === g.el) return mark(null, false);
     const r = t.getBoundingClientRect();
     mark(t, x > r.left + r.width / 2);
@@ -48,7 +48,7 @@ export function initCategorySort() {
     d.target?.classList.remove('ins-l', 'ins-r');
     d.ghost.remove();
     if (cancel || !d.target) { if (render.pending) { render.pending = false; render(); } return; }
-    const ids = [...document.querySelectorAll(`[data-cgrid="${d.kind}"] .fcard[data-cdrag]`)].map((x) => x.dataset.cdrag).filter((x) => x !== d.id);
+    const ids = [...document.querySelectorAll(`[data-cgrid="${d.kind}"] [data-cdrag]`)].map((x) => x.dataset.cdrag).filter((x) => x !== d.id);
     let at = ids.indexOf(d.target.dataset.cdrag) + (d.after ? 1 : 0);
     ids.splice(at, 0, d.id);
     render.pending = false;
@@ -56,8 +56,8 @@ export function initCategorySort() {
   };
   $app.addEventListener('pointerdown', (e) => {
     if (e.button > 0) return;
-    const el = e.target.closest('[data-cgrid] .fcard[data-cdrag]');
-    if (!el) return;
+    const el = e.target.closest('[data-cgrid] [data-cdrag]');
+    if (!el || e.target.closest('input, textarea, .tcheck, .pin-x')) return;   // Bedienelemente in Karten nicht als Ziehen werten
     press = { el, x: e.clientX, y: e.clientY, t: setTimeout(() => { if (press) begin(); }, HOLD) };
     el.classList.add('pressing');
   });
@@ -72,7 +72,7 @@ export function initCategorySort() {
   document.addEventListener('pointerup', up(false));
   document.addEventListener('pointercancel', up(true));
   document.addEventListener('touchmove', (e) => { if (g) e.preventDefault(); }, { passive: false });
-  $app.addEventListener('contextmenu', (e) => { if (e.target.closest('.fcard[data-cdrag]')) e.preventDefault(); });
+  $app.addEventListener('contextmenu', (e) => { if (e.target.closest('[data-cdrag]')) e.preventDefault(); });
   document.addEventListener('click', (e) => { if (swallow) { e.stopPropagation(); e.preventDefault(); swallow = false; } }, true);
 }
 

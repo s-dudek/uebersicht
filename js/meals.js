@@ -26,7 +26,7 @@ const SECTIONS = [
 
 const sectionIndex = (name) => { const i = SECTIONS.findIndex(([n]) => n === name); return i < 0 ? SECTIONS.length - 1 : i; };
 
-const SLOTS = [['fruehstueck', 'Frühstück'], ['mittag', 'Mittag'], ['abend', 'Abend']];
+export const SLOTS = [['fruehstueck', 'Frühstück'], ['mittag', 'Mittag'], ['abend', 'Abend']];
 
 const slotLabel = (k) => (SLOTS.find(([s]) => s === k) || [k, k])[1];
 
@@ -37,7 +37,7 @@ export const shopCat = () => state.categories.find((c) => c.name.trim().toLowerC
 export const mealsOn = (day) => state.items.filter((i) => i.type === 'meal' && i.due_date === day)
   .sort((a, b) => SLOTS.findIndex(([k]) => k === a.meta?.slot) - SLOTS.findIndex(([k]) => k === b.meta?.slot));
 
-const cookOn = (day) => state.items.filter((i) => i.type === 'meal' && i.meta?.cook_date === day && i.due_date !== day);
+export const cookOn = (day) => state.items.filter((i) => i.type === 'meal' && i.meta?.cook_date === day && i.due_date !== day);
 
 export function mealRow(m, { compact = false } = {}) {
   const n = m.meta?.nutrition || {};

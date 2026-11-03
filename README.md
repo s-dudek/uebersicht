@@ -23,6 +23,7 @@ js/
   control.js        Steuerknopf (Smartphone)
   nav.js            Bereiche und Wechsel zwischen ihnen
   menu.js           Rechtsklick-Menü (Maus)
+  pins.js           „Zu Home hinzufügen“ (Pinnwand auf der Startseite)
   actions.js        Tippen und Absenden in der Hauptansicht
   drag.js           Ziehen und Ablegen
   auth.js           Anmeldung

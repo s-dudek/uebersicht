@@ -1,7 +1,7 @@
 // Tippen und Absenden in der Hauptansicht
 import { calMove, scrollCal } from './calendar.js';
 import { openCategory, openNewList, toggleTile } from './categories.js';
-import { $app, sb, state, store, toast } from './core.js';
+import { $app, catById, isTodoList, sb, state, store, toast } from './core.js';
 import { createNote, createTodo, toggleTodo } from './data.js';
 import { addDays, mondayOf, ymd } from './dates.js';
 import { createEvent, openNewEventMenu } from './events.js';
@@ -9,6 +9,7 @@ import { openGroupEdit } from './groups.js';
 import { homeAction } from './home.js';
 import { openItem } from './items.js';
 import { navigate } from './nav.js';
+import { togglePin } from './pins.js';
 import { importPlan, openImport, shopCat } from './meals.js';
 import { render } from './render.js';
 
@@ -23,6 +24,8 @@ export function initActions() {
     switch (t.dataset.act) {
       case 'toggle': toggleTodo(id); break;
       case 'nav': navigate(id); break;
+      case 'unpin': togglePin(id); break;
+      case 'pin-open': { const c = catById(id); if (!c) break; state.tab = isTodoList(c) ? 'todos' : 'notes'; state.list = id; state.keepList = true; render(); break; }
       case 'group-edit': openGroupEdit(id, t.dataset.f, t.dataset.t || 'note'); break;
       case 'new-event': createEvent(id); break;
       case 'new-todo': createTodo(); break;

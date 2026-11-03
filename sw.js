@@ -1,6 +1,6 @@
 // Speichert die App-Dateien, damit sie auch bei schlechtem Netz schnell startet.
 // Bei jeder neuen Version die Nummer erhöhen.
-const CACHE = 'uebersicht-v11';
+const CACHE = 'uebersicht-v12';
 const FILES = [
   './', 'index.html', 'style.css', 'config.js', 'manifest.json',
   'icons/icon-192.png', 'icons/apple-touch-icon.png',
@@ -25,6 +25,7 @@ const FILES = [
   'js/nav.js',
   'js/notes.js',
   'js/panels.js',
+  'js/pins.js',
   'js/reminders.js',
   'js/render.js',
   'js/sheet.js',

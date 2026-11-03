@@ -17,7 +17,7 @@ import { render } from './render.js';
 // Reihenfolge der Ordner: je Person gespeichert (profiles.cat_order), sonst im Browser
 const CAT_ORDER_KEY = 'uebersicht-cat-order';
 
-const catOrder = (kind) => {
+export const catOrder = (kind) => {
   const p = state.profiles[state.me]?.cat_order;
   if (p && Array.isArray(p[kind])) return p[kind];
   try { return JSON.parse(localStorage.getItem(CAT_ORDER_KEY))?.[kind] || []; } catch { return []; }
@@ -75,7 +75,7 @@ export const noteFolders = () => [
 // Vorgefertigte Symbole für Notizen und Todos
 // Ordner-Symbol: eigenes Symbol der Kategorie in ihrer Farbe, sonst Ordner
 // Kategorie-Symbol (ohne gewähltes Symbol: Etikett); "Allgemein"/"Ohne Kategorie" bekommen eigene
-const catSym = (c) => (c?.icon && ICON[c.icon] ? ICON[c.icon] : ICON.tag);
+export const catSym = (c) => (c?.icon && ICON[c.icon] ? ICON[c.icon] : ICON.tag);
 
 export const folderIc = (f, cls = 'fc-ic') => {
   const c = f.id ? catById(f.id) : null;

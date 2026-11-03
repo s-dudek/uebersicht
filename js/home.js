@@ -1,10 +1,13 @@
 // Startseite
-import { askConfirm, catById, esc, isDesktop, safeColor, sb, state } from './core.js';
-import { addDays, dueLabel, ymd } from './dates.js';
-import { evAge, eventsOn, isBday } from './events.js';
+import { allChip, dayContent, hm } from './calendar.js';
+import { askConfirm, esc, isDesktop, isTodoList, safeColor, sb, state } from './core.js';
+import { addDays, ymd } from './dates.js';
+import { eventsOn, isBday } from './events.js';
+import { catSym } from './folders.js';
 import { ICON, LOGO_PORTRAIT } from './icons.js';
-import { mealRow, mealsOn } from './meals.js';
+import { SLOTS, cookOn, mealRow, mealsOn } from './meals.js';
 import { openSettings } from './panels.js';
+import { pinned } from './pins.js';
 import { dueTag } from './todos.js';
 
 const HOME_BTNS = [
@@ -49,50 +52,94 @@ export async function homeAction(k) {
   if (k === 'logout' && (await askConfirm('Abmelden?', 'Abmelden'))) sb.auth.signOut();
 }
 
-// ---------- Desktop: Startseite als Übersicht des Tages ----------
+// ---------- Desktop: Startseite – Datum, heutiger Tag, Essen, eigene Pinnwand ----------
+const DAY_FROM = 6 * 60, DAY_TO = 24 * 60;   // sichtbarer Zeitraum der Tagesleiste
+
+function dayStrip(today) {
+  const { timed, allday } = dayContent(today);
+  const pct = (min) => ((Math.min(Math.max(min, DAY_FROM), DAY_TO) - DAY_FROM) / (DAY_TO - DAY_FROM)) * 100;
+  const rows = Math.max(1, ...timed.map((t) => t.cols));
+  const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+  const hours = [];
+  for (let h = 6; h <= 24; h += 2) hours.push(`<span class="ds-h" style="left:${pct(h * 60)}%">${String(h % 24).padStart(2, '0')}</span>`);
+  const block = (t) => `<button class="ds-b k-${t.kind}" data-act="open" data-id="${t.item.id}" title="${esc(t.label)}"
+      style="left:${pct(t.start)}%;width:calc(${pct(t.end) - pct(t.start)}% - 3px);top:${(t.col / rows) * 100}%;height:calc(${100 / rows}% - 4px)">
+      <small>${hm(t.start)}</small><b>${esc(t.label)}</b></button>`;
+  return `<section class="tile dash-day">
+    <div class="th">${ICON.calendar}<b>Heute im Kalender</b><span class="th-sp"></span>
+      <button class="link-more" data-act="new-event" data-id="${today}">${ICON.plus} Termin</button>
+      <button class="link-more" data-act="nav" data-id="calendar">Kalender</button></div>
+    ${allday.length ? `<div class="allday">${allday.map(allChip).join('')}</div>` : ''}
+    <div class="ds">
+      <div class="ds-grid">${hours.join('')}</div>
+      <div class="ds-track" style="--rows:${rows}">${timed.map(block).join('')}
+        ${nowMin >= DAY_FROM ? `<i class="ds-now" style="left:${pct(nowMin)}%"></i>` : ''}</div>
+    </div>
+    ${!timed.length && !allday.length ? '<p class="kempty">Heute ist nichts eingetragen.</p>' : ''}
+  </section>`;
+}
+
+function mealsToday(today) {
+  const meals = mealsOn(today), cook = cookOn(today);
+  const col = ([slot, label]) => {
+    const list = meals.filter((m) => m.meta?.slot === slot);
+    return `<div class="dm-col"><div class="dm-h">${label}</div>${list.length ? `<div class="mrows">${list.map((m) => mealRow(m, { compact: true })).join('')}</div>` : '<p class="kempty">–</p>'}</div>`;
+  };
+  return `<section class="tile dash-meals">
+    <div class="th">${ICON.pot}<b>Essen heute</b><span class="th-sp"></span><button class="link-more" data-act="nav" data-id="meals">Woche</button></div>
+    ${meals.length || cook.length ? `<div class="dm">${SLOTS.map(col).join('')}</div>
+      ${cook.length ? `<div class="cook">${ICON.pot}<span>Heute auch vorkochen: <b>${cook.map((m) => esc(m.title)).join(', ')}</b></span></div>` : ''}`
+      : '<p class="kempty">Für heute ist nichts geplant.</p>'}
+  </section>`;
+}
+
+// Eine Karte der Pinnwand
+function pinCard({ key, type, obj }) {
+  const head = (icon, title, color = '') => `<div class="pin-h"${color ? ` style="--fc:${safeColor(color)}"` : ''}>
+      <span class="pin-ic">${icon}</span><b>${title}</b>
+      <button class="pin-x" data-act="unpin" data-id="${esc(key)}" aria-label="Von Home entfernen" title="Von Home entfernen">×</button></div>`;
+  const todoRow = (i) => `<div class="pin-r ${i.done ? 'done' : ''}">
+      <button class="tcheck ${i.done ? 'on' : ''}" data-act="toggle" data-id="${i.id}" aria-label="${i.done ? 'Wieder öffnen' : 'Erledigt'}">${i.done ? ICON.check : ''}</button>
+      <button class="pin-t" data-act="open" data-id="${i.id}">${esc(i.title) || 'Ohne Titel'}</button>${i.done ? '' : dueTag(i)}</div>`;
+  let body;
+  if (type === 'cat') {
+    const c = obj;
+    if (isTodoList(c)) {
+      const open = state.items.filter((i) => i.type === 'todo' && i.category_id === c.id && !i.done).slice(0, 8);
+      body = `${open.map(todoRow).join('') || '<p class="kempty">Alles erledigt.</p>'}
+        <form class="addrow pin-add" data-list="${c.id}"><span class="xic">${ICON.plus}</span><input name="title" placeholder="Hinzufügen …" autocomplete="off"></form>`;
+    } else {
+      const notes = state.items.filter((i) => i.type === 'note' && i.category_id === c.id).sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 6);
+      body = notes.map((n) => `<button class="pin-r pin-t" data-act="open" data-id="${n.id}">${esc(n.title) || 'Ohne Titel'}</button>`).join('') || '<p class="kempty">Leer.</p>';
+    }
+    return `<article class="pin pin-list" data-cdrag="${esc(key)}" data-pin="${esc(key)}">${head(catSym(c), esc(c.name), c.color)}
+      <div class="pin-b">${body}</div>
+      <button class="pin-more" data-act="pin-open" data-id="${c.id}">Öffnen</button></article>`;
+  }
+  const i = obj;
+  if (i.type === 'note') {
+    return `<article class="pin pin-note ${i.meta?.color ? 'tinted' : ''}" data-cdrag="${esc(key)}" data-pin="${esc(key)}"${i.meta?.color ? ` style="--ic:${safeColor(i.meta.color)}"` : ''}>
+      ${head(ICON.notes, esc(i.title) || 'Ohne Titel')}
+      <button class="pin-b pin-text" data-act="open" data-id="${i.id}">${esc(i.body.slice(0, 400)) || '<span class="muted">Kein Text.</span>'}</button></article>`;
+  }
+  if (i.type === 'todo') {
+    return `<article class="pin pin-todo" data-cdrag="${esc(key)}" data-pin="${esc(key)}">${head(ICON.todos, 'Todo')}<div class="pin-b">${todoRow(i)}</div></article>`;
+  }
+  return `<article class="pin" data-cdrag="${esc(key)}" data-pin="${esc(key)}">${head(i.type === 'event' ? ICON.calendar : ICON.pot, esc(i.title) || 'Eintrag')}
+    <button class="pin-more" data-act="open" data-id="${i.id}">Öffnen</button></article>`;
+}
+
 function renderDashboard() {
-  const today = ymd(new Date()), tomorrow = addDays(today, 1);
-  const tile = (title, icon, body, act = '') => `<section class="tile dash">
-      <div class="th">${ICON[icon]}<b>${title}</b>${act}</div>${body}</section>`;
-  const empty = (t) => `<p class="kempty">${t}</p>`;
-  const link = (tab, label) => `<span class="th-sp"></span><button class="link-more" data-act="nav" data-id="${tab}">${label}</button>`;
-
-  // Termine heute und morgen
-  const evs = [...eventsOn(today).map((e) => [e, 'Heute']), ...eventsOn(tomorrow).map((e) => [e, 'Morgen'])];
-  const evHtml = evs.length ? `<div class="dl">${evs.map(([e, w]) => `<button class="dr ${isBday(e) ? 'bday' : ''}" data-act="open" data-id="${e.id}">
-      <span class="dr-i">${isBday(e) ? ICON.cake : ICON.calendar}</span>
-      <span class="dr-t">${esc(isBday(e) ? `${e.title || 'Jemand'} hat Geburtstag${evAge(e, w === 'Heute' ? today : tomorrow) ? ` (${evAge(e, w === 'Heute' ? today : tomorrow)})` : ''}` : e.title || 'Termin')}</span>
-      <span class="dr-m">${w}${!isBday(e) && e.meta?.time ? ' · ' + esc(e.meta.time) : ''}</span></button>`).join('')}</div>` : empty('Heute und morgen nichts eingetragen.');
-
-  // offene Todos: überfällig und heute zuerst, dann mit Datum, dann der Rest
-  const todos = state.items.filter((i) => i.type === 'todo' && !i.done && !i.meta?.section)
-    .sort((a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999') || b.created_at.localeCompare(a.created_at)).slice(0, 8);
-  const todoHtml = todos.length ? `<div class="dl">${todos.map((i) => {
-    const c = catById(i.category_id);
-    return `<div class="dr">
-      <button class="tcheck" data-act="toggle" data-id="${i.id}" aria-label="Erledigt"></button>
-      <button class="dr-t" data-act="open" data-id="${i.id}">${esc(i.title) || 'Ohne Titel'}</button>
-      ${c ? `<span class="dr-c" style="--fc:${safeColor(c.color, '#6E8582')}">${esc(c.name)}</span>` : ''}${dueTag(i)}</div>`;
-  }).join('')}</div>` : empty('Alles erledigt.');
-
-  // Essen heute
-  const meals = mealsOn(today);
-  const mealHtml = meals.length ? `<div class="mrows">${meals.map((m) => mealRow(m, { compact: true })).join('')}</div>` : empty('Für heute ist nichts geplant.');
-
-  // zuletzt bearbeitete Notizen
-  const notes = state.items.filter((i) => i.type === 'note').sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 6);
-  const noteHtml = notes.length ? `<div class="dl">${notes.map((n) => `<button class="dr" data-act="open" data-id="${n.id}"${n.meta?.color ? ` style="--ic:${safeColor(n.meta.color)}"` : ''}>
-      <span class="dr-dot ${n.meta?.color ? 'on' : ''}"></span><span class="dr-t">${esc(n.title) || 'Ohne Titel'}</span>
-      <span class="dr-m">${esc(dueLabel(n.updated_at.slice(0, 10)).text)}</span></button>`).join('')}</div>` : empty('Noch keine Notizen.');
-
-  const d = new Date();
+  const today = ymd(new Date()), d = new Date();
+  const pins = pinned();
   return `<div class="dash-wrap">
     <header class="dash-head"><b>${d.toLocaleDateString('de-AT', { weekday: 'long' })}</b><span>${d.toLocaleDateString('de-AT', { day: 'numeric', month: 'long', year: 'numeric' })}</span></header>
-    <div class="dash-grid">
-      ${tile('Termine', 'calendar', evHtml, link('calendar', 'Kalender'))}
-      ${tile('Offene Todos', 'todos', todoHtml, link('todos', 'Alle'))}
-      ${tile('Essen heute', 'pot', mealHtml, link('meals', 'Woche'))}
-      ${tile('Zuletzt bearbeitet', 'notes', noteHtml, link('notes', 'Alle'))}
-    </div>
+    ${dayStrip(today)}
+    ${mealsToday(today)}
+    <section class="dash-pins">
+      <div class="dp-h"><b>Meine Übersicht</b><span>Rechtsklick auf eine Notiz, ein Todo oder eine Liste → „Zu Home hinzufügen“. Karten lange drücken zum Verschieben.</span></div>
+      ${pins.length ? `<div class="pins" data-cgrid="home">${pins.map(pinCard).join('')}</div>`
+        : '<div class="pins-empty">Noch leer. Füge in Todos oder Notizen per Rechtsklick „Zu Home hinzufügen“ hinzu.</div>'}
+    </section>
   </div>`;
 }
