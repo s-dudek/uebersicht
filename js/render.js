@@ -12,6 +12,9 @@ import { NAV } from './nav.js';
 import { notesIn, renderNotes } from './notes.js';
 import { renderTodos, todosIn } from './todos.js';
 
+// Dudek-Zeichen als Wasserzeichen hinter allem
+const WATERMARK = `<div class="watermark" aria-hidden="true">${LOGO_MARK}</div>`;
+
 const PAGES = { home: renderHome, todos: renderTodos, notes: renderNotes, categories: renderCategoryPage, meals: renderMeals, calendar: renderCalendar };
 
 export function render() {
@@ -32,6 +35,7 @@ export function render() {
   const content = (PAGES[tab] || renderHome)();
   $app.innerHTML = desk
     ? `<div class="app desk">
+        ${WATERMARK}
         ${sidebar(tab)}
         <div class="desk-main">
           ${home ? '' : pageHead(tab, true)}
@@ -39,6 +43,7 @@ export function render() {
         </div>
       </div>`
     : `<div class="app">
+        ${WATERMARK}
         ${home ? '' : pageHead(tab, false)}
         <main class="main ${home ? 'is-home' : 'has-dock'}">${content}</main>
         ${home ? '' : `<nav class="dock" aria-label="Aktionen">${actionsFor(tab)}</nav>`}
