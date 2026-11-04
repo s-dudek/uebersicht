@@ -41,6 +41,7 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
 2. Vorschau mit Beispieldaten: `npm run vorschau` → `demo/uebersicht-vorschau.html` (nicht im Repo).
    Die Beispiel-Datenbank `demo/mock-supabase.js` bildet die Zugriffsregeln nach: bei neuen Tabellen oder Regeln mitpflegen.
    Mit Playwright Bildschirmfotos bei 390 px, 820 px (iPad) und 1280 px prüfen, Konsole auf Fehler.
+   Simons Vorschau ist das Artifact https://claude.ai/artifact/5tX5mkGZ7retXy9QMp7gG8 – mit der neu gebauten Datei aktualisieren (gleiche URL behalten).
 3. In `sw.js` die Nummer bei `CACHE` erhöhen und neue Dateien in `FILES` eintragen.
 4. Committen und auf `main` pushen.
 
