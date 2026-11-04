@@ -45,9 +45,10 @@ export function serialize(items, h) {
   return {
     v: 1, h: Math.round(h),
     items: items.map((it) => {
-      if (it.t === 's') return { t: 's', ...strokeOut(it) };
-      if (it.t === 'i') return { t: 'i', src: it.src, x: it.x, y: it.y, w: it.w, h: it.h };
-      return { t: 't', page: it.page, s: it.s.map(strokeOut) };
+      const g = it.g ? { g: it.g } : {};
+      if (it.t === 's') return { t: 's', ...strokeOut(it), ...g };
+      if (it.t === 'i') return { t: 'i', src: it.src, x: it.x, y: it.y, w: it.w, h: it.h, ...g };
+      return { t: 't', page: it.page, s: it.s.map(strokeOut), ...g };
     }),
   };
 }
@@ -57,12 +58,16 @@ export function deserialize(data) {
   const list = Array.isArray(data?.items) ? data.items : [];
   const items = [];
   for (const it of list) {
-    if (it?.t === 's') items.push(strokeIn(it));
+    let out = null;
+    if (it?.t === 's') out = strokeIn(it);
     else if (it?.t === 'i' && IMG_PATH.test(it.src || '')) {
-      items.push({ t: 'i', src: it.src, x: num(it.x, -5000, 5000, 0), y: num(it.y, -5000, 1e6, 0), w: num(it.w, 10, 5000, 300), h: num(it.h, 10, 5000, 200) });
+      out = { t: 'i', src: it.src, x: num(it.x, -5000, 5000, 0), y: num(it.y, -5000, 1e6, 0), w: num(it.w, 10, 5000, 300), h: num(it.h, 10, 5000, 200) };
     } else if (it?.t === 't' && UUID.test(it.page || '') && Array.isArray(it.s)) {
-      items.push({ t: 't', page: it.page, s: it.s.map(strokeIn) });
+      out = { t: 't', page: it.page, s: it.s.map(strokeIn) };
     }
+    if (!out) continue;
+    if (UUID.test(it.g || '')) out.g = it.g;   // Gruppe
+    items.push(out);
   }
   return { items, h: num(data?.h, 0, 1e6, 0) };
 }

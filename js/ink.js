@@ -1,5 +1,5 @@
 // Handschrift: Startseite mit Titeln, jeder Titel öffnet eine eigene Seite (beliebig tief)
-import { $app, askConfirm, esc, state, store, toast } from './core.js';
+import { $app, askConfirm, COLORS, esc, state, store, toast } from './core.js';
 import { ICON } from './icons.js';
 import { createBoard } from './ink-board.js';
 import { deletePageTree, deserialize, loadChild, loadRoot, removeImages, savePage, titleIn, uploadImage } from './ink-store.js';
@@ -19,6 +19,7 @@ function openPage(row) {
   const page = { id: row.id, title: titleIn(row.title), atOpen: new Set(), uploaded: new Set(), timer: null, pending: null };
   page.board = createBoard({
     items, h,
+    colors: COLORS,
     hold,
     onCommit: (list, hh) => { page.pending = { list, hh }; scheduleSave(page); updateTools(); },
     onOpenTitle: (it) => openTitle(page, it),

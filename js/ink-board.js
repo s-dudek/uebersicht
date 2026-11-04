@@ -1,6 +1,7 @@
 // Handschrift: Zeichenfläche mit kariertem Papier
 // Stift (mit Druck), Radierer (ganze Striche), Auswahl (Lasso) zum Verschieben, Vergrößern, Löschen und "Als Titel".
 // Die Seite ist 1000 Einheiten breit und wächst nach unten. Gezeichnet wird in Kacheln, damit lange Seiten wenig Speicher brauchen.
+import { ICON } from './icons.js';
 import { getImage, newId } from './ink-store.js';
 
 const W = 1000;          // Seitenbreite in Einheiten
@@ -104,7 +105,7 @@ function drawStroke(ctx, s) {
 
 // ====================================================================
 // Zeichenfläche
-// opts: { items, h, onCommit(items, h), onOpenTitle(titleItem), onDeleteTitles(titles) -> Promise<bool>, hold(bool) }
+// opts: { items, h, colors, onCommit(items, h), onOpenTitle(titleItem), onDeleteTitles(titles) -> Promise<bool>, hold(bool) }
 // ====================================================================
 export function createBoard(opts) {
   let items = opts.items;
@@ -349,6 +350,113 @@ export function createBoard(opts) {
     renderSel();
   }
 
+  // Gruppen: wer ein Mitglied auswählt, bekommt die ganze Gruppe
+  function withGroups(list) {
+    const gs = new Set(list.map((it) => it.g).filter(Boolean));
+    return gs.size ? items.filter((it) => list.includes(it) || gs.has(it.g)) : list;
+  }
+
+  // Ausgewähltes verändern und ausgewählt lassen
+  function editSel(fn) {
+    if (!sel) return;
+    const changed = [];
+    const next = items.map((it) => { if (!sel.set.has(it)) return it; const n = fn(it); changed.push(n); return n; });
+    commit(next);
+    sel = { set: new Set(changed), box: union(changed) };
+    redrawAll();
+    renderTitles();
+    renderSel();
+  }
+  const recolor = (c) => editSel((it) => (it.t === 's' ? { ...it, c } : it.t === 't' ? { ...it, s: it.s.map((s) => ({ ...s, c })) } : it));
+  const group = () => { const g = newId(); editSel((it) => ({ ...it, g })); };
+  const ungroup = () => editSel(({ g, ...rest }) => rest);
+
+  // obenauf liegendes Element an einem Punkt
+  function hitAt(x, y) {
+    for (let i = items.length - 1; i >= 0; i--) {
+      const it = items[i], b = bbox(it), r = it.t === 's' ? 8 : 4;
+      if (x < b[0] - r || x > b[2] + r || y < b[1] - r || y > b[3] + r) continue;
+      if (it.t !== 's' || nearStroke(it, x, y, r)) return it;
+    }
+    return null;
+  }
+
+  // ---------- Menü: Rechtsklick oder lange drücken ----------
+  let menu = null, menuAt = 0;
+  const closeMenu = () => { menu?.remove(); menu = null; selBox.classList.remove('menu'); };
+
+  function openMenu(cx, cy) {
+    closeMenu();
+    if (!sel) return;
+    const list = [...sel.set];
+    const g = list[0].g;
+    const oneGroup = g && list.every((it) => it.g === g);
+    const canTitle = list.some((it) => it.t === 's') && !list.some((it) => it.t === 't');
+    const hasInk = list.some((it) => it.t !== 'i');
+    menu = document.createElement('div');
+    menu.className = 'cmenu';
+    menu.setAttribute('role', 'menu');
+    menu.innerHTML = `
+      ${hasInk ? `<div class="cm-colors" role="group" aria-label="Umfärben">${(opts.colors || []).map((c, i) => `<button class="cm-color" data-m="color" data-i="${i}" style="background:${c}" aria-label="Farbe ${i + 1}"></button>`).join('')}</div><hr>` : ''}
+      ${list.length > 1 && !oneGroup ? `<button class="cm-i" data-m="group">${ICON.stack}<span>Gruppieren</span></button>` : ''}
+      ${oneGroup ? `<button class="cm-i" data-m="ungroup">${ICON.stack}<span>Gruppierung aufheben</span></button>` : ''}
+      ${canTitle ? `<button class="cm-i" data-m="title">${ICON.chevR}<span>Als Titel</span></button>` : ''}
+      <button class="cm-i danger" data-m="delete">${ICON.trash}<span>Löschen</span></button>`;
+    document.body.appendChild(menu);
+    selBox.classList.add('menu');   // Leiste über der Auswahl ausblenden, solange das Menü offen ist
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.min(cx, window.innerWidth - r.width - 8)) + 'px';
+    menu.style.top = Math.max(8, Math.min(cy, window.innerHeight - r.height - 8)) + 'px';
+    menuAt = Date.now();
+    menu.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-m]');
+      if (!b) return;
+      const m = b.dataset.m;
+      closeMenu();
+      if (m === 'color') recolor(opts.colors[+b.dataset.i]);
+      else if (m === 'group') group();
+      else if (m === 'ungroup') ungroup();
+      else if (m === 'title') makeTitle();
+      else if (m === 'delete') deleteSel();
+    });
+  }
+  document.addEventListener('pointerdown', (e) => { if (menu && !menu.contains(e.target)) closeMenu(); }, true);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+  sc.addEventListener('scroll', closeMenu, { passive: true });
+
+  // Punkt in der Auswahl: Menü dafür; sonst das Element darunter auswählen
+  function contextAt(cx, cy, x, y) {
+    const inSel = sel && x >= sel.box[0] - 6 && x <= sel.box[2] + 6 && y >= sel.box[1] - 6 && y <= sel.box[3] + 6;
+    if (!inSel) {
+      const hit = hitAt(x, y);
+      if (!hit) { clearSel(); closeMenu(); return; }
+      setSel(withGroups([hit]));
+    }
+    openMenu(cx, cy);
+  }
+
+  pg.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (Date.now() - menuAt < 700) return;   // schon durch langes Drücken geöffnet
+    const [x, y] = pos(e);
+    contextAt(e.clientX, e.clientY, x, y);
+  });
+
+  // langes Drücken (Stift, Finger, Maus) ohne Bewegung
+  let lp = null;
+  const cancelLp = () => { if (lp) { clearTimeout(lp.t); lp = null; } };
+  function startLp(e) {
+    cancelLp();
+    const cx = e.clientX, cy = e.clientY, [x, y] = pos(e);
+    lp = { id: e.pointerId, cx, cy, t: setTimeout(() => {
+      lp = null;
+      if (act?.kind === 'pen') { items = act.before; redrawBox(bbox(act.s)); }
+      if (act?.kind === 'lasso') { lassoSvg.classList.remove('on'); lassoLine.setAttribute('points', ''); }
+      if (act) { act = null; opts.hold(false); }
+      contextAt(cx, cy, x, y);
+    }, 520) };
+  }
+
   selBox.querySelector('.ink-selbar').addEventListener('click', (e) => {
     const b = e.target.closest('[data-sel]');
     if (b?.dataset.sel === 'title') makeTitle();
@@ -383,7 +491,8 @@ export function createBoard(opts) {
     if (e.target.closest('button')) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     if (e.pointerType === 'touch') {
-      if (!finger || penDown) return;
+      if (penDown) return;
+      if (!finger) { startLp(e); return; }        // Finger scrollt; lange drücken öffnet das Menü
       fingers.set(e.pointerId, e.clientY);
       if (fingers.size > 1) {                       // zweiter Finger: Zeichnen abbrechen, verschieben
         if (act?.kind === 'pen') { items = act.before; redrawBox(bbox(act.s)); }
@@ -398,25 +507,31 @@ export function createBoard(opts) {
     if (e.pointerType === 'pen') penDown = true;
     opts.hold(true);
     const [x, y, p] = pos(e);
+    startLp(e);
 
-    if (tool === 'pen') {
+    const onHandle = e.target.closest('.ink-sel-h'), onSel = e.target.closest('.ink-sel');
+    if (sel && onHandle) act = { kind: 'scale', id: e.pointerId, x, y, k: 1 };
+    else if (sel && onSel) act = { kind: 'move', id: e.pointerId, x, y, dx: 0, dy: 0 };
+    else if (tool === 'pen') {
+      clearSel();
       const s = { t: 's', c: pen.c, w: pen.w, pts: [x, y, p] };
       act = { kind: 'pen', id: e.pointerId, s, before: items };
       items = [...items, s];
       const cv = tileCanvas(Math.floor(y / TILE));
       drawStroke(tileCtx(cv, Math.floor(y / TILE)), s);
     } else if (tool === 'eraser') {
+      clearSel();
       act = { kind: 'erase', id: e.pointerId, before: items, hit: false };
       erase(x, y);
     } else {
-      const onHandle = e.target.closest('.ink-sel-h'), onSel = e.target.closest('.ink-sel');
-      if (sel && onHandle) act = { kind: 'scale', id: e.pointerId, x, y, k: 1 };
-      else if (sel && onSel) act = { kind: 'move', id: e.pointerId, x, y, dx: 0, dy: 0 };
-      else { clearSel(); act = { kind: 'lasso', id: e.pointerId, poly: [x, y] }; lassoSvg.classList.add('on'); }
+      clearSel();
+      act = { kind: 'lasso', id: e.pointerId, poly: [x, y] };
+      lassoSvg.classList.add('on');
     }
   });
 
   pg.addEventListener('pointermove', (e) => {
+    if (lp && e.pointerId === lp.id && Math.hypot(e.clientX - lp.cx, e.clientY - lp.cy) > 8) cancelLp();
     if (act?.kind === 'pan' && fingers.has(e.pointerId)) {
       const prev = fingers.get(e.pointerId);
       fingers.set(e.pointerId, e.clientY);
@@ -469,11 +584,12 @@ export function createBoard(opts) {
   }
 
   function end(e) {
+    if (lp?.id === e.pointerId) cancelLp();
+    if (e.pointerType === 'pen') penDown = false;
     if (fingers.delete(e.pointerId) && act?.kind === 'pan') { if (!fingers.size) { act = null; } return; }
     if (!act || e.pointerId !== act.id) return;
     const a = act;
     act = null;
-    if (e.pointerType === 'pen') penDown = false;
     if (a.kind === 'pen') {
       boxes.delete(a.s);
       items = a.before;
@@ -486,7 +602,7 @@ export function createBoard(opts) {
     } else if (a.kind === 'lasso') {
       lassoSvg.classList.remove('on');
       lassoLine.setAttribute('points', '');
-      if (a.poly.length >= 6) setSel(items.filter((it) => share(it, a.poly) >= .5));
+      if (a.poly.length >= 6) setSel(withGroups(items.filter((it) => share(it, a.poly) >= .5)));
     } else if (a.kind === 'move') applySel(a.dx, a.dy, 1);
     else if (a.kind === 'scale') { selCv.style.transform = ''; applySel(0, 0, a.k); }
     opts.hold(false);
@@ -525,6 +641,6 @@ export function createBoard(opts) {
       redrawAll();
     },
     imagePaths: () => items.filter((it) => it.t === 'i').map((it) => it.src),
-    destroy() { ro.disconnect(); sc.remove(); },
+    destroy() { ro.disconnect(); closeMenu(); sc.remove(); },
   };
 }
