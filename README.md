@@ -40,6 +40,7 @@ js/
   ink-tree.js       Canvas: Gliederung (Bereiche, Titel und Unterseiten)
   ink-store.js      Canvas: Datenbank und Bilder (Supabase Storage)
   ink-export.js     Canvas: Bereiche als PDF, PNG oder JPEG
+  ink-layout.js     Canvas: Layouts für Bereiche im Dudek-CI (Blatt, Deckblatt, Planfeld)
   groups.js         Reihenfolge und Gruppen in Listen
   categories.js     Kategorien-Seite und -Fenster
   items.js          Todo-/Notiz-Fenster, Teilen

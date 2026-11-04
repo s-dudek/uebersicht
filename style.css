@@ -1120,7 +1120,14 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .ink-seg button { padding: 6px 10px; }
 .ink-seg svg { width: 20px; height: 20px; }
 /* Stift, Radierer, Auswahl ganz rechts; bleibt beim Wischen der Leiste immer sichtbar */
-.ink-tools-in .ink-seg { margin-left: auto; position: sticky; right: 0; flex: none; box-shadow: -10px 0 12px rgba(255, 255, 255, .95); }
+.ink-right { margin-left: auto; position: sticky; right: 0; flex: none; display: flex; align-items: center; gap: 8px; padding-left: 6px; background: rgba(255, 255, 255, .96); box-shadow: -10px 0 12px rgba(255, 255, 255, .95); }
+/* Auswahl: eigener Knopf ganz rechts; solange ausgewählt wird, ruhen die anderen Werkzeuge */
+.ink-select { display: flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px 0 10px; border-radius: 999px; font-size: 14px; font-weight: 600; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--soft); flex: none; }
+.ink-select svg { width: 20px; height: 20px; }
+.ink-select.on { background: #3E7CA8; color: var(--white); box-shadow: none; }
+.ink-bar.selecting .ink-tools-in > .dk.ink-b:not([data-act="ink-zoom"]), .ink-bar.selecting .ink-seg { opacity: .3; pointer-events: none; }
+.ink-view[data-tool="lasso"] :is(.ink-notes, .ink-desc, .ink-ftab, .ink-ntab) { pointer-events: none; }
+@media (max-width: 600px) { .ink-select span { display: none; } .ink-select { padding: 0 9px; } }
 .ink-pens { display: flex; align-items: center; gap: 8px; padding: 0 6px; flex: none; }
 .ink-dot { width: 22px; height: 22px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 2px var(--white), 0 0 0 3.5px transparent; flex: none; }
 .ink-dot.on { box-shadow: 0 0 0 2px var(--white), 0 0 0 3.5px var(--c); }
@@ -1173,7 +1180,7 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .tree-ttl { height: 34px; width: auto; max-width: min(60vw, 420px); flex: none; }
 .tree-c { min-width: 24px; height: 24px; padding: 0 7px; border-radius: 999px; display: grid; place-items: center; background: var(--pale); font-size: 12px; font-weight: 700; }
 .tree-empty { margin: 12px 4px; }
-.tree-fr { position: relative; display: flex; align-items: center; }
+.tree-fr > .tree-row { position: relative; }
 .tree-fr { --fc: #3E7CA8; }
 .tree-row { display: flex; align-items: center; }
 .tree-row .tree-i { flex: 1; min-width: 0; }
@@ -1183,13 +1190,13 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .tree-gh svg { width: 16px; height: 16px; }
 .tree-note > svg:first-child { width: 18px; height: 18px; flex: none; color: var(--grey); }
 .tree-note { font-weight: 600; }
-.tree-fr .tree-i { min-height: 44px; font-weight: 500; color: var(--fc); }
+.tree-fr > .tree-row .tree-i { min-height: 44px; font-weight: 500; color: var(--fc); }
 .tree-show { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--soft); }
 .tree-show svg { width: 17px; height: 17px; }
 @media (hover: hover) { .tree-show:hover { background: var(--pale); } }
-.tree-fr .tree-i > svg:first-child { width: 18px; height: 18px; flex: none; }
+.tree-fr > .tree-row .tree-i > svg:first-child { width: 18px; height: 18px; flex: none; }
 .tree-fn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tree-fr small { margin-left: auto; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--fc) 10%, transparent); font-size: 12px; white-space: nowrap; }
+.tree-fr > .tree-row small { margin-left: auto; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--fc) 10%, transparent); font-size: 12px; white-space: nowrap; }
 .tree-ren { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border-radius: 10px; color: var(--grey); }
 .tree-ren svg { width: 17px; height: 17px; }
 .tree-in { position: absolute; left: 34px; right: 44px; top: 4px; bottom: 4px; width: auto; z-index: 1; }

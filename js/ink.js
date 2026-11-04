@@ -9,6 +9,7 @@ import { ICON } from './icons.js';
 import { createBoard } from './ink-board.js';
 import { GRID, NOTES_W, SHAPES, union } from './ink-draw.js';
 import { deliver, exportWidth, fileName, toImage, toPdf } from './ink-export.js';
+import { LAYOUT_FIELDS } from './ink-layout.js';
 import { clampSize, cleanText, openPenPanel, PALETTE } from './ink-pen.js';
 import { deletePageTree, deserialize, loadChild, loadRoot, removeImages, savePage, serialize, titleIn, uploadImage } from './ink-store.js';
 import { openTree, titleSvg } from './ink-tree.js';
@@ -79,6 +80,7 @@ function openPage(row, note = null) {
     onOpenTitle: (it) => openTitle(page, it),
     onDeleteTitles: deleteTitles,
     onExport: (n) => openExport([n]),
+    onEditLayout: editLayoutSheet,
   });
   page.board.imagePaths().forEach((p) => page.atOpen.add(p));
   stack.push(page);
@@ -161,6 +163,19 @@ async function renameFrame(row, n, name) {
   if (name) f.n = name; else delete f.n;
   row.data = serialize(items, row.data?.h || 0, row.data?.w || 0);
   return savePage(row.id, items, row.data.h, row.data.w);
+}
+
+// Angaben im Layout eines Bereichs (Dudek-CI): Titel, Projekt, Projektnummer, Kontakt
+function editLayoutSheet(lf) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; resolve(v); } };
+    const sheet = openSheet(`<div class="sheet-head"><h2>Layout-Angaben</h2><button class="link-btn" data-close>Fertig</button></div>
+      ${LAYOUT_FIELDS.map(([k, l]) => `<div class="field"><label for="lf-${k}">${l}</label><input class="input" id="lf-${k}" maxlength="80" value="${esc(lf[k] || '')}"></div>`).join('')}
+      <p class="hint">Erscheint im Layout des Bereichs, auch beim Speichern als PDF oder Bild.</p>`, { onClose: () => finish(null) });
+    const read = () => Object.fromEntries(LAYOUT_FIELDS.map(([k]) => [k, sheet.querySelector('#lf-' + k).value.trim().slice(0, 80)]).filter(([, v]) => v));
+    sheet.querySelector('[data-close]').addEventListener('click', () => { finish(read()); closeSheet(); });
+  });
 }
 
 // Gliederung: Bereiche, Notizen und Titel aller Seiten; Titel und Notizen lassen sich dort auch löschen
@@ -369,7 +384,11 @@ function toggleBar() {
 export async function inkAction(act, id, btn) {
   const b = top()?.board;
   switch (act) {
-    case 'ink-tool': if (id === 'shape') { openShapes(btn); return; } ui.tool = id; break;
+    case 'ink-tool':
+      if (id === 'shape') { openShapes(btn); return; }
+      if (id === 'lasso') { if (ui.tool === 'lasso') ui.tool = ui.before || 'pen'; else { ui.before = ui.tool; ui.tool = 'lasso'; } }   // Auswahl ein/aus
+      else ui.tool = id;
+      break;
     case 'ink-color': {
       if (b?.selectionKind()) { b.styleSelection('pen', { c: ui.recent[+id] }); return; }   // Auswahl umfärben
       if (!DRAW.includes(ui.tool)) ui.tool = 'pen';
@@ -442,7 +461,7 @@ function openExport(preselect) {
 
   // kleine Vorschau je Bereich
   frames.forEach(async (f) => {
-    const cv = await b.renderBox(f.box, 220, f.bg);
+    const cv = await b.renderBox(f.box, 220, f.bg, f.ly, f.lf);
     sheet.querySelector(`.exp-card[data-n="${f.n}"] .exp-th`)?.appendChild(cv);
   });
 
@@ -480,7 +499,7 @@ async function runExport(b, list) {
   // PDF und JPEG brauchen Weiß, PNG darf durchsichtig sein
   const render1 = async (f) => {
     const bg = exp.bg === 'grid' ? f.bg : 'none';
-    const cv = await b.renderBox(f.box, exportWidth(f.fmt), bg);
+    const cv = await b.renderBox(f.box, exportWidth(f.fmt), bg, f.ly, f.lf);
     if (bg === 'none' && exp.fmt !== 'png') {
       const white = document.createElement('canvas');
       white.width = cv.width; white.height = cv.height;
@@ -587,15 +606,16 @@ export function inkHeadTools() {
   </div>`;
 }
 
-// Werkzeugleiste unter der Kopfleiste (einfahrbar): links Text, Textmarker, Formen, Bemaßung, Bild, Farben, Zoom;
-// ganz rechts die drei wichtigsten: Stift, Radierer, Auswahl
+// Werkzeugleiste unter der Kopfleiste (einfahrbar): links Textmarker, Formen, Bemaßung, Bild, Farben, Zoom;
+// rechts der Umschalter Text / Stift / Radierer und ganz rechts eigens die Auswahl. Solange ausgewählt wird,
+// ruht der Rest (nur Farbe und Stärke wirken auf das Ausgewählte, Zoom bleibt)
 function inkBar() {
   const kind = kindOf(), cur = ui[kind];
   const tool = (id, icon, label) => tb('ink-tool', icon, label, { id, on: ui.tool === id });
   const seg = (id, icon, label) => `<button class="${ui.tool === id ? 'on' : ''}" data-act="ink-tool" data-id="${id}" aria-label="${label}" title="${label}">${ICON[icon]}</button>`;
-  return `<div class="ink-bar ${ui.bar ? '' : 'closed'}">
+  const selecting = ui.tool === 'lasso';
+  return `<div class="ink-bar ${ui.bar ? '' : 'closed'} ${selecting ? 'selecting' : ''}">
     <div class="ink-tools"><div class="ink-tools-in">
-      ${tool('text', 'text', 'Text')}
       ${tool('marker', 'marker', 'Textmarker')}
       ${tool('shape', SHAPE_ICON[ui.shape], 'Formen')}
       ${tool('dim', 'ruler', 'Bemaßung')}
@@ -608,7 +628,10 @@ function inkBar() {
       <i class="ink-sep"></i>
       ${tb('ink-zoom', 'minus', 'Verkleinern', { id: 'out' })}
       ${tb('ink-zoom', 'plus', 'Vergrößern', { id: 'in' })}
-      <div class="seg-view ink-seg">${seg('pen', 'pen', 'Stift')}${seg('eraser', 'eraser', 'Radierer')}${seg('lasso', 'lasso', 'Auswählen')}</div>
+      <div class="ink-right">
+        <div class="seg-view ink-seg">${seg('text', 'text', 'Text')}${seg('pen', 'pen', 'Zeichnen')}${seg('eraser', 'eraser', 'Radieren')}</div>
+        <button class="ink-select ${selecting ? 'on' : ''}" data-act="ink-tool" data-id="lasso" aria-pressed="${selecting}" aria-label="Auswählen" title="Auswählen: antippen oder umkreisen">${ICON.lasso}<span>Auswahl</span></button>
+      </div>
     </div></div>
     <button class="ink-fold" data-act="ink-fold" aria-expanded="${ui.bar}" aria-label="Werkzeuge ein- oder ausfahren" title="Werkzeuge">${ICON.chevD}<span>Werkzeuge</span></button>
   </div>`;

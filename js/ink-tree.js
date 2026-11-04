@@ -1,9 +1,9 @@
-// Canvas: Gliederung – je Seite zuerst ihre Bereiche (A4), auf der Startseite dann die Notizen, danach die Titel
-// mit den Unterseiten darunter (beliebig tief). Bereiche lassen sich hier umbenennen, Titel und Notizen löschen;
+// Canvas: Gliederung – auf der Startseite zuerst die Notizen, dann je Seite ihre Bereiche (A4) mit den Titeln, die darin
+// stehen, danach die übrigen Titel; unter jedem Titel seine Unterseite (beliebig tief). Bereiche lassen sich hier umbenennen, Titel und Notizen löschen;
 // Tippen öffnet die Seite bzw. zeigt den Bereich.
 import { esc, toast } from './core.js';
 import { ICON } from './icons.js';
-import { fontCss, LINE_H, textSize } from './ink-draw.js';
+import { bbox, fontCss, LINE_H, textSize } from './ink-draw.js';
 import { deserialize, loadTree } from './ink-store.js';
 import { closeSheet, openSheet } from './sheet.js';
 
@@ -33,7 +33,7 @@ export function titleSvg({ s: strokes = [], tx = [] }, cls = 'ink-ttl') {
 }
 
 const fmtName = (f) => (f.fmt === 'a4l' ? 'A4 quer' : 'A4 hoch');
-const frameName = (f, n) => f.n || `${fmtName(f)} · ${n + 1}`;
+const frameName = (f, n) => f.n || f.lf?.t || `${fmtName(f)} · ${n + 1}`;
 
 // cat: Ordner; open: IDs der geöffneten Seiten (Startseite zuerst);
 // onOpen(pfad aus Titeln, bereich?); onRename(seite, bereich, name) -> Promise<Fehler | null>;
@@ -70,11 +70,13 @@ export async function openTree({ cat, open, notes, onOpen, onRename, onShow, onD
   }
   function branch(row, pi, path, depth) {
     const list = itemsOf(row);
-    const frames = list.filter((it) => it.t === 'f').map((f, n) => `<li class="tree-fr" ${f.fc ? `style="--fc:${f.fc}"` : ''}>
-        <button class="tree-i" data-n="${pi}" data-fr="${n}">${ICON.frame}<span class="tree-fn">${esc(frameName(f, n))}</span><small>${fmtName(f)}</small></button>
-        <button class="tree-ren" data-pg="${pages.indexOf(row)}" data-fr="${n}" aria-label="Bereich umbenennen" title="Umbenennen">${ICON.pen}</button>
-      </li>`).join('');
-    const titles = list.filter((it) => it.t === 't').map((it) => {
+    const frames = list.filter((it) => it.t === 'f');
+    // Bereich, in dem die Mitte eines Titels liegt (sonst -1)
+    const frameOf = (it) => {
+      const b = bbox(it), cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+      return frames.findIndex((f) => { const r = bbox(f); return cx >= r[0] && cx <= r[2] && cy >= r[1] && cy <= r[3]; });
+    };
+    const titleLi = (it) => {
       if (seen.has(it.page)) return '';
       seen.add(it.page);
       const child = byId.get(it.page);
@@ -85,9 +87,18 @@ export async function openTree({ cat, open, notes, onOpen, onRename, onShow, onD
       dels.push([row, it]);
       return `<li><div class="tree-row"><button class="tree-i ${open.includes(it.page) ? 'on' : ''}" data-n="${paths.length - 1}">
           ${titleSvg(it, 'tree-ttl')}${ICON.chevR}</button>${trash(dels.length - 1, 'Titel löschen')}</div>${sub ? `<ul>${sub}</ul>` : ''}</li>`;
-    }).join('');
+    };
+    const titles = list.filter((it) => it.t === 't');
     const notesHtml = row === root && notes.length ? `<li class="tree-group"><span class="tree-gh">${ICON.notes}Notizen</span><ul>${noteBranch(path, depth)}</ul></li>` : '';
-    return frames + notesHtml + titles;
+    const framesHtml = frames.map((f, n) => {
+      const inside = titles.filter((it) => frameOf(it) === n).map(titleLi).join('');
+      return `<li class="tree-fr" ${f.fc ? `style="--fc:${f.fc}"` : ''}><div class="tree-row">
+        <button class="tree-i" data-n="${pi}" data-fr="${n}">${ICON.frame}<span class="tree-fn">${esc(frameName(f, n))}</span><small>${fmtName(f)}</small></button>
+        <button class="tree-ren" data-pg="${pages.indexOf(row)}" data-fr="${n}" aria-label="Bereich umbenennen" title="Umbenennen">${ICON.pen}</button></div>
+        ${inside ? `<ul>${inside}</ul>` : ''}</li>`;
+    }).join('');
+    const rest = titles.filter((it) => frameOf(it) < 0).map(titleLi).join('');
+    return notesHtml + framesHtml + rest;
   }
   const list = branch(root, 0, [], 0);
   const body = sheet.querySelector('.tree-body');

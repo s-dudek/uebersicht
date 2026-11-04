@@ -10,6 +10,7 @@ import {
   bbox, dimLabelAt, distTo, drawDim, drawFrameBg, drawGrid, drawImageItem, drawStroke, drawText, fontCss, FONTS, fontListeners,
   FRAME_BG, FRAME_COLORS, forgetBox, forgetErased, fullRect, GRID, LINE_H, nearItem, NOTES_W, shapeStrokes, share, TEXT_FS, textSize, transform, union,
 } from './ink-draw.js';
+import { drawFrameLayout, FRAME_LAYOUTS } from './ink-layout.js';
 import { FRAMES, getImage, newId } from './ink-store.js';
 
 const VIEW = 1000;       // so viele Einheiten passen bei 100 % in die Breite
@@ -235,8 +236,9 @@ export function createBoard(opts) {
     if (cv) return cv;
     cv = document.createElement('canvas');
     cv.ix = ix; cv.iy = iy;
-    Object.assign(cv.style, { left: ix * TILE_PX + 'px', top: iy * TILE_PX + 'px', width: TILE_PX + 'px', height: TILE_PX + 'px' });
-    cv.width = cv.height = Math.round(TILE_PX * dpr);
+    // 1 Punkt größer als das Raster: die Kacheln überlappen leicht, damit zwischen ihnen keine feinen Nähte zu sehen sind
+    Object.assign(cv.style, { left: ix * TILE_PX + 'px', top: iy * TILE_PX + 'px', width: TILE_PX + 1 + 'px', height: TILE_PX + 1 + 'px' });
+    cv.width = cv.height = Math.round((TILE_PX + 1) * dpr);
     tiles.set(key, cv);
     tileLayer.appendChild(cv);
     drawTile(cv);
@@ -261,7 +263,7 @@ export function createBoard(opts) {
     ctx.lineJoin = 'round';
     return ctx;
   }
-  const hits = (cv, b) => b[2] >= cv.ix * tileU && b[0] <= (cv.ix + 1) * tileU && b[3] >= cv.iy * tileU && b[1] <= (cv.iy + 1) * tileU;
+  const hits = (cv, b) => { const e = tileU / TILE_PX; return b[2] >= cv.ix * tileU && b[0] <= (cv.ix + 1) * tileU + e && b[3] >= cv.iy * tileU && b[1] <= (cv.iy + 1) * tileU + e; };
   // alle Kacheln, die ein Rechteck berühren (legt sie bei Bedarf an)
   const tilesFor = (b) => {
     const out = [];
@@ -272,7 +274,11 @@ export function createBoard(opts) {
   };
 
   function drawItem(ctx, it) {
-    if (it.t === 'f') return it.bg && drawFrameBg(ctx, bbox(it), it.bg, scale);   // Rahmen und Reiter sind HTML darüber
+    if (it.t === 'f') {   // Hintergrund und Layout; Rahmen und Reiter sind HTML darüber
+      if (it.bg || it.ly) drawFrameBg(ctx, bbox(it), it.bg || 'blank', scale);
+      if (it.ly) drawFrameLayout(ctx, bbox(it), it.ly, it.lf);
+      return;
+    }
     if (it.t === 'n') return;                                                        // Notizen-Bereich ist HTML
     if (it.t === 'x') return drawText(ctx, it);
     if (it.t === 's') return drawStroke(ctx, it);
@@ -379,7 +385,7 @@ export function createBoard(opts) {
   // ---------- Bereiche (A4): gestrichelter Rahmen mit Reiter zum Verschieben ----------
   const frameList = () => items.filter((it) => it.t === 'f');
   const fmtName = (f) => (f.fmt === 'a4l' ? 'A4 quer' : 'A4 hoch');
-  const frameName = (f, n) => f.n || `${fmtName(f)} · ${n}`;
+  const frameName = (f, n) => f.n || f.lf?.t || `${fmtName(f)} · ${n}`;
 
   function renderFrames() {
     frameLayer.innerHTML = '';
@@ -401,7 +407,8 @@ export function createBoard(opts) {
     const snap = (v) => Math.round(v / GRID) * GRID;
     const x = snap(view.x + GRID * 2);
     let y = snap(view.y + GRID * 3);
-    const overlaps = (ax, ay) => frameList().some((f) => { const b = bbox(f); return ax < b[2] && ax + w > b[0] && ay < b[3] && ay + fh > b[1]; });
+    const taken = [...frameList().map(bbox), ...(notesItem() ? [notesBox()] : [])];   // nicht über andere Bereiche oder die Notizen
+    const overlaps = (ax, ay) => taken.some((b) => ax < b[2] && ax + w > b[0] && ay < b[3] && ay + fh > b[1]);
     while (overlaps(x, y)) y += GRID * 4;
     commit([...items, { t: 'f', fmt, x, y }]);
     goTo(x - GRID * 2, y - GRID * 3, view.z);
@@ -420,10 +427,17 @@ export function createBoard(opts) {
   // Format, Name oder Hintergrund eines Bereichs ändern
   function setFrame(f, patch) {
     const next = { ...f, ...patch };
-    for (const k of ['n', 'bg', 'fc']) if (!next[k]) delete next[k];
+    for (const k of ['n', 'bg', 'fc', 'ly', 'lf']) if (!next[k]) delete next[k];
     replace(f, next);
     redrawBox(union([f, next]));
     opts.onFrames?.();
+  }
+
+  // Angaben im Layout (Titel, Projekt, Projektnummer, Kontakt) über ein Fenster der App
+  async function editLayout(f) {
+    const lf = await opts.onEditLayout?.(f.lf || {});
+    const cur = frameList().find((o) => o.x === f.x && o.y === f.y);   // der Bereich nach dem Layout-Wechsel
+    if (lf && cur) setFrame(cur, { lf: Object.keys(lf).length ? lf : null });
   }
 
   function renameFrame(f) {
@@ -803,11 +817,15 @@ export function createBoard(opts) {
       <div class="cm-colors" role="group" aria-label="Farbe des Bereichs">${FRAME_COLORS.map((c, i) => `<button class="cm-color ${c === fc ? 'on' : ''}" data-m="fc" data-i="${i}" style="background:${c}" aria-label="Farbe ${i + 1}"></button>`).join('')}</div><hr>
       ${opt('a4p', f.fmt === 'a4p', 'frame', 'A4 hoch')}${opt('a4l', f.fmt === 'a4l', 'frame', 'A4 quer')}<hr>
       ${FRAME_BG.map(([k, l]) => opt('bg:' + k, (f.bg || '') === k, 'grid', l)).join('')}<hr>
+      ${FRAME_LAYOUTS.map(([k, l]) => opt('ly:' + k, (f.ly || '') === k, 'frame', l)).join('')}
+      ${f.ly ? `<button class="cm-i" data-m="lf">${ICON.text}<span>Titel, Projekt, Kontakt …</span></button>` : ''}<hr>
       <button class="cm-i" data-m="export">${ICON.download}<span>Speichern …</span></button>
       <button class="cm-i danger" data-m="remove">${ICON.trash}<span>Bereich entfernen</span></button>`, (m, i) => {
       if (m === 'fc') setFrame(f, { fc: i === '0' ? '' : FRAME_COLORS[+i] });
       else if (m === 'a4p' || m === 'a4l') setFrame(f, { fmt: m });
       else if (m.startsWith('bg:')) setFrame(f, { bg: m.slice(3) });
+      else if (m.startsWith('ly:')) { setFrame(f, { ly: m.slice(3) }); if (m !== 'ly:' && !f.lf) editLayout(f); }
+      else if (m === 'lf') editLayout(f);
       else if (m === 'rename') renameFrame(f);
       else if (m === 'export') opts.onExport(n);
       else if (m === 'remove') { commit(items.filter((it) => it !== f)); redrawBox(bbox(f)); opts.onFrames?.(); }   // Inhalt bleibt stehen
@@ -1365,7 +1383,7 @@ export function createBoard(opts) {
     },
     addFrame,
     // Bereiche für den Export: Name und Rechteck in Einheiten
-    frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, bg: f.bg || 'grid', box: bbox(f) })),
+    frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, bg: f.bg || (f.ly ? 'blank' : 'grid'), ly: f.ly, lf: f.lf, box: bbox(f) })),
     renameFrame(n, name) { const f = frameList()[n]; if (f) setFrame(f, { n: name.trim().slice(0, 40) }); },
     showOutline,
     selectionKind,
@@ -1390,7 +1408,7 @@ export function createBoard(opts) {
     },
     showFrame(n) { const f = frameList()[n]; if (f) goTo(f.x - GRID * 2, f.y - GRID * 3, view.z); },
     // Bereich als Bild zeichnen; bg: 'grid' (Kästchen), 'lines', 'dots', 'blank' (alle auf Weiß) oder 'none' (durchsichtig)
-    async renderBox(box, pxW, bg) {
+    async renderBox(box, pxW, bg, ly, lf) {
       const [x0, y0, x1, y1] = box, k = pxW / (x1 - x0);
       const cv = document.createElement('canvas');
       cv.width = Math.round(pxW);
@@ -1400,6 +1418,7 @@ export function createBoard(opts) {
       const ctx = cv.getContext('2d');
       ctx.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
       if (bg !== 'none') drawFrameBg(ctx, box, bg, 1);
+      if (ly) drawFrameLayout(ctx, box, ly, lf);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       drawList(ctx, inside);

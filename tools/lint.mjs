@@ -8,7 +8,7 @@ import * as walk from 'acorn-walk';
 const dir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../js');
 const GLOBALS = new Set(Object.getOwnPropertyNames(globalThis).concat([
   'window', 'document', 'navigator', 'localStorage', 'location', 'Notification', 'atob', 'btoa', 'crypto', 'getComputedStyle', 'ResizeObserver', 'createImageBitmap', 'requestAnimationFrame',
-  'requestAnimationFrame', 'cancelAnimationFrame', 'matchMedia', 'HTMLElement', 'Event', 'CustomEvent', 'Image', 'FileReader', 'undefined', 'arguments',
+  'requestAnimationFrame', 'cancelAnimationFrame', 'matchMedia', 'HTMLElement', 'Event', 'CustomEvent', 'Image', 'Path2D', 'FileReader', 'undefined', 'arguments',
 ]));
 let problems = 0;
 for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.js'))) {

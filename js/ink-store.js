@@ -1,6 +1,7 @@
 // Canvas: Speichern und Laden der Seiten (Tabelle ink_pages) und Bilder (Speicher "ink")
 import { safeColor, sb, state } from './core.js';
 import { FONTS } from './ink-draw.js';
+import { FRAME_LAYOUTS, LAYOUT_FIELDS } from './ink-layout.js';
 
 const BUCKET = 'ink';
 const IMG_PATH = /^(?:[uc]\/)?[\w-]{1,64}\/[\w-]{1,64}\.jpg$/;   // u/<user-id>/… oder c/<ordner-id>/… (ältere: <user-id>/…)
@@ -76,7 +77,11 @@ export function serialize(items, h, w) {
     items: items.map((it) => {
       const g = it.g ? { g: it.g } : {};
       if (it.t === 'n') return { t: 'n', x: it.x, y: it.y };
-      if (it.t === 'f') return { t: 'f', fmt: it.fmt, x: it.x, y: it.y, ...(it.n ? { n: it.n } : {}), ...(it.bg ? { bg: it.bg } : {}), ...(it.fc ? { fc: it.fc } : {}) };
+      if (it.t === 'f') {
+        const f = { t: 'f', fmt: it.fmt, x: it.x, y: it.y };
+        for (const k of ['n', 'bg', 'fc', 'ly', 'lf']) if (it[k]) f[k] = it[k];
+        return f;
+      }
       if (it.t === 'x') return { ...textOut(it), ...g };
       if (it.t === 's') return { t: 's', ...strokeOut(it), ...g };
       if (it.t === 'i') {
@@ -119,6 +124,12 @@ export function deserialize(data) {
       if (typeof it.n === 'string' && it.n.trim()) out.n = it.n.trim().slice(0, 40);   // eigener Name
       if (FRAME_BGS.includes(it.bg)) out.bg = it.bg;                                    // Hintergrund
       if (safeColor(it.fc)) out.fc = it.fc;                                             // Farbe von Rahmen und Reiter
+      if (FRAME_LAYOUTS.some(([k]) => k && k === it.ly)) out.ly = it.ly;                // Layout im Dudek-CI
+      if (it.lf && typeof it.lf === 'object') {                                         // Angaben im Layout
+        const lf = {};
+        for (const [k] of LAYOUT_FIELDS) if (typeof it.lf[k] === 'string' && it.lf[k].trim()) lf[k] = it.lf[k].trim().slice(0, 80);
+        if (Object.keys(lf).length) out.lf = lf;
+      }
     } else if (it?.t === 'x') out = textIn(it);   // Text
     if (!out) continue;
     if (UUID.test(it.g || '')) out.g = it.g;   // Gruppe

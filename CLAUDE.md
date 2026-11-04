@@ -30,7 +30,8 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   und ihrer Beschreibung oben; Notiz löschen löscht die Unterseite mit (data.js). Auswahl lässt sich nachträglich umgestalten (Farbe, Stärke, Schrift).
   unendliche Fläche (verschieben, zoomen 25–400 %, „Ursprungsansicht“), Werkzeugleiste unter der Kopfleiste (einfahrbar), Ordnerwahl über den Titel,
   Formen (als Striche), Textmarker (Strich mit `m`), Text (Element `x`), Bemaßung (Element `d`), Bilder mit Zuschnitt `cr` und Radierspuren `er`,
-  Bereiche mit Name `n`, Hintergrund `bg` (lines/dots/blank) und Farbe `fc`, Gliederung (Bereiche und Titel je Seite, „Auf der Fläche zeigen“),
+  Bereiche mit Name `n`, Hintergrund `bg` (lines/dots/blank), Farbe `fc`, Layout `ly` im Dudek-CI (ink-layout.js) mit Angaben `lf` (Titel, Projekt, Nr., Kontakt), Gliederung (Notizen zuerst, Titel unter ihrem Bereich, „Auf der Fläche zeigen“),
+  Werkzeugleiste: Umschalter Text/Zeichnen/Radieren, Auswahl als eigener Knopf (solange aktiv ruhen die anderen Werkzeuge),
   Text mit Schriftart `ff` (FONTS in ink-draw.js, Google Fonts in index.html), Schnitt `fw`, kursiv `i`; Ursprungsansicht = erster Bereich,
   Titel aus Strichen und Texten (`tx`). Handballen: großer Kontakt, Finger kurz nach dem Stift oder nahe der letzten Stiftstelle,
   Verschieben direkt vor dem Stift werden ignoriert bzw. zurückgenommen. Bildschirmtastatur: `#app` auf `visualViewport` begrenzt (ink.js).
