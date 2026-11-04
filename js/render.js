@@ -6,6 +6,7 @@ import { $app, catById, esc, isDesktop, state } from './core.js';
 import { addDays, isoWeek, ymd } from './dates.js';
 import { folderIc } from './folders.js';
 import { renderHome, resetHomeIntro } from './home.js';
+import { inkActions, inkHead, leaveInk, mountInk, renderInk } from './ink.js';
 import { ICON, LOGO_MARK, LOGO_WORD } from './icons.js';
 import { renderMeals } from './meals.js';
 import { NAV } from './nav.js';
@@ -16,7 +17,7 @@ import { renderTodos, todosIn } from './todos.js';
 // Dudek-Zeichen als Wasserzeichen hinter allem
 const WATERMARK = `<div class="watermark" aria-hidden="true">${LOGO_MARK}</div>`;
 
-const PAGES = { home: renderHome, todos: renderTodos, notes: renderNotes, categories: renderCategoryPage, meals: renderMeals, calendar: renderCalendar };
+const PAGES = { home: renderHome, todos: renderTodos, notes: renderNotes, categories: renderCategoryPage, meals: renderMeals, calendar: renderCalendar, ink: renderInk };
 
 export function render() {
   if (!state.me || !state.loaded) return;
@@ -27,12 +28,14 @@ export function render() {
   const focusedList = document.activeElement?.closest?.('.addrow[data-list]')?.dataset.list;
   const prevScroll = document.querySelector('.main')?.scrollTop || 0;
   const sameTab = render.lastTab === state.tab;
+  if (!sameTab && render.lastTab === 'ink') leaveInk();
   render.lastTab = state.tab;
   if (!sameTab && !state.keepList) state.list = null;
   if (!sameTab) resetHomeIntro();
   state.keepList = false;
 
   const tab = state.tab, home = tab === 'home', desk = isDesktop();
+  const ink = tab === 'ink' ? 'is-ink' : '';
   const content = (PAGES[tab] || renderHome)();
   $app.innerHTML = desk
     ? `<div class="app desk">
@@ -40,16 +43,17 @@ export function render() {
         ${sidebar(tab)}
         <div class="desk-main">
           ${home ? '' : pageHead(tab, true)}
-          <main class="main ${home ? 'is-home' : ''}">${content}</main>
+          <main class="main ${home ? 'is-home' : ''} ${ink}">${content}</main>
         </div>
       </div>`
     : `<div class="app">
         ${WATERMARK}
         ${home ? '' : pageHead(tab, false)}
-        <main class="main ${home ? 'is-home' : 'has-dock'}">${content}</main>
+        <main class="main ${home ? 'is-home' : 'has-dock'} ${ink}">${content}</main>
         ${home ? '' : `<nav class="dock" aria-label="Aktionen">${actionsFor(tab)}</nav>`}
       </div>`;
   ctl.show(!desk, home ? 'center' : null);
+  if (tab === 'ink') mountInk();
 
   if (sameTab) $app.querySelector('.main').scrollTop = prevScroll;
   for (const [k, v] of Object.entries(typedMap)) { const i = document.querySelector(`.addrow[data-list="${k}"] input`); if (i) i.value = v; }
@@ -99,11 +103,12 @@ function actionsFor(tab) {
     return `${actBtn('week-prev', 'chevL', 'Vorige Woche', { text: false })}<button class="dk wk-now" data-act="week-today"><span>KW ${isoWeek(state.weekStart)}</span></button>${actBtn('week-next', 'chevR', 'Nächste Woche', { text: false })}${actBtn('import-plan', 'plus', 'Plan', { primary: true })}`;
   }
   if (tab === 'categories') return actBtn('new-cat', 'plus', 'Neue Kategorie', { primary: true });
+  if (tab === 'ink') return inkActions();
   return '';
 }
 
 // ---------- Kopfleiste (hängt am oberen Rand) ----------
-const TITLES = { todos: 'Todos', notes: 'Notizen', categories: 'Kategorien', meals: 'Gerichte', calendar: 'Kalender' };
+const TITLES = { ink: 'Handschrift', todos: 'Todos', notes: 'Notizen', categories: 'Kategorien', meals: 'Gerichte', calendar: 'Kalender' };
 
 function pageCount(tab) {
   if (tab === 'todos') return state.items.filter((i) => i.type === 'todo' && !i.done).length;
@@ -123,6 +128,8 @@ function pageHead(tab, desk) {
     left = `<b class="ph-t cal-pt">${esc(t)}<small>${esc(sub)}</small></b>
       <button class="chip ph-today ${isToday ? 'on' : ''}" data-act="cal-today">Heute</button>
       <button class="cbtn ph-add" data-act="new-event-menu" aria-label="Neuer Termin" title="Neuer Termin">${ICON.plus}</button>`;
+  } else if (tab === 'ink') {
+    left = inkHead();
   } else if ((tab === 'todos' || tab === 'notes') && state.list !== null) {
     const c = catById(state.list);
     const n = tab === 'todos' ? todosIn(state.list).filter((i) => !i.done).length : notesIn(state.list).length;

@@ -11,6 +11,7 @@ import { openItem } from './items.js';
 import { navigate } from './nav.js';
 import { togglePin } from './pins.js';
 import { importPlan, openImport, shopCat } from './meals.js';
+import { inkAction } from './ink.js';
 import { render } from './render.js';
 
 export function initActions() {
@@ -52,6 +53,7 @@ export function initActions() {
       case 'new-cat': openNewList({ mode: 'category' }); break;
       case 'list-edit': openCategory(id); break;
       case 'new-note': createNote(); break;
+      default: if (t.dataset.act.startsWith('ink-')) inkAction(t.dataset.act, id);
     }
   });
 

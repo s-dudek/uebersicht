@@ -3,6 +3,7 @@ import { ctl } from './control.js';
 import { $app, esc, sb, state } from './core.js';
 import { loadAll, subscribe, unsubscribe } from './data.js';
 import { ICON, LOGO_MARK, LOGO_WORD } from './icons.js';
+import { resetInk } from './ink.js';
 import { closeSheet } from './sheet.js';
 import { splashReady } from './splash.js';
 
@@ -99,6 +100,7 @@ export function initAuth() {
     } else {
       unsubscribe();
       closeSheet();
+      resetInk();
       state.loaded = false;
       renderAuth();
     }
