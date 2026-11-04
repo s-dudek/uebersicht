@@ -28,7 +28,7 @@ const html = `<!doctype html>
 <meta charset="utf-8">
 <title>Übersicht App</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,700;1,400;1,700&family=Caveat:wght@400;700&family=JetBrains+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap">
 <style>
 ${read('style.css')}
 /* Vorschau: der Rahmen polstert oben/unten schon selbst */

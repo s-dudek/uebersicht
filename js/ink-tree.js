@@ -27,11 +27,14 @@ const fmtName = (f) => (f.fmt === 'a4l' ? 'A4 quer' : 'A4 hoch');
 const frameName = (f, n) => f.n || `${fmtName(f)} · ${n + 1}`;
 
 // cat: Ordner; open: IDs der geöffneten Seiten (Startseite zuerst);
-// onOpen(pfad aus Titeln, bereich?); onRename(seite, bereich, name) -> Promise<Fehler | null>
-export async function openTree({ cat, open, onOpen, onRename }) {
+// onOpen(pfad aus Titeln, bereich?); onRename(seite, bereich, name) -> Promise<Fehler | null>;
+// onShow(): Bereiche und Titel der geöffneten Seite auf der Fläche hervorheben
+export async function openTree({ cat, open, onOpen, onRename, onShow }) {
   const sheet = openSheet(`<div class="sheet-head"><h2>Gliederung</h2><button class="link-btn" data-close>Fertig</button></div>
+    <button class="btn secondary block tree-show">${ICON.eye} Auf der Fläche zeigen</button>
     <div class="tree-body"><p class="muted">Lädt …</p></div>`);
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
+  sheet.querySelector('.tree-show').addEventListener('click', () => { closeSheet(); onShow(); });
   let rows;
   try { rows = await loadTree(cat); } catch (e) { toast('Gliederung konnte nicht geladen werden: ' + (e.message || e)); closeSheet(); return; }
   const byId = new Map(rows.map((r) => [r.id, r]));
@@ -43,7 +46,7 @@ export async function openTree({ cat, open, onOpen, onRename }) {
   const seen = new Set([root?.id]);
   function branch(row, pi, path, depth) {
     const list = itemsOf(row);
-    const frames = list.filter((it) => it.t === 'f').map((f, n) => `<li class="tree-fr">
+    const frames = list.filter((it) => it.t === 'f').map((f, n) => `<li class="tree-fr" ${f.fc ? `style="--fc:${f.fc}"` : ''}>
         <button class="tree-i" data-n="${pi}" data-fr="${n}">${ICON.frame}<span class="tree-fn">${esc(frameName(f, n))}</span><small>${fmtName(f)}</small></button>
         <button class="tree-ren" data-pg="${pages.indexOf(row)}" data-fr="${n}" aria-label="Bereich umbenennen" title="Umbenennen">${ICON.pen}</button>
       </li>`).join('');

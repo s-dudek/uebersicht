@@ -1,5 +1,6 @@
 // Handschrift: Speichern und Laden der Seiten (Tabelle ink_pages) und Bilder (Speicher "ink")
 import { safeColor, sb, state } from './core.js';
+import { FONTS } from './ink-draw.js';
 
 const BUCKET = 'ink';
 const IMG_PATH = /^(?:[uc]\/)?[\w-]{1,64}\/[\w-]{1,64}\.jpg$/;   // u/<user-id>/… oder c/<ordner-id>/… (ältere: <user-id>/…)
@@ -65,8 +66,8 @@ export function serialize(items, h, w) {
     v: 1, h: Math.round(h), w: Math.round(w),
     items: items.map((it) => {
       const g = it.g ? { g: it.g } : {};
-      if (it.t === 'f') return { t: 'f', fmt: it.fmt, x: it.x, y: it.y, ...(it.n ? { n: it.n } : {}), ...(it.bg ? { bg: it.bg } : {}) };
-      if (it.t === 'x') return { t: 'x', x: it.x, y: it.y, txt: it.txt, c: it.c, fs: it.fs, ...g };
+      if (it.t === 'f') return { t: 'f', fmt: it.fmt, x: it.x, y: it.y, ...(it.n ? { n: it.n } : {}), ...(it.bg ? { bg: it.bg } : {}), ...(it.fc ? { fc: it.fc } : {}) };
+      if (it.t === 'x') return { t: 'x', x: it.x, y: it.y, txt: it.txt, c: it.c, fs: it.fs, ff: it.ff, fw: it.fw, ...(it.i ? { i: 1 } : {}), ...g };
       if (it.t === 's') return { t: 's', ...strokeOut(it), ...g };
       if (it.t === 'i') {
         const img = { t: 'i', src: it.src, x: it.x, y: it.y, w: it.w, h: it.h, ...g };
@@ -105,8 +106,10 @@ export function deserialize(data) {
       out = { t: 'f', fmt: it.fmt, x: snap(it.x), y: snap(it.y) };
       if (typeof it.n === 'string' && it.n.trim()) out.n = it.n.trim().slice(0, 40);   // eigener Name
       if (FRAME_BGS.includes(it.bg)) out.bg = it.bg;                                    // Hintergrund
+      if (safeColor(it.fc)) out.fc = it.fc;                                             // Farbe von Rahmen und Reiter
     } else if (it?.t === 'x' && typeof it.txt === 'string' && it.txt) {                 // Text
-      out = { t: 'x', x: num(it.x, -1e6, 1e6, 0), y: num(it.y, -1e6, 1e6, 0), txt: it.txt.slice(0, 2000), c: safeColor(it.c, '#0C3741'), fs: num(it.fs, 4, 400, 20) };
+      out = { t: 'x', x: num(it.x, -1e6, 1e6, 0), y: num(it.y, -1e6, 1e6, 0), txt: it.txt.slice(0, 2000), c: safeColor(it.c, '#0C3741'), fs: num(it.fs, 4, 400, 20),
+        ff: FONTS[it.ff] ? it.ff : 'sans', fw: [300, 400, 500, 700].includes(it.fw) ? it.fw : 400, ...(it.i === 1 ? { i: 1 } : {}) };
     }
     if (!out) continue;
     if (UUID.test(it.g || '')) out.g = it.g;   // Gruppe

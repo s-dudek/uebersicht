@@ -6,8 +6,8 @@
 import { ICON } from './icons.js';
 import { startCrop } from './ink-crop.js';
 import {
-  bbox, dimLabelAt, distTo, drawDim, drawFrameBg, drawGrid, drawImageItem, drawStroke, drawText, FRAME_BG, forgetBox, forgetErased,
-  fullRect, GRID, LINE_H, nearItem, shapeStrokes, share, textSize, transform, union,
+  bbox, dimLabelAt, distTo, drawDim, drawFrameBg, drawGrid, drawImageItem, drawStroke, drawText, fontCss, FONTS, fontListeners,
+  FRAME_BG, FRAME_COLORS, forgetBox, forgetErased, fullRect, GRID, LINE_H, nearItem, shapeStrokes, share, TEXT_FS, textSize, transform, union,
 } from './ink-draw.js';
 import { FRAMES, getImage, newId } from './ink-store.js';
 
@@ -19,6 +19,9 @@ const HISTORY = 60;      // Schritte zum Rückgängigmachen
 const SEL_PX = 4096;     // größte Kantenlänge der Auswahl-Vorschau in Pixel
 const LONG = 480;        // lange drücken (ms)
 const TOOLS = ['pen', 'eraser', 'lasso'];   // Reihenfolge für die Taste am Stift
+const PALM = 70;         // Berührung ab dieser Breite (Punkte) ist ein Handballen, kein Finger
+const PEN_REST = 1200;   // so lange nach dem Stift gilt ein einzelner neuer Finger als aufgelegte Hand (ms)
+const UNDO_PAN = 600;    // setzt der Stift so kurz nach einem Verschieben auf, war es die Hand: zurück (ms)
 
 // ====================================================================
 // opts: { items, colors, onCommit(items, h, w), onOpenTitle(titleItem), onDeleteTitles(titles) -> Promise<bool>,
@@ -27,7 +30,7 @@ const TOOLS = ['pen', 'eraser', 'lasso'];   // Reihenfolge für die Taste am Sti
 export function createBoard(opts) {
   let items = opts.items;
   let tool = 'pen', shape = 'line', finger = false;
-  let pen = { c: '#0C3741', w: 2.2 }, marker = { c: '#F2D33B', w: 16 }, textStyle = { c: '#0C3741', fs: 22 };
+  let pen = { c: '#0C3741', w: 2.2 }, marker = { c: '#F2D33B', w: 16 }, textStyle = { c: '#0C3741', ff: 'sans', fw: 400, i: false, fs: TEXT_FS };
   const past = [], future = [];
   let sel = null;            // { set: Set<item>, box: [x0,y0,x1,y1] }
   let crop = null;           // laufendes Zuschneiden: { item, ui }
@@ -81,14 +84,27 @@ export function createBoard(opts) {
     const s = cur();
     pg.style.transform = `translate(${-view.x * s}px, ${-view.y * s}px) scale(${s / scale})`;
     drawGrid(gridCv, sc.clientWidth, sc.clientHeight, dpr, view.x, view.y, s);
-    zoomBar.hidden = Math.abs(view.z - 1) < .005 && Math.abs(view.x) < 1 && view.y > -1;
+    const o = originView();
+    zoomBar.hidden = Math.abs(view.z - o.z) < .005 && Math.abs(view.x - o.x) < 2 && Math.abs(view.y - o.y) < 2;
     zoomPct.textContent = Math.round(view.z * 100) + ' %';
   }
 
+  // Ursprungsansicht: der erste Bereich ganz sichtbar und mittig (ohne Bereich: Anfang der Seite bei 100 %)
+  function originView() {
+    const f = frameList()[0], W = sc.clientWidth, H = sc.clientHeight;
+    if (!f || !base) return { x: 0, y: 0, z: 1 };
+    const [x0, y0, x1, y1] = bbox(f), m = 20, top = 34;   // Rand, oben Platz für den Reiter
+    const z = clampZ(Math.min(1, (W - 2 * m) / ((x1 - x0) * base), (H - m - top) / ((y1 - y0) * base)));
+    const s = base * z;
+    return { x: x0 - (W / s - (x1 - x0)) / 2, y: y0 - top / s, z };
+  }
+
+  let first = true;   // beim ersten Anzeigen gleich die Ursprungsansicht
   function layout() {
     const w = sc.clientWidth;
     if (!w) return;
     base = w / VIEW;
+    if (first) { first = false; Object.assign(view, originView()); }
     dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     liveCv.width = Math.round(w * dpr);
     liveCv.height = Math.round(sc.clientHeight * dpr);
@@ -160,7 +176,22 @@ export function createBoard(opts) {
     const z = clampZ(Math.round(view.z * f * 20) / 20);
     goTo(view.x + w / s - w / (base * z), view.y + h / s - h / (base * z), z);
   }
-  const resetView = () => goTo(0, 0, 1);
+  const resetView = () => { const o = originView(); goTo(o.x, o.y, o.z); };
+
+  // Gliederung auf der Fläche: alle Bereiche und Titel hervorgehoben, so dass alles zu sehen ist; Antippen beendet
+  let outline = false;
+  function showOutline() {
+    const marks = items.filter((it) => it.t === 'f' || it.t === 't');
+    outline = !!marks.length;
+    sc.classList.toggle('outline', outline);
+    if (!outline) return false;
+    const [x0, y0, x1, y1] = union(marks), m = 40;
+    const z = clampZ(Math.min(1.5, (sc.clientWidth - 2 * m) / ((x1 - x0) * base), (sc.clientHeight - 2 * m) / ((y1 - y0) * base)));
+    const s = base * z;
+    goTo(x0 - (sc.clientWidth / s - (x1 - x0)) / 2, y0 - (sc.clientHeight / s - (y1 - y0)) / 2, z);
+    return true;
+  }
+  const endOutline = () => { outline = false; sc.classList.remove('outline'); };
 
   zoomBar.addEventListener('click', (e) => {
     const b = e.target.closest('[data-zoom]');
@@ -260,7 +291,9 @@ export function createBoard(opts) {
     tileCtx(cv);
     drawList(ctx, items.filter((it) => !sel?.set.has(it) && it !== crop?.item && it !== textEd?.item && hits(cv, bbox(it))));
   }
-  document.fonts?.ready.then(() => redrawAll());   // Text erst mit geladener Schrift richtig
+  // sobald eine Schrift geladen ist: Texte neu messen und zeichnen
+  const fontReady = () => { items.forEach((it) => it.t === 'x' && forgetBox(it)); redrawAll(); renderSel(); textEd?.fit(); };
+  fontListeners.add(fontReady);
 
   const redrawBox = (b) => tiles.forEach((cv) => { if (hits(cv, b)) drawTile(cv); });
   const redrawAll = () => tiles.forEach(drawTile);
@@ -302,8 +335,10 @@ export function createBoard(opts) {
       const b = bbox(f);
       const el = document.createElement('div');
       el.className = 'ink-frame';
+      if (f.fc) el.style.setProperty('--fc', f.fc);
       Object.assign(el.style, { left: b[0] * scale + 'px', top: b[1] * scale + 'px', width: (b[2] - b[0]) * scale + 'px', height: (b[3] - b[1]) * scale + 'px' });
-      el.innerHTML = `<button type="button" class="ink-ftab" data-frame="${n}">${frameName(f, n + 1)}</button>`;
+      el.innerHTML = `<button type="button" class="ink-ftab" data-frame="${n}"></button>`;
+      el.firstElementChild.textContent = frameName(f, n + 1);
       frameLayer.appendChild(el);
     });
   }
@@ -333,7 +368,7 @@ export function createBoard(opts) {
   // Format, Name oder Hintergrund eines Bereichs ändern
   function setFrame(f, patch) {
     const next = { ...f, ...patch };
-    for (const k of ['n', 'bg']) if (!next[k]) delete next[k];
+    for (const k of ['n', 'bg', 'fc']) if (!next[k]) delete next[k];
     replace(f, next);
     redrawBox(union([f, next]));
     opts.onFrames?.();
@@ -549,7 +584,7 @@ export function createBoard(opts) {
       if (field === inp) field = null;
       if (!cancelled) done(inp.value.trim().slice(0, max));
     });
-    inp.focus();
+    focusSoon(inp);
   }
 
   // Bemaßung: Maß eintragen
@@ -563,12 +598,20 @@ export function createBoard(opts) {
     } });
   }
 
+  // Eingabefeld fokussieren. Am iPad öffnet sich die Tastatur nur innerhalb einer Berührung:
+  // darum zusätzlich beim Loslassen (touchend) noch einmal, siehe unten
+  let wantFocus = null;
+  function focusSoon(el) {
+    wantFocus = el;
+    el.focus();
+  }
+
   // ---------- Text: schreiben und bearbeiten direkt auf der Fläche ----------
   let textEd = null;   // { el, item (bestehender Text oder null), x, y, st }
   function editText(it, x, y) {
     textEd?.el.blur();
     clearSel();
-    const ed = { item: it, x: it ? it.x : x, y: it ? it.y : y, st: it ? { c: it.c, fs: it.fs } : { ...textStyle } };
+    const ed = { item: it, x: it ? it.x : x, y: it ? it.y : y, st: it ? { c: it.c, fs: it.fs, ff: it.ff, fw: it.fw, i: !!it.i } : { ...textStyle } };
     const ta = ed.el = document.createElement('textarea');
     ta.className = 'ink-text';
     ta.maxLength = 2000;
@@ -578,10 +621,10 @@ export function createBoard(opts) {
     pg.appendChild(ta);
     textEd = ed;
     const fit = () => {
-      const [w, h] = textSize(ta.value || 'M', ed.st.fs);
+      const [w, h] = textSize(ta.value || 'M', ed.st);
       Object.assign(ta.style, {
-        left: ed.x * scale + 'px', top: ed.y * scale + 'px', color: ed.st.c,
-        fontSize: ed.st.fs * scale + 'px', lineHeight: LINE_H, width: w * scale + 28 + 'px', height: h * scale + 6 + 'px',
+        left: ed.x * scale + 'px', top: ed.y * scale + 'px', color: ed.st.c, font: fontCss(ed.st, ed.st.fs * scale),
+        lineHeight: LINE_H, width: w * scale + 28 + 'px', height: h * scale + 6 + 'px',
       });
     };
     ed.fit = fit;
@@ -601,11 +644,13 @@ export function createBoard(opts) {
       if (cancelled || (it && !items.includes(it))) { if (it) redrawBox(bbox(it)); return; }
       if (it && !txt) { commit(items.filter((o) => o !== it)); redrawBox(bbox(it)); return; }
       if (!txt) return;
-      const next = { ...(it || { t: 'x' }), x: ed.x, y: ed.y, txt, c: ed.st.c, fs: ed.st.fs };
+      const { c, fs, ff, fw, i } = ed.st;
+      const next = { ...(it || { t: 'x' }), x: ed.x, y: ed.y, txt, c, fs, ff: FONTS[ff] ? ff : 'sans', fw, i: i ? 1 : 0 };
+      if (!next.i) delete next.i;
       if (it) replace(it, next); else commit([...items, next]);
       redrawBox(it ? union([it, next]) : bbox(next));
     });
-    ta.focus();
+    focusSoon(ta);
   }
 
   // ---------- Menü: Rechtsklick oder lange drücken ----------
@@ -668,12 +713,15 @@ export function createBoard(opts) {
     const f = frameList()[n];
     if (!f) return;
     const opt = (m, on, icon, label) => `<button class="cm-i ${on ? 'on' : ''}" data-m="${m}">${ICON[icon]}<span>${label}</span>${on ? ICON.check : ''}</button>`;
+    const fc = f.fc || FRAME_COLORS[0];
     showMenu(cx, cy, `<button class="cm-i" data-m="rename">${ICON.pen}<span>Umbenennen …</span></button><hr>
+      <div class="cm-colors" role="group" aria-label="Farbe des Bereichs">${FRAME_COLORS.map((c, i) => `<button class="cm-color ${c === fc ? 'on' : ''}" data-m="fc" data-i="${i}" style="background:${c}" aria-label="Farbe ${i + 1}"></button>`).join('')}</div><hr>
       ${opt('a4p', f.fmt === 'a4p', 'frame', 'A4 hoch')}${opt('a4l', f.fmt === 'a4l', 'frame', 'A4 quer')}<hr>
       ${FRAME_BG.map(([k, l]) => opt('bg:' + k, (f.bg || '') === k, 'grid', l)).join('')}<hr>
       <button class="cm-i" data-m="export">${ICON.download}<span>Speichern …</span></button>
-      <button class="cm-i danger" data-m="remove">${ICON.trash}<span>Bereich entfernen</span></button>`, (m) => {
-      if (m === 'a4p' || m === 'a4l') setFrame(f, { fmt: m });
+      <button class="cm-i danger" data-m="remove">${ICON.trash}<span>Bereich entfernen</span></button>`, (m, i) => {
+      if (m === 'fc') setFrame(f, { fc: i === '0' ? '' : FRAME_COLORS[+i] });
+      else if (m === 'a4p' || m === 'a4l') setFrame(f, { fmt: m });
       else if (m.startsWith('bg:')) setFrame(f, { bg: m.slice(3) });
       else if (m === 'rename') renameFrame(f);
       else if (m === 'export') opts.onExport(n);
@@ -740,6 +788,10 @@ export function createBoard(opts) {
   // keine Browser-Gesten (Scrollen, Lupe, Doppeltipp-Zoom) auf der Fläche; Knöpfe und Eingabefelder bleiben antippbar
   sc.addEventListener('touchstart', (e) => { if (!e.target.closest('button, input, textarea')) e.preventDefault(); }, { passive: false });
   sc.addEventListener('touchmove', (e) => { if (!e.target.closest('input, textarea')) e.preventDefault(); }, { passive: false });
+  sc.addEventListener('touchend', () => {
+    if (wantFocus?.isConnected && document.activeElement !== wantFocus) wantFocus.focus();
+    wantFocus = null;
+  });
 
   function drawLasso() {
     const s = cur();
@@ -779,7 +831,9 @@ export function createBoard(opts) {
   }
 
   function startPan(e) {
-    act = { kind: 'pan', id: e.pointerId, touch: e.pointerType === 'touch', lx: e.clientX, ly: e.clientY, vx: 0, vy: 0, t: performance.now() };
+    const now = performance.now(), [ux, uy] = pos(e);
+    act = { kind: 'pan', id: e.pointerId, touch: e.pointerType === 'touch', lx: e.clientX, ly: e.clientY, vx: 0, vy: 0, t: now,
+      sx: e.clientX, sy: e.clientY, t0: now, ux, uy, from: { ...view } };
     if (!act.touch) sc.classList.add('panning');
     opts.hold(true);
   }
@@ -788,7 +842,7 @@ export function createBoard(opts) {
     const [[ax, ay], [bx, by]] = [...fingers.values()];
     const r = sc.getBoundingClientRect(), s = cur();
     const mx = (ax + bx) / 2 - r.left, my = (ay + by) / 2 - r.top;
-    act = { kind: 'pinch', touch: true, d: Math.hypot(bx - ax, by - ay) || 1, z: view.z, ux: view.x + mx / s, uy: view.y + my / s };
+    act = { kind: 'pinch', touch: true, d: Math.hypot(bx - ax, by - ay) || 1, z: view.z, ux: view.x + mx / s, uy: view.y + my / s, from: { ...view } };
     opts.hold(true);
   }
 
@@ -831,8 +885,25 @@ export function createBoard(opts) {
     e.preventDefault();
   }
 
+  // Handballen: die Hand liegt oft schon auf, bevor der Stift aufsetzt. Wurde dadurch verschoben, wird das zurückgenommen.
+  let lastPen = 0, penUsed = false, handPan = null;   // handPan: { from, end } des letzten Verschiebens mit dem Finger
+  function undoHandPan(a) {
+    const from = a?.from || (handPan && performance.now() - handPan.end < UNDO_PAN ? handPan.from : null);
+    handPan = null;
+    if (!from) return;
+    Object.assign(view, from);
+    moveView();
+    settle();
+  }
+  const isPalm = (e) => penUsed && (Math.max(e.width || 0, e.height || 0) > PALM || (!fingers.size && performance.now() - lastPen < PEN_REST));
+
   sc.addEventListener('pointerdown', (e) => {
     stopAnim();
+    if (e.pointerType === 'pen') { penUsed = true; lastPen = performance.now(); }
+    if (outline) {   // Gliederung auf der Fläche: Antippen beendet sie (Titel und Reiter bleiben antippbar)
+      endOutline();
+      if (e.pointerType !== 'touch' && !e.target.closest('.ink-title, .ink-ftab')) return;
+    }
     if (field && e.target !== field) field.blur();
     if (textEd && e.target !== textEd.el) textEd.el.blur();
     const tab = e.target.closest('.ink-ftab');
@@ -870,15 +941,19 @@ export function createBoard(opts) {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const onSel = sel && e.target.closest('.ink-sel');
     if (e.pointerType === 'touch') {
-      if (penDown) return;                          // Handballen beim Schreiben
+      if (penDown || isPalm(e)) return;             // Handballen beim oder kurz nach dem Schreiben
       fingers.set(e.pointerId, [e.clientX, e.clientY]);
       capture(sc, e.pointerId);
       if (fingers.size === 2) { cancelLp(); cancelAct(); startPinch(); return; }
       if (fingers.size > 2 || act) return;
       // Finger verschiebt die Fläche (lange drücken öffnet das Menü); Auswahl lässt sich mit dem Finger ziehen
       if ((!finger || crop) && !onSel) { startPan(e); startLp(e); return; }
-    } else if (e.pointerType === 'pen' && act?.touch) {
-      cancelLp(); cancelAct();                      // der Stift hat Vorrang vor der Hand
+    } else if (e.pointerType === 'pen') {
+      if (act?.touch) {                             // der Stift hat Vorrang vor der Hand: Verschieben der Hand zurücknehmen
+        const a = act;
+        cancelLp(); cancelAct();
+        if (a.kind === 'pan' || a.kind === 'pinch') undoHandPan(a);
+      } else undoHandPan();
       fingers.clear();
     }
     if (act) return;                                 // nur eine Geste gleichzeitig
@@ -923,6 +998,7 @@ export function createBoard(opts) {
   });
 
   sc.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'pen') lastPen = performance.now();   // auch schwebender Stift (neuere iPads)
     if (lp && e.pointerId === lp.id && Math.hypot(e.clientX - lp.cx, e.clientY - lp.cy) > 8) cancelLp();
     if (fingers.has(e.pointerId)) fingers.set(e.pointerId, [e.clientX, e.clientY]);
     if (act?.kind === 'pinch') { if (fingers.has(e.pointerId)) pinchMove(); return; }
@@ -1049,7 +1125,12 @@ export function createBoard(opts) {
     act = null;
     if (a.kind === 'pan') {
       sc.classList.remove('panning');
-      if (a.touch && performance.now() - a.t < 80) glide(a.vx, a.vy);
+      const now = performance.now();
+      if (a.touch && Math.hypot(e.clientX - a.sx, e.clientY - a.sy) < 8 && now - a.t0 < 400) fingerTap(a);   // nur angetippt
+      else if (a.touch) {
+        handPan = { from: a.from, end: now };
+        if (now - a.t < 80) glide(a.vx, a.vy);
+      }
     } else if (a.kind === 'tpress') {
       clearTimeout(a.timer);
       opts.hold(false);
@@ -1060,9 +1141,7 @@ export function createBoard(opts) {
       commit([...items, a.s]);
       redrawBox(bbox(a.s));
     } else if (a.kind === 'text') {
-      const hit = hitAt(a.x, a.y, a.touch);   // vorhandenen Text bearbeiten, sonst neuen beginnen
-      if (hit?.t === 'x') editText(hit);
-      else editText(null, a.x, a.y - textStyle.fs * .65);
+      textTap(a.x, a.y, a.touch);
     } else if (a.kind === 'pen') {
       drawLive();
       forgetBox(a.s);
@@ -1106,6 +1185,17 @@ export function createBoard(opts) {
     else if (a.kind === 'scale') { selCv.style.transform = ''; applySel(0, 0, a.k); }
     opts.hold(false);
   }
+  // Finger kurz angetippt (er verschiebt sonst): mit Text neuen Text beginnen oder bearbeiten, mit der Auswahl auswählen
+  function fingerTap(a) {
+    if (tool === 'text') textTap(a.ux, a.uy, true);
+    else if (tool === 'lasso') { const hit = hitAt(a.ux, a.uy, true); setSel(hit ? withGroups([hit]) : []); }
+  }
+  function textTap(x, y, touch) {
+    const hit = hitAt(x, y, touch);   // vorhandenen Text bearbeiten, sonst neuen beginnen
+    if (hit?.t === 'x') editText(hit);
+    else editText(null, x, y - textStyle.fs * .65);
+  }
+
   sc.addEventListener('pointerup', end);
   sc.addEventListener('pointercancel', end);
 
@@ -1162,6 +1252,7 @@ export function createBoard(opts) {
     // Bereiche für den Export: Name und Rechteck in Einheiten
     frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, bg: f.bg || 'grid', box: bbox(f) })),
     renameFrame(n, name) { const f = frameList()[n]; if (f) setFrame(f, { n: name.trim().slice(0, 40) }); },
+    showOutline,
     showFrame(n) { const f = frameList()[n]; if (f) goTo(f.x - GRID * 2, f.y - GRID * 3, view.z); },
     // Bereich als Bild zeichnen; bg: 'grid' (Kästchen), 'lines', 'dots', 'blank' (alle auf Weiß) oder 'none' (durchsichtig)
     async renderBox(box, pxW, bg) {
@@ -1184,6 +1275,7 @@ export function createBoard(opts) {
       ro.disconnect(); stopAnim(); closeMenu();
       document.removeEventListener('pointerdown', onDocDown, true);
       document.removeEventListener('keydown', onDocKey);
+      fontListeners.delete(fontReady);
       sc.remove();
     },
   };

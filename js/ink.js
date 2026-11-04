@@ -6,7 +6,7 @@ import { ICON } from './icons.js';
 import { createBoard } from './ink-board.js';
 import { SHAPES } from './ink-draw.js';
 import { deliver, exportWidth, fileName, toImage, toPdf } from './ink-export.js';
-import { clampSize, openPenPanel, PALETTE } from './ink-pen.js';
+import { clampSize, cleanText, openPenPanel, PALETTE } from './ink-pen.js';
 import { deletePageTree, deserialize, loadChild, loadRoot, removeImages, savePage, serialize, titleIn, uploadImage } from './ink-store.js';
 import { openTree, titleSvg } from './ink-tree.js';
 import { render } from './render.js';
@@ -20,7 +20,7 @@ const ui = {
   shape: SHAPES.some(([k]) => k === store('inkShape')) ? store('inkShape') : 'line',
   pen: style('pen', PALETTE[0]),
   marker: style('marker', '#F2D33B'),
-  text: style('text', PALETTE[0]),
+  text: cleanText(saved.text),
   recent: (Array.isArray(saved.r) ? saved.r.map((c) => safeColor(c)).filter(Boolean) : []).concat(['#0C3741', '#3E7CA8', '#C2575A']).filter((c, i, a) => a.indexOf(c) === i).slice(0, 3),
   finger: store('inkFinger') === '1',
   bar: store('inkBar') !== '0',
@@ -104,6 +104,12 @@ async function renameFrame(row, n, name) {
   return savePage(row.id, items, row.data.h, row.data.w);
 }
 
+// Gliederung auf der Fläche: alle Bereiche und Titel der geöffneten Seite hervorheben
+function showOutline() {
+  if (!top()?.board.showOutline()) toast('Auf dieser Seite gibt es noch keine Bereiche oder Titel.');
+  else toast('Antippen beendet die Übersicht.');
+}
+
 // schmale Kopfleiste (Smartphone): Bereich und Speichern im Menü „Mehr“
 function openMore(btn) {
   dropMenu(btn, `<button class="cm-i" data-a="ink-frame">${ICON.frame}<span>Bereich (A4) anlegen</span></button>
@@ -172,7 +178,7 @@ function applyUi() {
   b.setShape(ui.shape);
   b.setPen(ui.pen);
   b.setMarker(ui.marker);
-  b.setTextStyle({ c: ui.text.c, fs: ui.text.w });
+  b.setTextStyle(ui.text);
   b.setFinger(ui.finger);
 }
 
@@ -255,7 +261,7 @@ function openPen(btn) {
     chip?.style.setProperty('--w', penDot(kind, v.w));
   }, () => { remember(ui[kind].c); saveStyle(); render(); });
 }
-const penDot = (kind, w) => Math.round(Math.min(24, kind === 'text' ? 6 + w / 4 : kind === 'marker' ? 6 + w * .5 : 6 + w * 1.1)) + 'px';
+const penDot = (kind, w) => Math.round(Math.min(24, kind === 'text' ? 12 : kind === 'marker' ? 6 + w * .5 : 6 + w * 1.1)) + 'px';
 const remember = (c) => { ui.recent = [c, ...ui.recent.filter((x) => x !== c)].slice(0, 3); };
 
 // Kategorien (Notiz-Ordner) aus der Kopfleiste wählen; nochmal tippen schließt
@@ -294,7 +300,7 @@ export async function inkAction(act, id, btn) {
       break;
     }
     case 'ink-pen': openPen(btn); return;
-    case 'ink-tree': flushAll(); openTree({ cat, open: stack.map((p) => p.id), onOpen: openPath, onRename: renameFrame }); return;
+    case 'ink-tree': flushAll(); openTree({ cat, open: stack.map((p) => p.id), onOpen: openPath, onRename: renameFrame, onShow: showOutline }); return;
     case 'ink-more': openMore(btn); return;
     case 'ink-notes': state.noteMode = 'text'; render(); return;
     case 'ink-finger': ui.finger = !ui.finger; store('inkFinger', ui.finger ? '1' : '0'); toast(ui.finger ? 'Mit dem Finger schreiben, mit zwei Fingern verschieben und zoomen' : 'Stift und Maus schreiben, der Finger verschiebt'); break;

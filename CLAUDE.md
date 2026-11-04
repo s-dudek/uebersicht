@@ -28,7 +28,10 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
 - Handschrift (`js/ink*.js`): je Notiz-Ordner eine Startseite in `ink_pages`, Titel führen zu Unterseiten, A4-Bereiche auf dem 25er-Raster,
   unendliche Fläche (verschieben, zoomen 25–400 %, „Ursprungsansicht“), Werkzeugleiste unter der Kopfleiste (einfahrbar), Ordnerwahl über den Titel,
   Formen (als Striche), Textmarker (Strich mit `m`), Text (Element `x`), Bemaßung (Element `d`), Bilder mit Zuschnitt `cr` und Radierspuren `er`,
-  Bereiche mit Name `n` und Hintergrund `bg` (lines/dots/blank), Gliederung (Bereiche und Titel je Seite). Einstieg über den Knopf „Handschrift“ in den Notizen,
+  Bereiche mit Name `n`, Hintergrund `bg` (lines/dots/blank) und Farbe `fc`, Gliederung (Bereiche und Titel je Seite, „Auf der Fläche zeigen“),
+  Text mit Schriftart `ff` (FONTS in ink-draw.js, Google Fonts in index.html), Schnitt `fw`, kursiv `i`; Ursprungsansicht = erster Bereich,
+  Handballen: großer Kontakt, Finger kurz nach dem Stift und Verschieben direkt vor dem Stift werden ignoriert bzw. zurückgenommen.
+  Einstieg über den Knopf „Handschrift“ in den Notizen,
   Stifttaste wechselt Werkzeug (nur wo der Browser sie meldet – Apple-Pencil-Doppeltippen/Drücken erreicht Webseiten nicht),
   Export als PDF/PNG/JPEG (eigener PDF-Schreiber in `ink-export.js`). Bilder im privaten Storage-Bucket `ink` (`c/<ordner-id>/…`, `u/<user-id>/…`).
 

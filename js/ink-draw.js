@@ -11,7 +11,7 @@ export function bbox(it) {
   if (b) return b;
   if (it.t === 'i') b = [it.x, it.y, it.x + it.w, it.y + it.h];
   else if (it.t === 'f') { const [w, h] = FRAMES[it.fmt]; b = [it.x, it.y, it.x + w, it.y + h]; }
-  else if (it.t === 'x') { const [w, h] = textSize(it.txt, it.fs); b = [it.x, it.y, it.x + w, it.y + h]; }
+  else if (it.t === 'x') { const [w, h] = textSize(it.txt, it); b = [it.x, it.y, it.x + w, it.y + h]; }
   else if (it.t === 'd') {
     const m = dimSize(it).fs * 1.6 + 10;
     b = [Math.min(it.a[0], it.b[0]) - m, Math.min(it.a[1], it.b[1]) - m, Math.max(it.a[0], it.b[0]) + m, Math.max(it.a[1], it.b[1]) + m];
@@ -155,19 +155,39 @@ function drawMarker(ctx, s) {
   ctx.restore();
 }
 
-// ---------- Text: mehrzeilig, ohne Umbruch; gemessen mit einer kleinen Zeichenfläche ----------
+// ---------- Text: mehrzeilig, ohne Umbruch; Schriftart (ff), Schriftschnitt (fw) und kursiv (i) ----------
 export const LINE_H = 1.3;
-const font = (fs) => `400 ${fs}px Outfit, system-ui, sans-serif`;
+export const TEXT_FS = 22;   // Schriftgröße neuer Texte (größer/kleiner über den Griff der Auswahl)
+export const FONTS = {
+  sans: { label: 'Outfit', css: 'Outfit, system-ui, sans-serif', weights: [300, 400, 500, 700] },
+  serif: { label: 'Lora', css: 'Lora, Georgia, serif', weights: [400, 700] },
+  hand: { label: 'Caveat', css: 'Caveat, cursive', weights: [400, 700] },
+  mono: { label: 'Mono', css: "'JetBrains Mono', ui-monospace, monospace", weights: [400, 700] },
+};
+export const WEIGHTS = { 300: 'Leicht', 400: 'Normal', 500: 'Mittel', 700: 'Fett' };
+export const fontCss = (st, fs = st.fs) => `${st.i ? 'italic ' : ''}${st.fw || 400} ${fs}px ${(FONTS[st.ff] || FONTS.sans).css}`;
+
+// Schriften der Seite lädt der Browser erst bei Bedarf: danach neu messen und zeichnen
+export const fontListeners = new Set();
+const fontsAsked = new Set();
+function needFont(f) {
+  if (!document.fonts || fontsAsked.has(f) || document.fonts.check(f)) return;
+  fontsAsked.add(f);
+  document.fonts.load(f).then(() => fontListeners.forEach((cb) => cb()), () => {});
+}
+
 let measureCtx = null;
-export function textSize(txt, fs) {
+export function textSize(txt, st) {
   measureCtx ??= document.createElement('canvas').getContext('2d');
-  measureCtx.font = font(fs);
+  measureCtx.font = fontCss(st);
   const lines = String(txt || ' ').split('\n');
-  return [Math.max(fs * .5, ...lines.map((l) => measureCtx.measureText(l).width)), lines.length * fs * LINE_H];
+  return [Math.max(st.fs * .5, ...lines.map((l) => measureCtx.measureText(l).width)), lines.length * st.fs * LINE_H];
 }
 export function drawText(ctx, it) {
+  const f = fontCss(it);
+  needFont(f);
   ctx.fillStyle = it.c;
-  ctx.font = font(it.fs);
+  ctx.font = f;
   ctx.textBaseline = 'top';
   ctx.textAlign = 'left';
   it.txt.split('\n').forEach((l, i) => ctx.fillText(l, it.x, it.y + i * it.fs * LINE_H + it.fs * .15));
@@ -175,6 +195,7 @@ export function drawText(ctx, it) {
 
 // ---------- Bereiche: eigener Hintergrund (weiß, darauf Linien oder Punkte), deckt die Kästchen der Fläche ab ----------
 export const FRAME_BG = [['', 'Kariert (wie die Fläche)'], ['lines', 'Liniert'], ['dots', 'Punktiert'], ['blank', 'Leer (weiß)']];
+export const FRAME_COLORS = ['#3E7CA8', '#0C3741', '#7FA08A', '#7A5AA6', '#C2575A', '#D9873E', '#C9A227', '#6E8582'];   // Farbe von Rahmen und Reiter
 
 export function drawFrameBg(ctx, box, bg, k = 1) {
   const [x0, y0, x1, y1] = box;
