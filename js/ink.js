@@ -9,7 +9,7 @@ import { ICON } from './icons.js';
 import { createBoard } from './ink-board.js';
 import { GRID, NOTES_W, SHAPES, union } from './ink-draw.js';
 import { deliver, exportWidth, fileName, toImage, toPdf } from './ink-export.js';
-import { LAYOUT_FIELDS } from './ink-layout.js';
+import { FRAME_LAYOUTS, LAYOUT_FIELDS } from './ink-layout.js';
 import { clampSize, cleanText, openPenPanel, PALETTE } from './ink-pen.js';
 import { deletePageTree, deserialize, loadChild, loadRoot, removeImages, savePage, serialize, titleIn, uploadImage } from './ink-store.js';
 import { openTree, titleSvg } from './ink-tree.js';
@@ -317,9 +317,13 @@ function dropMenu(btn, html, onPick) {
 }
 
 // Bereich anlegen: A4 hoch oder quer
+// Bereich anlegen: leer (A4 hoch/quer) oder gleich mit einem Layout im Dudek-CI
 function openFrameChoice(btn) {
-  dropMenu(btn, `<button class="cm-i" data-f="a4p">${ICON.frame}<span>A4 hoch</span></button>
-    <button class="cm-i" data-f="a4l">${ICON.frame}<span>A4 quer</span></button>`, (b) => top()?.board.addFrame(b.dataset.f));
+  const fmt = (f, ly, label) => `<button class="cm-i" data-f="${f}" data-ly="${ly}">${ICON.frame}<span>${label}</span></button>`;
+  dropMenu(btn, `${fmt('a4p', '', 'A4 hoch')}${fmt('a4l', '', 'A4 quer')}<hr>
+    <div class="cm-h">Mit Dudek-Layout</div>
+    ${FRAME_LAYOUTS.filter(([k]) => k).map(([k, l]) => `${fmt('a4p', k, `${l.replace('Dudek · ', '')} · A4 hoch`)}${fmt('a4l', k, `${l.replace('Dudek · ', '')} · A4 quer`)}`).join('')}`,
+  (b) => top()?.board.addFrame(b.dataset.f, b.dataset.ly));
 }
 
 // Formen: Linie, Pfeil, Rechteck, Ellipse, Dreieck

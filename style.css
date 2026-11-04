@@ -1000,6 +1000,8 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .cmenu { position: fixed; z-index: 120; min-width: 220px; max-width: 280px; padding: 6px; border-radius: 16px; background: var(--white);
   box-shadow: 0 0 0 1px var(--soft), 0 14px 34px rgba(12,55,65,.22); animation: fade .12s ease; }
 .cmenu hr { border: 0; border-top: 1px solid var(--soft); margin: 5px 4px; }
+.cmenu { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; }   /* lange Menüs scrollen statt abgeschnitten */
+.cm-h { padding: 6px 10px 2px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--grey); }
 .cm-i { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 10px; text-align: left; font-size: 15px; font-weight: 400; }
 .cm-i svg { width: 17px; height: 17px; flex: none; }
 .cm-i span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

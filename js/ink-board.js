@@ -98,9 +98,14 @@ export function createBoard(opts) {
 
   // Ursprungsansicht: der erste Bereich ganz sichtbar und mittig (ohne Bereich der Notizen-Bereich, sonst Anfang der Seite bei 100 % mit Rand)
   function originView() {
-    const f = frameList()[0] || notesItem(), W = sc.clientWidth, H = sc.clientHeight;
+    const f = frameList()[0] || notesItem();
     if (!f || !base) return { x: -GRID, y: -GRID * 2, z: 1 };   // etwas Rand oben links
-    const [x0, y0, x1, y1] = f.t === 'n' ? notesBox() : bbox(f), m = 20, top = 34;   // Rand, oben Platz für den Reiter
+    return fitView(f.t === 'n' ? notesBox() : bbox(f));
+  }
+
+  // Ansicht, in der ein Rechteck ganz und mittig zu sehen ist (höchstens 100 %)
+  function fitView([x0, y0, x1, y1]) {
+    const W = sc.clientWidth, H = sc.clientHeight, m = 20, top = 34;   // Rand, oben Platz für den Reiter
     const z = clampZ(Math.min(1, (W - 2 * m) / ((x1 - x0) * base), (H - m - top) / ((y1 - y0) * base)));
     const s = base * z;
     return { x: x0 - (W / s - (x1 - x0)) / 2, y: y0 - top / s, z };
@@ -402,7 +407,8 @@ export function createBoard(opts) {
   }
 
   // freier Platz im sichtbaren Bereich bzw. unter vorhandenen Bereichen, auf den Kästchen
-  function addFrame(fmt) {
+  // ly: gleich mit Layout im Dudek-CI (danach öffnen sich die Angaben)
+  function addFrame(fmt, ly = '') {
     const [w, fh] = FRAMES[fmt];
     const snap = (v) => Math.round(v / GRID) * GRID;
     const x = snap(view.x + GRID * 2);
@@ -410,8 +416,11 @@ export function createBoard(opts) {
     const taken = [...frameList().map(bbox), ...(notesItem() ? [notesBox()] : [])];   // nicht über andere Bereiche oder die Notizen
     const overlaps = (ax, ay) => taken.some((b) => ax < b[2] && ax + w > b[0] && ay < b[3] && ay + fh > b[1]);
     while (overlaps(x, y)) y += GRID * 4;
-    commit([...items, { t: 'f', fmt, x, y }]);
-    goTo(x - GRID * 2, y - GRID * 3, view.z);
+    const f = { t: 'f', fmt, x, y, ...(ly ? { ly } : {}) };
+    commit([...items, f]);
+    const v = fitView(bbox(f));
+    goTo(v.x, v.y, v.z);
+    if (ly) { redrawBox(bbox(f)); editLayout(f); }
   }
 
   // Inhalt eines Bereichs: alles, dessen Mitte darin liegt
@@ -1406,7 +1415,7 @@ export function createBoard(opts) {
       const dy = r.bottom > v.bottom - m ? v.bottom - m - r.bottom : r.top < v.top + m ? v.top + m - r.top : 0;
       if (dy) panBy(0, dy);
     },
-    showFrame(n) { const f = frameList()[n]; if (f) goTo(f.x - GRID * 2, f.y - GRID * 3, view.z); },
+    showFrame(n) { const f = frameList()[n]; if (f) { const v = fitView(bbox(f)); goTo(v.x, v.y, v.z); } },
     // Bereich als Bild zeichnen; bg: 'grid' (Kästchen), 'lines', 'dots', 'blank' (alle auf Weiß) oder 'none' (durchsichtig)
     async renderBox(box, pxW, bg, ly, lf) {
       const [x0, y0, x1, y1] = box, k = pxW / (x1 - x0);
