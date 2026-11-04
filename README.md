@@ -49,6 +49,7 @@ js/
   meals.js          Gerichte, Wochenplan, Einkaufsliste
   training.js       Training: Woche, Einheiten mit Übungen zum Abhaken
   plan-import.js    Code einfügen: Gerichte, Einkauf und Training (Tag oder Woche)
+  training-catalog.js  Übungs-Datenbank mit festen Nummern, kurze Trainings-Codes (TR-…)
   reminders.js      Erinnerungen und Push
   panels.js         Schnelle Notiz, Einstellungen
   vendor/supabase.js  Supabase-Bibliothek, lokal gebündelt (kein CDN)

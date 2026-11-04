@@ -7,8 +7,14 @@ import { importPlan } from './meals.js';
 import { render } from './render.js';
 import { closeSheet, openSheet } from './sheet.js';
 import { importTraining, validTraining } from './training.js';
+import { expandTrainingCode } from './training-catalog.js';
 
 function parseCode(text) {
+  const short = expandTrainingCode(text);   // kurzer Code aus der Übungs-Datenbank (TR-…)
+  if (short) {
+    if (!short.length) throw new Error('In diesem Code sind nur freie Tage.');
+    return { plan: {}, meals: [], shop: [], training: validTraining(short) };
+  }
   const a = text.indexOf('{'), b = text.lastIndexOf('}');
   if (a < 0 || b < a) throw new Error('Kein Code gefunden. Bitte den ganzen Code aus dem Chat einfügen.');
   let plan;
@@ -32,7 +38,7 @@ export function openPlanImport() {
   const sheet = openSheet(`
     <div class="sheet-head"><h2>Code einfügen</h2><button class="link-btn" data-close>Fertig</button></div>
     <p class="hint" style="margin:0 2px 12px">Den Code, den dir Claude für Essen oder Training zusammenstellt, hier komplett einfügen – für einen Tag oder eine ganze Woche.</p>
-    <textarea class="textarea" id="imp-text" rows="7" placeholder="PLAN { … }"></textarea>
+    <textarea class="textarea" id="imp-text" rows="7" placeholder="TR-261110-E3 oder PLAN { … }"></textarea>
     <div id="imp-preview"></div>
     <div class="row-inline" style="margin-top:12px">
       ${window.__DEMO ? '<button class="btn secondary" id="imp-demo" type="button">Beispiel</button>' : ''}

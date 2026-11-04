@@ -896,6 +896,12 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .ex-t .ex-n { font-style: italic; }
 .ex.on { background: var(--pale); }
 .ex.on b { text-decoration: line-through; text-decoration-color: var(--soft); }
+/* Übungs-Datenbank */
+.cat-g h3 { margin: 16px 2px 6px; font-family: var(--font-head); font-size: 17px; }
+.cat-g ul { list-style: none; margin: 0; padding: 0; }
+.cat-g li { display: grid; grid-template-columns: 44px 1fr; column-gap: 8px; padding: 8px 2px; border-top: 1px solid var(--soft); }
+.cat-g li b { grid-row: span 2; font-variant-numeric: tabular-nums; color: var(--mid); }
+.cat-g li small { color: var(--grey); font-size: 13px; }
 .imp-ok svg { width: 20px; height: 20px; flex: none; color: var(--ink); }
 .imp-ok div { display: flex; flex-direction: column; gap: 3px; }
 .imp-ok small { color: var(--grey); }

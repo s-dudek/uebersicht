@@ -5,6 +5,7 @@ import { deleteItem, loadAll, saveItem } from './data.js';
 import { addDays, dayName, isoWeek, parseYmd, ymd } from './dates.js';
 import { ICON } from './icons.js';
 import { closeSheet, openSheet } from './sheet.js';
+import { catalogHtml } from './training-catalog.js';
 
 export const KINDS = {
   kraft: ['Kraft', 'dumbbell'], ausdauer: ['Ausdauer', 'heart'], mobilitaet: ['Mobilität', 'leaf'], sport: ['Sport', 'star'], ruhe: ['Erholung', 'clock'],
@@ -24,7 +25,7 @@ export function trainingRow(t) {
     <span class="m-slot">${esc(label)}</span>
     <span class="m-main">
       <b><span class="tic-in">${ICON[icon]}</span>${esc(t.title)}</b>
-      <span class="m-tags">${t.meta?.minutes ? `<i>${esc(t.meta.minutes)} Min.</i>` : ''}${ex.length ? `<i>${ex.length} Übungen</i>` : ''}${t.meta?.for ? `<i>${esc(t.meta.for)}</i>` : ''}</span>
+      <span class="m-tags">${t.meta?.minutes ? `<i>${esc(t.meta.minutes)} Min.</i>` : ''}${ex.length ? `<i>${ex.length} ${ex.length === 1 ? 'Übung' : 'Übungen'}</i>` : ''}${t.meta?.for ? `<i>${esc(t.meta.for)}</i>` : ''}</span>
     </span>
     ${t.done ? `<span class="trn-done" title="Erledigt">${ICON.check}</span>` : ''}
   </button>`;
@@ -42,7 +43,7 @@ export function renderTraining() {
         <div><b>${week.filter((t) => t.done).length}</b><span>erledigt</span></div>
         <div><b>${minutes || '–'}</b><span>Minuten</span></div>
       </div>
-      <div class="wsum-act"><button class="btn" data-act="import-plan">${ICON.plus} Code einfügen</button></div>
+      <div class="wsum-act"><button class="btn secondary" data-act="training-catalog">${ICON.book} Übungen</button><button class="btn" data-act="import-plan">${ICON.plus} Code einfügen</button></div>
     </section>`;
   if (!week.length) {
     return summary + `<section class="tile"><p class="empty">Für diese Woche ist noch kein Training geplant. Stell dir mit Claude ein Training zusammen (für einen Tag oder die ganze Woche) und füge den Code hier ein.</p></section>`;
@@ -53,6 +54,14 @@ export function renderTraining() {
     if (!list.length) return `<section class="tile day empty-day">${head}<p class="kempty">Kein Training.</p></section>`;
     return `<section class="tile day ${d === today ? 'today' : ''}">${head}<div class="mrows">${list.map(trainingRow).join('')}</div></section>`;
   }).join('')}</div>`;
+}
+
+// Übungs-Datenbank ansehen: alle Übungen und fertigen Einheiten mit ihren Nummern (für die kurzen Codes)
+export function openCatalog() {
+  const sheet = openSheet(`<div class="sheet-head"><h2>Übungen</h2><button class="link-btn" data-close>Fertig</button></div>
+    <p class="hint" style="margin:0 2px 10px">Jede Übung und Einheit hat eine feste Nummer. Claude stellt daraus kurze Codes zusammen, z. B. TR-261110-E3.</p>
+    <div class="cat">${catalogHtml(esc)}</div>`, { full: true });
+  sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
 }
 
 // ---------- Einheit ansehen: Übungen abhaken, erledigt, Tag ändern ----------

@@ -52,6 +52,13 @@ PLAN {
                  "aufwaermen": [], "uebungen": [{ "name", "saetze", "wdh", "gewicht", "dauer", "pause", "hinweis" }], "abschluss": [], "hinweis" }]
 }
 ```
+**Kurze Trainings-Codes (bevorzugt):** Übungs-Datenbank in `js/training-catalog.js` mit festen Nummern
+(1xx Beine/Po, 2xx Brust/Schultern/Arme, 3xx Rücken, 4xx Rumpf, 5xx Ausdauer, 6xx Mobilität; Einheiten E1, E2 …).
+Code `TR-JJMMTT-<Tag>-<Tag>-…`, ab dem Datum ein Eintrag je Tag: `0` frei, `E3` fertige Einheit, oder Übungen mit Punkt getrennt,
+je `Nr[xSätzexWdh][@kg]` (Wdh. mit `s` = Sekunden), z. B. `TR-261109-E3-0-301x4x8@12.402.603-0-E12`. Vorher in der Datei nachsehen,
+welche Nummern es gibt; fehlt eine Übung oder Einheit, sie am Ende anhängen (Nummern nie ändern), committen und pushen, dann den Code geben.
+In der App zeigt Training → „Übungen“ die ganze Datenbank.
+
 Übernahme ersetzt Gerichte gleicher Tage und Mahlzeit bzw. die eigenen Trainingseinheiten an den Tagen des Codes. Training ist privat
 (ohne Kategorie); für Anna-Lena den Code in ihrem Konto einfügen. Nur Felder verwenden, die oben stehen.
 

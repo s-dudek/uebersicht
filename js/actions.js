@@ -12,6 +12,7 @@ import { navigate } from './nav.js';
 import { togglePin } from './pins.js';
 import { importPlan, shopCat } from './meals.js';
 import { openPlanImport } from './plan-import.js';
+import { openCatalog } from './training.js';
 import { inkAction } from './ink.js';
 import { render } from './render.js';
 
@@ -43,6 +44,7 @@ export function initActions() {
       case 'toggle-done': state.doneOpen.has(id || '') ? state.doneOpen.delete(id || '') : state.doneOpen.add(id || ''); render(); break;
       case 'new-list': openNewList(); break;
       case 'import-plan': openPlanImport(); break;
+      case 'training-catalog': openCatalog(); break;
       case 'week-prev': state.weekStart = addDays(state.weekStart, -7); render(); break;
       case 'week-next': state.weekStart = addDays(state.weekStart, 7); render(); break;
       case 'week-today': state.weekStart = mondayOf(new Date()); render(); break;
