@@ -1,59 +1,69 @@
-// Handschrift: Startseite mit Titeln, jeder Titel öffnet eine eigene Seite (beliebig tief)
-import { $app, askConfirm, COLORS, esc, state, store, toast } from './core.js';
+// Handschrift in den Notiz-Ordnern: jede Kategorie hat eine eigene Startseite mit Titeln,
+// jeder Titel öffnet eine eigene Seite (beliebig tief). Bereiche (A4) lassen sich exportieren.
+import { $app, askConfirm, catById, COLORS, esc, store, toast } from './core.js';
 import { ICON } from './icons.js';
 import { createBoard } from './ink-board.js';
+import { deliver, exportWidth, fileName, toImage, toPdf } from './ink-export.js';
 import { deletePageTree, deserialize, loadChild, loadRoot, removeImages, savePage, titleIn, uploadImage } from './ink-store.js';
 import { render } from './render.js';
+import { closeSheet, openSheet } from './sheet.js';
 
 const PENS = ['#0C3741', '#3E7CA8', '#C2575A'];
 const SIZES = { fine: 2.2, bold: 4.2 };
 const ui = { tool: 'pen', color: PENS[0], size: 'fine', finger: store('inkFinger') === '1' };
 
 const stack = [];      // geöffnete Seiten: [Startseite, Unterseite, …]
+let cat = null;        // Ordner, zu dem die Seiten gehören ('' = Ohne Kategorie)
 let status = 'idle';   // 'idle' | 'loading' | 'ready' | 'error'
+let active = false;    // Handschrift gerade sichtbar
 const top = () => stack[stack.length - 1];
 
 // ---------- Seiten öffnen und schließen ----------
 function openPage(row) {
-  const { items, h } = deserialize(row.data);
+  const { items, h, w } = deserialize(row.data);
   const page = { id: row.id, title: titleIn(row.title), atOpen: new Set(), uploaded: new Set(), timer: null, pending: null };
   page.board = createBoard({
-    items, h,
+    items, h, w,
     colors: COLORS,
     hold,
-    onCommit: (list, hh) => { page.pending = { list, hh }; scheduleSave(page); updateTools(); },
+    onCommit: (list, hh, ww) => { page.pending = { list, hh, ww }; scheduleSave(page); updateTools(); },
     onOpenTitle: (it) => openTitle(page, it),
     onDeleteTitles: deleteTitles,
+    onExport: (n) => openExport([n]),
   });
   page.board.imagePaths().forEach((p) => page.atOpen.add(p));
   stack.push(page);
   applyUi();
 }
 
-async function start() {
+async function start(fid) {
+  cat = fid;
   status = 'loading';
   try {
-    openPage(await loadRoot());
+    const row = await loadRoot(fid);
+    if (cat !== fid) return;   // inzwischen anderer Ordner
+    openPage(row);
     status = 'ready';
   } catch (e) {
+    if (cat !== fid) return;
     status = 'error';
     console.warn('Handschrift', e);
   }
-  if (state.tab === 'ink') render();
+  if (active) render();
 }
 
 async function openTitle(parent, it) {
   try {
-    openPage(await loadChild(it.page, parent.id, it.s));
+    const row = await loadChild(it.page, parent.id, cat, it.s);
+    openPage(row);
     render();
   } catch (e) {
     toast('Seite konnte nicht geöffnet werden: ' + (e.message || e));
   }
 }
 
-async function closeTop() {
-  const page = stack.pop();
-  await flush(page);
+function closePage(page) {
+  flush(page);   // speichert die letzten Striche auch nach dem Schließen
   cleanup(page);
   page.board.destroy();
 }
@@ -87,10 +97,10 @@ function scheduleSave(page) {
 async function flush(page) {
   clearTimeout(page.timer);
   if (!page?.pending) return;
-  const { list, hh } = page.pending;
+  const { list, hh, ww } = page.pending;
   page.pending = null;
-  const err = await savePage(page.id, list, hh);
-  if (err) { page.pending ??= { list, hh }; toast('Speichern fehlgeschlagen: ' + err.message, 4000); }
+  const err = await savePage(page.id, list, hh, ww);
+  if (err) { page.pending ??= { list, hh, ww }; toast('Speichern fehlgeschlagen: ' + err.message, 4000); }
 }
 
 const flushAll = () => stack.forEach(flush);
@@ -129,7 +139,7 @@ picker.addEventListener('change', async () => {
   if (!file || !page) return;
   toast('Bild wird hochgeladen …');
   try {
-    const img = await uploadImage(file);
+    const img = await uploadImage(file, cat);
     page.uploaded.add(img.path);
     page.board.addImage(img);
   } catch (e) {
@@ -137,7 +147,29 @@ picker.addEventListener('change', async () => {
   }
 });
 
-export async function inkAction(act, id) {
+// Bereich anlegen: kleine Auswahl unter dem Knopf
+function openFrameChoice(btn) {
+  const r = btn.getBoundingClientRect();
+  const el = document.createElement('div');
+  el.className = 'cmenu';
+  el.innerHTML = `<button class="cm-i" data-f="a4p">${ICON.frame}<span>A4 hoch</span></button>
+    <button class="cm-i" data-f="a4l">${ICON.frame}<span>A4 quer</span></button>`;
+  document.body.appendChild(el);
+  const m = el.getBoundingClientRect();
+  el.style.left = Math.max(8, Math.min(r.left, window.innerWidth - m.width - 8)) + 'px';
+  el.style.top = (r.top - m.height - 8 > 8 ? r.top - m.height - 8 : r.bottom + 8) + 'px';
+  const close = (e) => { if (!el.contains(e.target)) { el.remove(); document.removeEventListener('pointerdown', close, true); } };
+  document.addEventListener('pointerdown', close, true);
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-f]');
+    if (!b) return;
+    el.remove();
+    document.removeEventListener('pointerdown', close, true);
+    top()?.board.addFrame(b.dataset.f);
+  });
+}
+
+export async function inkAction(act, id, btn) {
   const b = top()?.board;
   switch (act) {
     case 'ink-tool': ui.tool = id; break;
@@ -147,7 +179,9 @@ export async function inkAction(act, id) {
     case 'ink-undo': b?.undo(); return;
     case 'ink-redo': b?.redo(); return;
     case 'ink-img': picker.click(); return;
-    case 'ink-back': if (stack.length > 1) await closeTop(); break;
+    case 'ink-frame': openFrameChoice(btn); return;
+    case 'ink-export': openExport(); return;
+    case 'ink-back': if (stack.length > 1) closePage(stack.pop()); break;
     default: return;
   }
   applyUi();
@@ -156,7 +190,7 @@ export async function inkAction(act, id) {
 
 // Tastatur am Computer: Rückgängig, Wiederholen, Auswahl löschen
 document.addEventListener('keydown', (e) => {
-  if (state.tab !== 'ink' || e.target.closest?.('input, textarea')) return;
+  if (!active || e.target.closest?.('input, textarea, .sheet')) return;
   const b = top()?.board;
   if (!b) return;
   const mod = e.metaKey || e.ctrlKey;
@@ -165,24 +199,115 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'Delete' || e.key === 'Backspace') b.deleteSelection();
 });
 
-// Abmelden: nichts von dieser Person im Speicher lassen
-export function resetInk() {
-  stack.splice(0).forEach((p) => { clearTimeout(p.timer); p.board.destroy(); });
-  status = 'idle';
+// ---------- Export: Bereiche auswählen, Format und Hintergrund ----------
+const exp = { fmt: 'pdf', bg: 'grid' };
+
+function openExport(preselect) {
+  const b = top()?.board;
+  if (!b) return;
+  const frames = b.frames();
+  const chosen = new Set(preselect ?? frames.map((f) => f.n));
+  const seg = (key, opts) => `<div class="seg-view exp-seg" data-key="${key}">${opts.map(([v, l]) => `<button type="button" class="${exp[key] === v ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>`;
+  const sheet = openSheet(`
+    <div class="sheet-head"><h2>Exportieren</h2><button class="link-btn" data-close>Fertig</button></div>
+    ${frames.length ? `
+      <p class="muted exp-lead">Bereiche auswählen:</p>
+      <div class="exp-grid">${frames.map((f) => `<button type="button" class="exp-card ${chosen.has(f.n) ? 'on' : ''}" data-n="${f.n}"><span class="exp-th ${f.fmt}"></span><span>${esc(f.name)}</span></button>`).join('')}</div>
+      <div class="exp-row"><span>Format</span>${seg('fmt', [['pdf', 'PDF'], ['png', 'PNG'], ['jpeg', 'JPEG']])}</div>
+      <div class="exp-row"><span>Hintergrund</span>${seg('bg', [['grid', 'Mit Kästchen'], ['none', 'Ohne']])}</div>
+      <p class="hint exp-note"></p>
+      <button class="btn block" id="exp-go">${ICON.download} Exportieren</button>`
+    : `<p class="exp-lead">Noch kein Bereich auf dieser Seite. Lege einen Bereich an, schreibe hinein und exportiere ihn dann.</p>
+      <div class="exp-new"><button class="btn" data-f="a4p">${ICON.frame} A4 hoch</button><button class="btn" data-f="a4l">${ICON.frame} A4 quer</button></div>`}`);
+  sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
+
+  const note = () => {
+    const el = sheet.querySelector('.exp-note');
+    if (el) el.textContent = exp.bg === 'none' ? (exp.fmt === 'png' ? 'PNG ohne Hintergrund ist durchsichtig.' : 'Ohne Kästchen, auf weißem Hintergrund.') : '';
+  };
+  note();
+
+  // kleine Vorschau je Bereich
+  frames.forEach(async (f) => {
+    const cv = await b.renderBox(f.box, 220, 'grid');
+    sheet.querySelector(`.exp-card[data-n="${f.n}"] .exp-th`)?.appendChild(cv);
+  });
+
+  sheet.addEventListener('click', async (e) => {
+    const nf = e.target.closest('[data-f]');
+    if (nf) { closeSheet(); b.addFrame(nf.dataset.f); return; }
+    const card = e.target.closest('.exp-card');
+    if (card) { const n = +card.dataset.n; chosen.has(n) ? chosen.delete(n) : chosen.add(n); card.classList.toggle('on', chosen.has(n)); return; }
+    const sb = e.target.closest('.exp-seg button');
+    if (sb) {
+      exp[sb.parentElement.dataset.key] = sb.dataset.v;
+      sb.parentElement.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === sb));
+      note();
+      return;
+    }
+    const go = e.target.closest('#exp-go');
+    if (!go) return;
+    const list = frames.filter((f) => chosen.has(f.n));
+    if (!list.length) { toast('Bitte mindestens einen Bereich auswählen.'); return; }
+    go.disabled = true;
+    go.textContent = 'Wird erstellt …';
+    try {
+      await runExport(b, list);
+      closeSheet();
+    } catch (err) {
+      toast('Export fehlgeschlagen: ' + (err.message || err), 4000);
+      go.disabled = false;
+      go.innerHTML = `${ICON.download} Exportieren`;
+    }
+  });
+}
+
+async function runExport(b, list) {
+  const base = `Handschrift ${cat ? catById(cat)?.name || '' : ''} ${new Date().toISOString().slice(0, 10)}`;
+  // PDF und JPEG brauchen Weiß, PNG darf durchsichtig sein
+  const bg = exp.bg === 'grid' ? 'grid' : 'none';
+  const render1 = async (f) => {
+    const cv = await b.renderBox(f.box, exportWidth(f.fmt), bg);
+    if (bg === 'none' && exp.fmt !== 'png') {
+      const white = document.createElement('canvas');
+      white.width = cv.width; white.height = cv.height;
+      const ctx = white.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(cv, 0, 0);
+      return white;
+    }
+    return cv;
+  };
+  if (exp.fmt === 'pdf') {
+    const pages = [];
+    for (const f of list) pages.push({ cv: await render1(f), landscape: f.fmt === 'a4l' });
+    const pdf = await toPdf(pages);
+    return deliver([new File([pdf], fileName(base, 'pdf'), { type: 'application/pdf' })]);
+  }
+  const ext = exp.fmt === 'png' ? 'png' : 'jpg';
+  const files = [];
+  for (const f of list) {
+    const blob = await toImage(await render1(f), exp.fmt);
+    files.push(new File([blob], fileName(`${base} ${list.length > 1 ? f.n + 1 : ''}`, ext), { type: blob.type }));
+  }
+  return deliver(files);
 }
 
 // ---------- Ansicht ----------
-export function renderInk() {
-  if (status === 'idle') start();
-  if (status === 'error') return '<div class="empty">Die Handschrift ist noch nicht eingerichtet. Bitte das Datenbank-Update (supabase-setup.sql, Abschnitt „Handschrift“) in Supabase ausführen.</div>';
-  if (!top()) return '<div class="center muted">Lädt …</div>';
+// Handschrift eines Notiz-Ordners (fid '' = Ohne Kategorie)
+export function renderInk(fid) {
+  if (cat !== fid) { leaveInk(); start(fid); }
+  if (status === 'error') return '<div class="ink-slot"><p class="empty ink-msg">Die Handschrift ist gerade nicht erreichbar. Bitte später nochmal versuchen.</p></div>';
+  if (!top()) return '<div class="ink-slot"><p class="center muted ink-msg">Lädt …</p></div>';
   return `<div class="ink-slot">
-    <p class="ink-hint" ${stack.length === 1 && top().board.isEmpty ? '' : 'hidden'}>Mit dem Stift schreiben. Einen Bereich mit der Auswahl umkreisen und „Als Titel“ wählen: der Titel öffnet eine eigene Seite.</p>
+    <p class="ink-hint" ${stack.length === 1 && top().board.isEmpty ? '' : 'hidden'}>Mit dem Stift schreiben. Einen Bereich mit der Auswahl umkreisen und „Als Titel“ wählen: der Titel öffnet eine eigene Seite. Mit „Bereich“ ein A4-Blatt markieren und später exportieren.</p>
   </div>`;
 }
 
 // nach dem Neuzeichnen: die bestehende Zeichenfläche wieder einhängen (Striche bleiben erhalten)
 export function mountInk() {
+  active = true;
   const slot = $app.querySelector('.ink-slot');
   const page = top();
   if (!slot || !page) return;
@@ -191,12 +316,21 @@ export function mountInk() {
   updateTools();
 }
 
-// Bereich verlassen: speichern, nicht mehr benutzte Bilder entfernen
+// Handschrift verlassen (anderer Ordner, Notizen-Ansicht, anderer Bereich, Abmelden):
+// speichern, nicht mehr benutzte Bilder entfernen; beim nächsten Öffnen frisch laden (Änderungen der anderen Person)
 export function leaveInk() {
-  const page = top();
-  if (!page) return;
-  flush(page);
-  cleanup(page);
+  active = false;
+  stack.splice(0).reverse().forEach(closePage);
+  cat = null;
+  status = 'idle';
+}
+
+// Abmelden: nichts von dieser Person im Speicher lassen
+export function resetInk() {
+  active = false;
+  stack.splice(0).forEach((p) => { clearTimeout(p.timer); p.board.destroy(); });
+  cat = null;
+  status = 'idle';
 }
 
 // Titel der Unterseite als Bild aus den eigenen Strichen (nur Zahlen und geprüfte Farben)
@@ -216,8 +350,9 @@ function titleSvg(strokes) {
   return `<svg class="ink-ttl" viewBox="${(x0 - pad).toFixed(1)} ${(y0 - pad).toFixed(1)} ${(x1 - x0 + pad * 2).toFixed(1)} ${(y1 - y0 + pad * 2).toFixed(1)}" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Handschriftlicher Titel">${paths}</svg>`;
 }
 
+// Kopfzeile einer Unterseite: zurück + handschriftlicher Titel (sonst null: normale Ordner-Kopfzeile)
 export function inkHead() {
-  if (stack.length < 2) return '<b>Handschrift</b>';
+  if (stack.length < 2) return null;
   return `<button class="ph-back" data-act="ink-back" aria-label="Zurück">${ICON.chevL}</button>${titleSvg(top().title)}`;
 }
 
@@ -233,6 +368,8 @@ export function inkActions() {
       <button class="ink-size ${ui.size}" data-act="ink-size" aria-label="Strichstärke" title="Strichstärke"><i></i></button>
     </div>
     ${tb('ink-img', 'image', 'Bild hinzufügen')}
+    ${tb('ink-frame', 'frame', 'Bereich (A4) anlegen')}
+    ${tb('ink-export', 'download', 'Exportieren')}
     ${tb('ink-undo', 'undo', 'Rückgängig', { dis: !b?.canUndo })}
     ${tb('ink-redo', 'redo', 'Wiederholen', { dis: !b?.canRedo })}
     ${tb('ink-finger', 'hand', 'Mit Finger schreiben', { on: ui.finger })}`;

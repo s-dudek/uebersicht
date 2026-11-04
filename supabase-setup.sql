@@ -335,3 +335,51 @@ create policy ink_img_insert on storage.objects for insert to authenticated
   with check (bucket_id = 'ink' and (storage.foldername(name))[1] = auth.uid()::text);
 create policy ink_img_delete on storage.objects for delete to authenticated
   using (bucket_id = 'ink' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- ---------- Handschrift in den Notiz-Ordnern ----------
+-- Jeder Ordner (Kategorie) hat eine eigene Handschrift-Startseite, die alle Beteiligten des Ordners sehen.
+-- Ohne Ordner ("Ohne Kategorie"): eine Startseite je Person, nur für sie sichtbar.
+alter table public.ink_pages add column if not exists category_id uuid references public.categories on delete cascade;
+drop index if exists public.ink_pages_one_root;
+create unique index if not exists ink_root_own on public.ink_pages (owner_id) where parent_id is null and category_id is null;
+create unique index if not exists ink_root_cat on public.ink_pages (category_id) where parent_id is null and category_id is not null;
+
+create or replace function public.can_access_ink(cid uuid, oid uuid)
+returns boolean language sql stable set search_path = public as $$
+  select case when cid is null then oid = auth.uid() else public.can_access_category(cid) end;
+$$;
+
+drop policy if exists ink_select on public.ink_pages;
+drop policy if exists ink_insert on public.ink_pages;
+drop policy if exists ink_update on public.ink_pages;
+drop policy if exists ink_delete on public.ink_pages;
+create policy ink_select on public.ink_pages for select using (public.can_access_ink(category_id, owner_id));
+create policy ink_insert on public.ink_pages for insert with check (
+  owner_id = auth.uid()
+  and public.can_access_ink(category_id, owner_id)
+  and (parent_id is null or exists (
+    select 1 from public.ink_pages p
+    where p.id = ink_pages.parent_id and p.category_id is not distinct from ink_pages.category_id
+      and public.can_access_ink(p.category_id, p.owner_id)))
+);
+create policy ink_update on public.ink_pages for update
+  using (public.can_access_ink(category_id, owner_id))
+  with check (public.can_access_ink(category_id, owner_id));
+create policy ink_delete on public.ink_pages for delete using (public.can_access_ink(category_id, owner_id));
+
+-- Bilder: u/<user-id>/… nur für die Person, c/<ordner-id>/… für alle Beteiligten des Ordners
+create or replace function public.can_access_ink_file(path text)
+returns boolean language sql stable set search_path = public as $$
+  select case
+    when (storage.foldername(path))[1] = auth.uid()::text then true            -- ältere Bilder (<user-id>/…)
+    when (storage.foldername(path))[1] = 'u' then (storage.foldername(path))[2] = auth.uid()::text
+    when (storage.foldername(path))[1] = 'c' and (storage.foldername(path))[2] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      then public.can_access_category(((storage.foldername(path))[2])::uuid)
+    else false end;
+$$;
+drop policy if exists ink_img_select on storage.objects;
+drop policy if exists ink_img_insert on storage.objects;
+drop policy if exists ink_img_delete on storage.objects;
+create policy ink_img_select on storage.objects for select to authenticated using (bucket_id = 'ink' and public.can_access_ink_file(name));
+create policy ink_img_insert on storage.objects for insert to authenticated with check (bucket_id = 'ink' and public.can_access_ink_file(name));
+create policy ink_img_delete on storage.objects for delete to authenticated using (bucket_id = 'ink' and public.can_access_ink_file(name));

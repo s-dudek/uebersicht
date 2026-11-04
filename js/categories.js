@@ -18,6 +18,7 @@ import {
 import { insertCategory, loadAll } from './data.js';
 import { dueLabel, remindLabel } from './dates.js';
 import { ICON, ITEM_ICONS, itemIcon } from './icons.js';
+import { removeFolderImages } from './ink-store.js';
 import { personPicker, shareMessage } from './items.js';
 import { render } from './render.js';
 import { closeSheet, openSheet } from './sheet.js';
@@ -311,6 +312,7 @@ export async function deleteCategory(cid) {
   const { error } = await sb.from('categories').delete().eq('id', cid);
   if (error) return toast('Fehler: ' + error.message);
   if (state.list === cid) state.list = null;
+  removeFolderImages(cid).catch(() => {});   // Bilder der Handschrift in diesem Ordner
   closeSheet(); await loadAll();
 }
 export async function leaveCategory(cid) {

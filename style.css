@@ -1018,8 +1018,8 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
    ========================================================================== */
 .main.is-ink { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
 .ink-slot { position: relative; flex: 1; min-height: 0; display: flex; width: 100%; max-width: none; margin: 0; }
-.ink-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
-  touch-action: pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.ink-scroll { flex: 1; min-width: 0; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .ink-scroll.finger { touch-action: none; }
 .main.is-ink.has-dock .ink-scroll { padding-bottom: calc(var(--safe-bottom) + 96px); }
 .ink-page { position: relative; overflow: hidden; cursor: crosshair; background-color: var(--white);
@@ -1027,7 +1027,15 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
   background-size: var(--g, 25px) var(--g, 25px); }
 .ink-scroll[data-tool="lasso"] .ink-page { cursor: default; }
 .ink-tiles canvas { position: absolute; left: 0; width: 100%; pointer-events: none; }
-.ink-titles { position: absolute; inset: 0; pointer-events: none; }
+.ink-titles, .ink-frames { position: absolute; inset: 0; pointer-events: none; }
+/* Bereiche (A4): gestrichelter Rahmen, Reiter zum Verschieben und für das Menü */
+.ink-frame { position: absolute; box-sizing: border-box; border: 2px dashed rgba(62, 124, 168, .55); border-radius: 2px; }
+.ink-ftab { position: absolute; left: -2px; bottom: 100%; margin-bottom: 4px; pointer-events: auto; touch-action: none; cursor: grab; white-space: nowrap;
+  padding: 4px 10px; border-radius: 8px; background: #3E7CA8; color: var(--white); font-size: 12px; font-weight: 600; }
+.ink-ftab:active { cursor: grabbing; }
+.ink-sel.bare { border-color: transparent; background: none; }
+.ink-sel.bare .ink-sel-h, .ink-sel.bare .ink-selbar { display: none; }
+.ink-msg { margin: 24px; }
 /* Titel: unauffällig, erst beim Darüberfahren (Maus oder schwebender Stift) sichtbar */
 .ink-title { position: absolute; pointer-events: auto; border-radius: 10px; background: transparent; box-shadow: inset 0 0 0 1.5px transparent; transition: background .15s, box-shadow .15s; }
 .ink-title::after { content: ''; position: absolute; right: -13px; top: 50%; width: 22px; height: 22px; margin-top: -11px; border-radius: 50%; opacity: 0; transition: opacity .15s;
@@ -1063,6 +1071,21 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .dk:disabled { opacity: .3; }
 .dock:has(.ink-seg) { overflow-x: auto; scrollbar-width: none; }
 .ph-in .ink-ttl + .ph-tools { margin-left: auto; }
+/* Notiz-Ordner: Notizen / Handschrift umschalten */
+.ph-in .note-mode { margin-left: auto; flex: none; }
+.ph-in .note-mode + .ph-tools { margin-left: 12px; }
+/* Export */
+.exp-lead { margin: 0 0 10px; }
+.exp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.exp-card { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; border-radius: 14px; box-shadow: inset 0 0 0 1.5px var(--soft); font-size: 14px; font-weight: 500; }
+.exp-card.on { box-shadow: inset 0 0 0 2.5px var(--ink); }
+.exp-th { display: block; width: 100%; aspect-ratio: 850 / 1200; border-radius: 6px; overflow: hidden; background: var(--pale); }
+.exp-th.a4l { aspect-ratio: 1200 / 850; }
+.exp-th canvas { display: block; width: 100%; height: 100%; }
+.exp-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 0; }
+.exp-new { display: flex; gap: 10px; flex-wrap: wrap; }
+#exp-go svg, .exp-new svg { width: 18px; height: 18px; flex: none; }
+#exp-go, .exp-new .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 
 /* ==========================================================================
    Desktop – Seitenleiste, Aktionen in der Kopfleiste, Platz nutzen (ab 1024 px)
@@ -1195,6 +1218,15 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
   /* Fenster etwas breiter */
   .sheet { max-width: 760px; }
   .sheet.full { height: min(820px, calc(100% - 64px)); }
+}
+
+/* Handschrift am Desktop: Ordner links, Zeichenfläche füllt den Rest */
+@media (min-width: 1024px) {
+  .main.is-ink { padding: 16px 0 0 24px; }
+  .split.ink-split { flex: 1; min-height: 0; width: 100%; max-width: none; margin: 0; gap: 16px; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+  .ink-split .fcol { align-self: start; }
+  .ink-split > .split-main { display: flex; min-height: 0; min-width: 0; }
+  .ink-split .ink-page { border-top-left-radius: 14px; }
 }
 
 /* ==========================================================================

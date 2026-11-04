@@ -2,7 +2,7 @@
 import { safeColor, sb, state } from './core.js';
 
 const BUCKET = 'ink';
-const IMG_PATH = /^[\w-]{1,64}\/[\w-]{1,64}\.jpg$/;   // <user-id>/<bild-id>.jpg
+const IMG_PATH = /^(?:[uc]\/)?[\w-]{1,64}\/[\w-]{1,64}\.jpg$/;   // u/<user-id>/… oder c/<ordner-id>/… (ältere: <user-id>/…)
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_IMG = 1600;                                  // längste Bildseite in Pixel
 export const newId = () => crypto.randomUUID();
@@ -41,11 +41,14 @@ const strokeOut = (s) => ({ c: s.c, w: s.w, p: encodePts(s.pts) });
 const strokeIn = (s) => ({ t: 's', c: safeColor(s?.c, '#0C3741'), w: num(s?.w, .5, 30, 2.2), pts: decodePts(s?.p) });
 
 // Seiteninhalt für die Datenbank
-export function serialize(items, h) {
+export const FRAMES = { a4p: [850, 1200], a4l: [1200, 850] };   // A4 hoch/quer, genau auf den Kästchen (25 Einheiten)
+
+export function serialize(items, h, w) {
   return {
-    v: 1, h: Math.round(h),
+    v: 1, h: Math.round(h), w: Math.round(w),
     items: items.map((it) => {
       const g = it.g ? { g: it.g } : {};
+      if (it.t === 'f') return { t: 'f', fmt: it.fmt, x: it.x, y: it.y };
       if (it.t === 's') return { t: 's', ...strokeOut(it), ...g };
       if (it.t === 'i') return { t: 'i', src: it.src, x: it.x, y: it.y, w: it.w, h: it.h, ...g };
       return { t: 't', page: it.page, s: it.s.map(strokeOut), ...g };
@@ -64,28 +67,37 @@ export function deserialize(data) {
       out = { t: 'i', src: it.src, x: num(it.x, -5000, 5000, 0), y: num(it.y, -5000, 1e6, 0), w: num(it.w, 10, 5000, 300), h: num(it.h, 10, 5000, 200) };
     } else if (it?.t === 't' && UUID.test(it.page || '') && Array.isArray(it.s)) {
       out = { t: 't', page: it.page, s: it.s.map(strokeIn) };
+    } else if (it?.t === 'f' && FRAMES[it.fmt]) {
+      const snap = (v) => Math.round(num(v, 0, 1e6, 0) / 25) * 25;
+      out = { t: 'f', fmt: it.fmt, x: snap(it.x), y: snap(it.y) };
     }
     if (!out) continue;
     if (UUID.test(it.g || '')) out.g = it.g;   // Gruppe
     items.push(out);
   }
-  return { items, h: num(data?.h, 0, 1e6, 0) };
+  return { items, h: num(data?.h, 0, 1e6, 0), w: num(data?.w, 0, 1e6, 0) };
 }
 
 export const titleOut = (strokes) => ({ s: strokes.map(strokeOut) });
 export const titleIn = (t) => (Array.isArray(t?.s) ? t.s.map(strokeIn) : []);
 
 // ---------- Seiten ----------
-export async function loadRoot() {
-  const { data, error } = await sb.from('ink_pages').select('*').is('parent_id', null);
+// Startseite eines Notiz-Ordners (catId leer: "Ohne Kategorie", nur die eigene)
+const rootQuery = (catId) => {
+  const q = sb.from('ink_pages').select('*').is('parent_id', null);
+  return catId ? q.eq('category_id', catId) : q.is('category_id', null);
+};
+
+export async function loadRoot(catId) {
+  const { data, error } = await rootQuery(catId);
   if (error) throw error;
   if (data[0]) return data[0];
   // erste Nutzung: Startseite anlegen (ID selbst erzeugt, ohne Rückgabe)
-  const row = { id: newId(), owner_id: state.me, parent_id: null, data: { v: 1, items: [] } };
+  const row = { id: newId(), owner_id: state.me, parent_id: null, category_id: catId || null, data: { v: 1, items: [] } };
   const ins = await sb.from('ink_pages').insert(row);
   if (ins.error) {
-    // gleichzeitig auf einem anderen Gerät angelegt: nochmal lesen
-    const again = await sb.from('ink_pages').select('*').is('parent_id', null);
+    // gleichzeitig auf einem anderen Gerät (oder von der anderen Person) angelegt: nochmal lesen
+    const again = await rootQuery(catId);
     if (again.error || !again.data[0]) throw ins.error;
     return again.data[0];
   }
@@ -93,23 +105,18 @@ export async function loadRoot() {
 }
 
 // Unterseite eines Titels: wird erst beim ersten Öffnen angelegt
-export async function loadChild(id, parentId, titleStrokes) {
+export async function loadChild(id, parentId, catId, titleStrokes) {
   const { data, error } = await sb.from('ink_pages').select('*').eq('id', id);
   if (error) throw error;
   if (data[0]) return data[0];
-  const row = { id, owner_id: state.me, parent_id: parentId, title: titleOut(titleStrokes), data: { v: 1, items: [] } };
+  const row = { id, owner_id: state.me, parent_id: parentId, category_id: catId || null, title: titleOut(titleStrokes), data: { v: 1, items: [] } };
   const ins = await sb.from('ink_pages').insert(row);
   if (ins.error) throw ins.error;
   return row;
 }
 
-export async function savePage(id, items, h) {
-  const { error } = await sb.from('ink_pages').update({ data: serialize(items, h), updated_at: new Date().toISOString() }).eq('id', id);
-  return error;
-}
-
-export async function saveTitle(id, strokes) {
-  const { error } = await sb.from('ink_pages').update({ title: titleOut(strokes) }).eq('id', id);
+export async function savePage(id, items, h, w) {
+  const { error } = await sb.from('ink_pages').update({ data: serialize(items, h, w), updated_at: new Date().toISOString() }).eq('id', id);
   return error;
 }
 
@@ -137,7 +144,7 @@ export async function deletePageTree(id) {
 const cache = new Map();   // Pfad -> Promise<ImageBitmap | null>
 
 // Foto verkleinern (entfernt dabei auch Standort- und Kameradaten) und hochladen
-export async function uploadImage(file) {
+export async function uploadImage(file, catId) {
   if (!file?.type?.startsWith('image/')) throw new Error('Bitte ein Bild auswählen.');
   const bmp = await createImageBitmap(file);
   const k = Math.min(1, MAX_IMG / Math.max(bmp.width, bmp.height));
@@ -148,7 +155,7 @@ export async function uploadImage(file) {
   bmp.close?.();
   const blob = await new Promise((res) => cv.toBlob(res, 'image/jpeg', .82));
   if (!blob) throw new Error('Bild konnte nicht umgewandelt werden.');
-  const path = `${state.me}/${newId()}.jpg`;
+  const path = catId ? `c/${catId}/${newId()}.jpg` : `u/${state.me}/${newId()}.jpg`;
   const { error } = await sb.storage.from(BUCKET).upload(path, blob, { contentType: 'image/jpeg', upsert: false });
   if (error) throw error;
   cache.set(path, createImageBitmap(blob));
@@ -169,4 +176,11 @@ export async function removeImages(paths) {
   if (!list.length) return;
   list.forEach((p) => cache.delete(p));
   await sb.storage.from(BUCKET).remove(list);
+}
+
+// Ordner gelöscht: seine Bilder mit entfernen (die Seiten löscht die Datenbank selbst)
+export async function removeFolderImages(catId) {
+  if (!UUID.test(catId || '')) return;
+  const { data } = await sb.storage.from(BUCKET).list(`c/${catId}`, { limit: 1000 });
+  if (data?.length) await removeImages(data.map((f) => `c/${catId}/${f.name}`));
 }

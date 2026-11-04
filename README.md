@@ -32,9 +32,10 @@ js/
   todos.js          Todos
   notes.js          Notizen
   folders.js        Ordner (Kategorien) in Todos/Notizen
-  ink.js            Handschrift: Seiten, Werkzeuge, Speichern
+  ink.js            Handschrift je Notiz-Ordner: Seiten, Werkzeuge, Export, Speichern
   ink-board.js      Handschrift: Zeichenfläche (Stift, Radierer, Auswahl, Titel)
   ink-store.js      Handschrift: Datenbank und Bilder (Supabase Storage)
+  ink-export.js     Handschrift: Bereiche als PDF, PNG oder JPEG
   groups.js         Reihenfolge und Gruppen in Listen
   categories.js     Kategorien-Seite und -Fenster
   items.js          Todo-/Notiz-Fenster, Teilen

@@ -53,7 +53,8 @@ export function initActions() {
       case 'new-cat': openNewList({ mode: 'category' }); break;
       case 'list-edit': openCategory(id); break;
       case 'new-note': createNote(); break;
-      default: if (t.dataset.act.startsWith('ink-')) inkAction(t.dataset.act, id);
+      case 'note-mode': state.noteMode = id === 'ink' ? 'ink' : 'text'; store('noteMode', state.noteMode); render(); break;
+      default: if (t.dataset.act.startsWith('ink-')) inkAction(t.dataset.act, id, t);
     }
   });
 

@@ -1,11 +1,13 @@
 // Handschrift: Zeichenfläche mit kariertem Papier
 // Stift (mit Druck), Radierer (ganze Striche), Auswahl (Lasso) zum Verschieben, Vergrößern, Löschen und "Als Titel".
-// Die Seite ist 1000 Einheiten breit und wächst nach unten. Gezeichnet wird in Kacheln, damit lange Seiten wenig Speicher brauchen.
+// Die Fläche ist unbegrenzt: sie wächst nach rechts und unten mit. 1000 Einheiten passen in die Fensterbreite.
+// Gezeichnet wird in Kacheln, damit große Flächen wenig Speicher brauchen.
+// Bereiche (A4 hoch/quer) markieren, was exportiert wird; sie liegen immer genau auf den Kästchen.
 import { ICON } from './icons.js';
-import { getImage, newId } from './ink-store.js';
+import { FRAMES, getImage, newId } from './ink-store.js';
 
-const W = 1000;          // Seitenbreite in Einheiten
-const TILE = 800;        // Kachelhöhe in Einheiten
+const VIEW = 1000;       // so viele Einheiten passen in die Fensterbreite
+const TILE = 800;        // Kachelgröße in Einheiten
 const GRID = 25;         // Kästchengröße in Einheiten
 const MIN_H = 1414;      // Seitenhöhe am Anfang (Verhältnis wie A4)
 const ERASE_R = 9;       // Radierer-Radius in Einheiten
@@ -17,6 +19,7 @@ function bbox(it) {
   let b = boxes.get(it);
   if (b) return b;
   if (it.t === 'i') b = [it.x, it.y, it.x + it.w, it.y + it.h];
+  else if (it.t === 'f') { const [w, h] = FRAMES[it.fmt]; b = [it.x, it.y, it.x + w, it.y + h]; }
   else {
     b = [Infinity, Infinity, -Infinity, -Infinity];
     for (const s of it.t === 't' ? it.s : [it]) {
@@ -42,6 +45,7 @@ function inPolygon(x, y, poly) {
 }
 
 function share(it, poly) {
+  if (it.t === 'f') return 0;   // Bereiche werden über ihren Reiter verschoben, nicht ausgewählt
   if (it.t === 'i') return inPolygon(it.x + it.w / 2, it.y + it.h / 2, poly) ? 1 : 0;
   let n = 0, hit = 0;
   for (const s of it.t === 't' ? it.s : [it]) {
@@ -68,6 +72,7 @@ function transform(it, ox, oy, k, dx, dy) {
   const st = (s) => ({ ...s, w: s.w * k, pts: s.pts.map((v, i) => (i % 3 === 0 ? tx(v) : i % 3 === 1 ? ty(v) : v)) });
   if (it.t === 's') return st(it);
   if (it.t === 't') return { ...it, s: it.s.map(st) };
+  if (it.t === 'f') return { ...it, x: it.x + dx, y: it.y + dy };   // Bereiche werden nur verschoben
   return { ...it, x: tx(it.x), y: ty(it.y), w: it.w * k, h: it.h * k };
 }
 
@@ -105,16 +110,18 @@ function drawStroke(ctx, s) {
 
 // ====================================================================
 // Zeichenfläche
-// opts: { items, h, colors, onCommit(items, h), onOpenTitle(titleItem), onDeleteTitles(titles) -> Promise<bool>, hold(bool) }
+// opts: { items, h, w, colors, onCommit(items, h, w), onOpenTitle(titleItem), onDeleteTitles(titles) -> Promise<bool>,
+//         onExport(frameIndex), hold(bool) }
 // ====================================================================
 export function createBoard(opts) {
   let items = opts.items;
   let h = Math.max(MIN_H, opts.h || 0);
+  let pw = Math.max(VIEW, opts.w || 0);   // Breite der Fläche in Einheiten
   let tool = 'pen', pen = { c: '#0C3741', w: 2.2 }, finger = false;
   const past = [], future = [];
   let sel = null;            // { set: Set<item>, box: [x0,y0,x1,y1] }
-  let scale = 1, dpr = 1, savedTop = 0;
-  const tiles = new Map();   // Kachelnummer -> Canvas
+  let scale = 1, dpr = 1, savedTop = 0, savedLeft = 0;
+  const tiles = new Map();   // "spalte:zeile" -> Canvas
   const loaded = new Map();  // Bildpfad -> ImageBitmap
 
   // ---------- Aufbau ----------
@@ -122,12 +129,14 @@ export function createBoard(opts) {
   sc.className = 'ink-scroll';
   sc.innerHTML = `<div class="ink-page">
       <div class="ink-tiles"></div>
+      <div class="ink-frames"></div>
       <div class="ink-titles"></div>
       <svg class="ink-lasso" preserveAspectRatio="none" aria-hidden="true"><polyline/></svg>
     </div>`;
   const pg = sc.firstElementChild;
   const tileLayer = pg.querySelector('.ink-tiles');
   const titleLayer = pg.querySelector('.ink-titles');
+  const frameLayer = pg.querySelector('.ink-frames');
   const lassoSvg = pg.querySelector('.ink-lasso');
   const lassoLine = lassoSvg.firstElementChild;
 
@@ -135,19 +144,24 @@ export function createBoard(opts) {
   setTool('pen');
 
   // ---------- Maße ----------
+  function sizePage() {
+    pg.style.width = pw * scale + 'px';
+    pg.style.height = h * scale + 'px';
+    lassoSvg.setAttribute('viewBox', `0 0 ${pw} ${h}`);
+  }
+
   function layout() {
-    const w = pg.clientWidth || sc.clientWidth;
+    const w = sc.clientWidth;
     if (!w) return;
-    scale = w / W;
+    scale = w / VIEW;
     dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     h = Math.max(h, MIN_H, Math.ceil(sc.clientHeight / scale));
-    pg.style.height = h * scale + 'px';
     pg.style.setProperty('--g', GRID * scale + 'px');
-    lassoSvg.setAttribute('viewBox', `0 0 ${W} ${h}`);
+    sizePage();
     tiles.forEach((cv) => cv.remove());
     tiles.clear();
     ensureTiles();
-    renderTitles();
+    renderOverlays();
     renderSel();
   }
 
@@ -156,39 +170,49 @@ export function createBoard(opts) {
   ro.observe(sc);
 
   // ---------- Kacheln ----------
-  function tileCanvas(i) {
-    let cv = tiles.get(i);
+  function tileCanvas(ix, iy) {
+    const key = ix + ':' + iy;
+    let cv = tiles.get(key);
     if (cv) return cv;
     cv = document.createElement('canvas');
-    cv.style.top = i * TILE * scale + 'px';
-    cv.style.height = TILE * scale + 'px';
-    cv.width = Math.round(pg.clientWidth * dpr);
-    cv.height = Math.round(TILE * scale * dpr);
-    tiles.set(i, cv);
+    cv.ix = ix; cv.iy = iy;
+    Object.assign(cv.style, { left: ix * TILE * scale + 'px', top: iy * TILE * scale + 'px', width: TILE * scale + 'px', height: TILE * scale + 'px' });
+    cv.width = cv.height = Math.round(TILE * scale * dpr);
+    tiles.set(key, cv);
     tileLayer.appendChild(cv);
-    drawTile(i);
+    drawTile(cv);
     return cv;
   }
 
+  // Kacheln im sichtbaren Bereich (plus Rand) anlegen, weit entfernte freigeben
   function ensureTiles() {
     if (!scale) return;
-    const y0 = sc.scrollTop / scale, y1 = (sc.scrollTop + sc.clientHeight) / scale;
-    const last = Math.ceil(h / TILE) - 1;
-    const a = Math.max(0, Math.floor(y0 / TILE) - 1), b = Math.min(last, Math.floor(y1 / TILE) + 1);
-    for (let i = a; i <= b; i++) tileCanvas(i);
-    tiles.forEach((cv, i) => { if (i < a - 1 || i > b + 1) { cv.remove(); tiles.delete(i); } });
+    const range = (pos, size, max) => [Math.max(0, Math.floor(pos / scale / TILE) - 1), Math.min(Math.ceil(max / TILE) - 1, Math.floor((pos + size) / scale / TILE) + 1)];
+    const [xa, xb] = range(sc.scrollLeft, sc.clientWidth, pw), [ya, yb] = range(sc.scrollTop, sc.clientHeight, h);
+    for (let iy = ya; iy <= yb; iy++) for (let ix = xa; ix <= xb; ix++) tileCanvas(ix, iy);
+    tiles.forEach((cv, key) => { if (cv.ix < xa - 1 || cv.ix > xb + 1 || cv.iy < ya - 1 || cv.iy > yb + 1) { cv.remove(); tiles.delete(key); } });
   }
 
-  function tileCtx(cv, i) {
+  function tileCtx(cv) {
     const ctx = cv.getContext('2d');
     const k = scale * dpr;
-    ctx.setTransform(k, 0, 0, k, 0, -i * TILE * k);
+    ctx.setTransform(k, 0, 0, k, -cv.ix * TILE * k, -cv.iy * TILE * k);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     return ctx;
   }
+  const hits = (cv, b) => b[2] >= cv.ix * TILE && b[0] <= (cv.ix + 1) * TILE && b[3] >= cv.iy * TILE && b[1] <= (cv.iy + 1) * TILE;
+  // alle Kacheln, die ein Rechteck berühren (legt sichtbare bei Bedarf an)
+  const tilesFor = (b) => {
+    const out = [];
+    for (let iy = Math.max(0, Math.floor(b[1] / TILE)); iy <= Math.floor(b[3] / TILE); iy++) {
+      for (let ix = Math.max(0, Math.floor(b[0] / TILE)); ix <= Math.floor(b[2] / TILE); ix++) out.push(tileCanvas(ix, iy));
+    }
+    return out;
+  };
 
   function drawItem(ctx, it) {
+    if (it.t === 'f') return;   // Bereiche sind nur Markierungen (HTML darüber)
     if (it.t === 's') return drawStroke(ctx, it);
     if (it.t === 't') return it.s.forEach((s) => drawStroke(ctx, s));
     const img = loaded.get(it.src);
@@ -198,25 +222,20 @@ export function createBoard(opts) {
     getImage(it.src).then((bmp) => { if (bmp && !loaded.has(it.src)) { loaded.set(it.src, bmp); redrawBox(bbox(it)); renderSel(); } });
   }
 
-  function drawTile(i) {
-    const cv = tiles.get(i);
-    if (!cv) return;
+  function drawTile(cv) {
     const ctx = cv.getContext('2d');
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, cv.width, cv.height);
-    tileCtx(cv, i);
-    const y0 = i * TILE, y1 = y0 + TILE;
-    for (const it of items) {
-      if (sel?.set.has(it)) continue;
-      const b = bbox(it);
-      if (b[3] >= y0 && b[1] <= y1) drawItem(ctx, it);
-    }
+    tileCtx(cv);
+    for (const it of items) if (!sel?.set.has(it) && hits(cv, bbox(it))) drawItem(ctx, it);
   }
 
-  const redrawBox = (b) => tiles.forEach((_, i) => { if (b[3] >= i * TILE && b[1] <= (i + 1) * TILE) drawTile(i); });
-  const redrawAll = () => tiles.forEach((_, i) => drawTile(i));
+  const redrawBox = (b) => tiles.forEach((cv) => { if (hits(cv, b)) drawTile(cv); });
+  const redrawAll = () => tiles.forEach(drawTile);
 
   // ---------- Titel: anklickbare Flächen über den Strichen ----------
+  function renderOverlays() { renderTitles(); renderFrames(); }
+
   function renderTitles() {
     titleLayer.innerHTML = '';
     items.forEach((it, idx) => {
@@ -239,15 +258,59 @@ export function createBoard(opts) {
     if (el) opts.onOpenTitle(items[+el.dataset.idx]);
   });
 
+  // ---------- Bereiche (A4): gestrichelter Rahmen mit Reiter zum Verschieben ----------
+  const frameList = () => items.filter((it) => it.t === 'f');
+  const frameName = (f, n) => `${f.fmt === 'a4l' ? 'A4 quer' : 'A4 hoch'} · ${n}`;
+
+  function renderFrames() {
+    frameLayer.innerHTML = '';
+    frameList().forEach((f, n) => {
+      const b = bbox(f);
+      const el = document.createElement('div');
+      el.className = 'ink-frame';
+      Object.assign(el.style, { left: b[0] * scale + 'px', top: b[1] * scale + 'px', width: (b[2] - b[0]) * scale + 'px', height: (b[3] - b[1]) * scale + 'px' });
+      el.innerHTML = `<button type="button" class="ink-ftab" data-frame="${n}">${frameName(f, n + 1)}</button>`;
+      frameLayer.appendChild(el);
+    });
+  }
+
+  // freier Platz rechts neben dem sichtbaren Bereich bzw. unter vorhandenen Bereichen, auf den Kästchen
+  function addFrame(fmt) {
+    const [w, fh] = FRAMES[fmt];
+    const snap = (v) => Math.max(GRID * 2, Math.round(v / GRID) * GRID);
+    let x = snap(sc.scrollLeft / scale + GRID * 2), y = snap(sc.scrollTop / scale + GRID * 3);
+    const overlaps = (ax, ay) => frameList().some((f) => { const b = bbox(f); return ax < b[2] && ax + w > b[0] && ay < b[3] && ay + fh > b[1]; });
+    while (overlaps(x, y)) y += GRID * 4;
+    commit([...items, { t: 'f', fmt, x, y }]);
+    sc.scrollTo({ top: Math.max(0, (y - GRID * 3) * scale), left: Math.max(0, (x - GRID * 2) * scale), behavior: 'smooth' });
+  }
+
+  // Inhalt eines Bereichs: alles, dessen Mitte darin liegt
+  function frameContent(f) {
+    const [x0, y0, x1, y1] = bbox(f);
+    return items.filter((it) => {
+      if (it === f || it.t === 'f') return false;
+      const b = bbox(it), cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+      return cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1;
+    });
+  }
+
+  function setFrameFmt(f, fmt) {
+    if (f.fmt === fmt) return;
+    commit(items.map((it) => (it === f ? { ...it, fmt } : it)));
+  }
+
   // ---------- Verlauf ----------
+  // Fläche wächst nach rechts und unten, sobald man in die Nähe des Randes kommt
   function grow() {
-    const maxY = items.reduce((m, it) => Math.max(m, bbox(it)[3]), 0);
-    if (maxY > h - 500) {
-      h = Math.ceil((maxY + 800) / TILE) * TILE;
-      pg.style.height = h * scale + 'px';
-      lassoSvg.setAttribute('viewBox', `0 0 ${W} ${h}`);
-      ensureTiles();
-    }
+    let maxX = 0, maxY = 0;
+    for (const it of items) { const b = bbox(it); maxX = Math.max(maxX, b[2]); maxY = Math.max(maxY, b[3]); }
+    const nh = maxY > h - 500 ? Math.ceil((maxY + 800) / TILE) * TILE : h;
+    const nw = maxX > pw - 300 ? Math.ceil((maxX + 600) / TILE) * TILE : pw;
+    if (nh === h && nw === pw) return;
+    h = nh; pw = nw;
+    sizePage();
+    ensureTiles();
   }
 
   function commit(next) {
@@ -256,8 +319,8 @@ export function createBoard(opts) {
     future.length = 0;
     items = next;
     grow();
-    renderTitles();
-    opts.onCommit(items, h);
+    renderOverlays();
+    opts.onCommit(items, h, pw);
   }
 
   function step(from, to) {
@@ -266,8 +329,8 @@ export function createBoard(opts) {
     to.push(items);
     items = from.pop();
     redrawAll();
-    renderTitles();
-    opts.onCommit(items, h);
+    renderOverlays();
+    opts.onCommit(items, h, pw);
   }
 
   // ---------- Auswahl ----------
@@ -319,7 +382,7 @@ export function createBoard(opts) {
     commit(next);
     sel = { set: new Set(moved), box: union(moved) };
     redrawAll();
-    renderTitles();
+    renderOverlays();
     renderSel();
   }
 
@@ -346,7 +409,7 @@ export function createBoard(opts) {
     sel = null;
     commit(next);
     redrawAll();
-    renderTitles();
+    renderOverlays();
     renderSel();
   }
 
@@ -364,7 +427,7 @@ export function createBoard(opts) {
     commit(next);
     sel = { set: new Set(changed), box: union(changed) };
     redrawAll();
-    renderTitles();
+    renderOverlays();
     renderSel();
   }
   const recolor = (c) => editSel((it) => (it.t === 's' ? { ...it, c } : it.t === 't' ? { ...it, s: it.s.map((s) => ({ ...s, c })) } : it));
@@ -375,6 +438,7 @@ export function createBoard(opts) {
   function hitAt(x, y) {
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i], b = bbox(it), r = it.t === 's' ? 8 : 4;
+      if (it.t === 'f') continue;
       if (x < b[0] - r || x > b[2] + r || y < b[1] - r || y > b[3] + r) continue;
       if (it.t !== 's' || nearStroke(it, x, y, r)) return it;
     }
@@ -385,6 +449,25 @@ export function createBoard(opts) {
   let menu = null, menuAt = 0;
   const closeMenu = () => { menu?.remove(); menu = null; selBox.classList.remove('menu'); };
 
+  function showMenu(cx, cy, html, onPick) {
+    closeMenu();
+    menu = document.createElement('div');
+    menu.className = 'cmenu';
+    menu.setAttribute('role', 'menu');
+    menu.innerHTML = html;
+    document.body.appendChild(menu);
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.min(cx, window.innerWidth - r.width - 8)) + 'px';
+    menu.style.top = Math.max(8, Math.min(cy, window.innerHeight - r.height - 8)) + 'px';
+    menuAt = Date.now();
+    menu.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-m]');
+      if (!b) return;
+      closeMenu();
+      onPick(b.dataset.m, b.dataset.i);
+    });
+  }
+
   function openMenu(cx, cy) {
     closeMenu();
     if (!sel) return;
@@ -393,31 +476,32 @@ export function createBoard(opts) {
     const oneGroup = g && list.every((it) => it.g === g);
     const canTitle = list.some((it) => it.t === 's') && !list.some((it) => it.t === 't');
     const hasInk = list.some((it) => it.t !== 'i');
-    menu = document.createElement('div');
-    menu.className = 'cmenu';
-    menu.setAttribute('role', 'menu');
-    menu.innerHTML = `
+    showMenu(cx, cy, `
       ${hasInk ? `<div class="cm-colors" role="group" aria-label="Umfärben">${(opts.colors || []).map((c, i) => `<button class="cm-color" data-m="color" data-i="${i}" style="background:${c}" aria-label="Farbe ${i + 1}"></button>`).join('')}</div><hr>` : ''}
       ${list.length > 1 && !oneGroup ? `<button class="cm-i" data-m="group">${ICON.stack}<span>Gruppieren</span></button>` : ''}
       ${oneGroup ? `<button class="cm-i" data-m="ungroup">${ICON.stack}<span>Gruppierung aufheben</span></button>` : ''}
       ${canTitle ? `<button class="cm-i" data-m="title">${ICON.chevR}<span>Als Titel</span></button>` : ''}
-      <button class="cm-i danger" data-m="delete">${ICON.trash}<span>Löschen</span></button>`;
-    document.body.appendChild(menu);
-    selBox.classList.add('menu');   // Leiste über der Auswahl ausblenden, solange das Menü offen ist
-    const r = menu.getBoundingClientRect();
-    menu.style.left = Math.max(8, Math.min(cx, window.innerWidth - r.width - 8)) + 'px';
-    menu.style.top = Math.max(8, Math.min(cy, window.innerHeight - r.height - 8)) + 'px';
-    menuAt = Date.now();
-    menu.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-m]');
-      if (!b) return;
-      const m = b.dataset.m;
-      closeMenu();
-      if (m === 'color') recolor(opts.colors[+b.dataset.i]);
+      <button class="cm-i danger" data-m="delete">${ICON.trash}<span>Löschen</span></button>`, (m, i) => {
+      if (m === 'color') recolor(opts.colors[+i]);
       else if (m === 'group') group();
       else if (m === 'ungroup') ungroup();
       else if (m === 'title') makeTitle();
       else if (m === 'delete') deleteSel();
+    });
+    selBox.classList.add('menu');   // Leiste über der Auswahl ausblenden, solange das Menü offen ist
+  }
+
+  // Menü eines Bereichs (Tippen auf seinen Reiter)
+  function openFrameMenu(n, cx, cy) {
+    const f = frameList()[n];
+    if (!f) return;
+    const opt = (fmt, label) => `<button class="cm-i ${f.fmt === fmt ? 'on' : ''}" data-m="${fmt}">${ICON.frame}<span>${label}</span>${f.fmt === fmt ? ICON.check : ''}</button>`;
+    showMenu(cx, cy, `${opt('a4p', 'A4 hoch')}${opt('a4l', 'A4 quer')}<hr>
+      <button class="cm-i" data-m="export">${ICON.download}<span>Exportieren …</span></button>
+      <button class="cm-i danger" data-m="remove">${ICON.trash}<span>Bereich entfernen</span></button>`, (m) => {
+      if (m === 'a4p' || m === 'a4l') setFrameFmt(f, m);
+      else if (m === 'export') opts.onExport(n);
+      else if (m === 'remove') commit(items.filter((it) => it !== f));   // Inhalt bleibt stehen
     });
   }
   document.addEventListener('pointerdown', (e) => { if (menu && !menu.contains(e.target)) closeMenu(); }, true);
@@ -488,12 +572,24 @@ export function createBoard(opts) {
   sc.addEventListener('touchcancel', endTouch);
 
   pg.addEventListener('pointerdown', (e) => {
+    const tab = e.target.closest('.ink-ftab');
+    if (tab && !act) {   // Bereich samt Inhalt verschieben (Tippen ohne Bewegung: Menü)
+      e.preventDefault();
+      tab.setPointerCapture(e.pointerId);
+      opts.hold(true);
+      const n = +tab.dataset.frame, f = frameList()[n];
+      const [x, y] = pos(e);
+      setSel([f, ...frameContent(f)]);
+      selBox.classList.add('bare');   // nur der Inhalt wandert mit, ohne Auswahlrahmen
+      act = { kind: 'fmove', id: e.pointerId, n, x, y, dx: 0, dy: 0, cx: e.clientX, cy: e.clientY, tab };
+      return;
+    }
     if (e.target.closest('button')) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     if (e.pointerType === 'touch') {
       if (penDown) return;
       if (!finger) { startLp(e); return; }        // Finger scrollt; lange drücken öffnet das Menü
-      fingers.set(e.pointerId, e.clientY);
+      fingers.set(e.pointerId, [e.clientX, e.clientY]);
       if (fingers.size > 1) {                       // zweiter Finger: Zeichnen abbrechen, verschieben
         if (act?.kind === 'pen') { items = act.before; redrawBox(bbox(act.s)); }
         if (act) opts.hold(false);
@@ -517,8 +613,7 @@ export function createBoard(opts) {
       const s = { t: 's', c: pen.c, w: pen.w, pts: [x, y, p] };
       act = { kind: 'pen', id: e.pointerId, s, before: items };
       items = [...items, s];
-      const cv = tileCanvas(Math.floor(y / TILE));
-      drawStroke(tileCtx(cv, Math.floor(y / TILE)), s);
+      tilesFor([x - 5, y - 5, x + 5, y + 5]).forEach((cv) => drawStroke(tileCtx(cv), s));
     } else if (tool === 'eraser') {
       clearSel();
       act = { kind: 'erase', id: e.pointerId, before: items, hit: false };
@@ -530,18 +625,20 @@ export function createBoard(opts) {
     }
   });
 
-  pg.addEventListener('pointermove', (e) => {
+  const onMove = (e) => {
     if (lp && e.pointerId === lp.id && Math.hypot(e.clientX - lp.cx, e.clientY - lp.cy) > 8) cancelLp();
     if (act?.kind === 'pan' && fingers.has(e.pointerId)) {
-      const prev = fingers.get(e.pointerId);
-      fingers.set(e.pointerId, e.clientY);
-      sc.scrollTop -= (e.clientY - prev) / fingers.size;
+      const [px, py] = fingers.get(e.pointerId);
+      fingers.set(e.pointerId, [e.clientX, e.clientY]);
+      sc.scrollLeft -= (e.clientX - px) / fingers.size;
+      sc.scrollTop -= (e.clientY - py) / fingers.size;
       return;
     }
     if (!act || e.pointerId !== act.id) return;
     const evs = e.getCoalescedEvents?.() || [e];
     for (const ev of evs.length ? evs : [e]) move(pos(ev));
-  });
+  };
+  pg.addEventListener('pointermove', onMove);
 
   function move([x, y, p]) {
     if (act.kind === 'pen') {
@@ -552,8 +649,8 @@ export function createBoard(opts) {
       boxes.delete(act.s);
       // nur das neue Stück zeichnen; am Ende wird die Kachel sauber neu gezeichnet
       const seg = { c: act.s.c, w: act.s.w, pts: pts.slice(Math.max(0, n - 6)) };
-      const ya = Math.min(ly, y) - 10, yb = Math.max(ly, y) + 10;
-      for (let i = Math.floor(ya / TILE); i <= Math.floor(yb / TILE); i++) if (i >= 0) drawStroke(tileCtx(tileCanvas(i), i), seg);
+      const r = act.s.w * 2;
+      tilesFor([Math.min(lx, x) - r, Math.min(ly, y) - r, Math.max(lx, x) + r, Math.max(ly, y) + r]).forEach((cv) => drawStroke(tileCtx(cv), seg));
     } else if (act.kind === 'erase') erase(x, y);
     else if (act.kind === 'lasso') {
       act.poly.push(x, y);
@@ -561,6 +658,13 @@ export function createBoard(opts) {
     } else if (act.kind === 'move') {
       act.dx = x - act.x; act.dy = y - act.y;
       renderSel(act.dx, act.dy, 1);
+    } else if (act.kind === 'fmove') {
+      // immer ganze Kästchen weit, damit der Bereich auf dem Raster bleibt
+      const f = frameList()[act.n];
+      act.dx = Math.max(-f.x, Math.round((x - act.x) / GRID) * GRID);
+      act.dy = Math.max(-f.y, Math.round((y - act.y) / GRID) * GRID);
+      renderSel(act.dx, act.dy, 1);
+      act.tab.closest('.ink-frame').style.translate = `${act.dx * scale}px ${act.dy * scale}px`;
     } else if (act.kind === 'scale') {
       const [x0, y0, x1, y1] = sel.box;
       act.k = Math.max(.2, Math.min(6, Math.max((x - x0) / (act.x - x0 || 1), (y - y0) / (act.y - y0 || 1))));
@@ -604,6 +708,11 @@ export function createBoard(opts) {
       lassoLine.setAttribute('points', '');
       if (a.poly.length >= 6) setSel(withGroups(items.filter((it) => share(it, a.poly) >= .5)));
     } else if (a.kind === 'move') applySel(a.dx, a.dy, 1);
+    else if (a.kind === 'fmove') {
+      selBox.classList.remove('bare');
+      if (a.dx || a.dy) { applySel(a.dx, a.dy, 1); clearSel(); }
+      else { clearSel(); const r = a.tab.getBoundingClientRect(); openFrameMenu(a.n, r.left, r.bottom + 6); }
+    }
     else if (a.kind === 'scale') { selCv.style.transform = ''; applySel(0, 0, a.k); }
     opts.hold(false);
   }
@@ -614,6 +723,7 @@ export function createBoard(opts) {
   let raf = 0;
   sc.addEventListener('scroll', () => {
     savedTop = sc.scrollTop;
+    savedLeft = sc.scrollLeft;
     if (!raf) raf = requestAnimationFrame(() => { raf = 0; ensureTiles(); });
   }, { passive: true });
 
@@ -621,7 +731,7 @@ export function createBoard(opts) {
   return {
     el: sc,
     // nach dem Einhängen ins Dokument (auch nach jedem Neuzeichnen der Ansicht)
-    attach() { if (!scale || sc.clientWidth !== lastW) { lastW = sc.clientWidth; layout(); } sc.scrollTop = savedTop; ensureTiles(); },
+    attach() { if (!scale || sc.clientWidth !== lastW) { lastW = sc.clientWidth; layout(); } sc.scrollTop = savedTop; sc.scrollLeft = savedLeft; ensureTiles(); },
     setTool,
     get tool() { return tool; },
     setPen(p) { pen = { ...pen, ...p }; },
@@ -635,10 +745,38 @@ export function createBoard(opts) {
     get isEmpty() { return !items.length; },
     // Bild in der Mitte des sichtbaren Bereichs einfügen (unter die Striche)
     addImage({ path, w, h: ih }) {
-      const bw = Math.min(480, W - 80), bh = bw * (ih / w);
-      const cy = (sc.scrollTop + sc.clientHeight / 2) / scale;
-      commit([{ t: 'i', src: path, x: (W - bw) / 2, y: Math.max(20, cy - bh / 2), w: bw, h: bh }, ...items]);
+      const bw = Math.min(480, VIEW - 80), bh = bw * (ih / w);
+      const cx = (sc.scrollLeft + sc.clientWidth / 2) / scale, cy = (sc.scrollTop + sc.clientHeight / 2) / scale;
+      commit([{ t: 'i', src: path, x: Math.max(20, cx - bw / 2), y: Math.max(20, cy - bh / 2), w: bw, h: bh }, ...items]);
       redrawAll();
+    },
+    addFrame,
+    // Bereiche für den Export: Name und Rechteck in Einheiten
+    frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, box: bbox(f) })),
+    // Bereich als Bild zeichnen; bg: 'grid' (weiß mit Kästchen) oder 'none' (durchsichtig)
+    async renderBox(box, pxW, bg) {
+      const [x0, y0, x1, y1] = box, k = pxW / (x1 - x0);
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(pxW);
+      cv.height = Math.round((y1 - y0) * k);
+      const inside = items.filter((it) => it.t !== 'f' && (() => { const b = bbox(it); return b[2] >= x0 && b[0] <= x1 && b[3] >= y0 && b[1] <= y1; })());
+      await Promise.all(inside.filter((it) => it.t === 'i').map(async (it) => { const bmp = await getImage(it.src); if (bmp) loaded.set(it.src, bmp); }));
+      const ctx = cv.getContext('2d');
+      if (bg === 'grid') {
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, cv.width, cv.height);
+        ctx.strokeStyle = 'rgba(12,55,65,.09)';
+        ctx.lineWidth = Math.max(1, k * 1.1);
+        ctx.beginPath();
+        for (let gx = Math.ceil(x0 / GRID) * GRID; gx <= x1; gx += GRID) { const p = Math.round((gx - x0) * k) + .5; ctx.moveTo(p, 0); ctx.lineTo(p, cv.height); }
+        for (let gy = Math.ceil(y0 / GRID) * GRID; gy <= y1; gy += GRID) { const p = Math.round((gy - y0) * k) + .5; ctx.moveTo(0, p); ctx.lineTo(cv.width, p); }
+        ctx.stroke();
+      }
+      ctx.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      inside.forEach((it) => drawItem(ctx, it));
+      return cv;
     },
     imagePaths: () => items.filter((it) => it.t === 'i').map((it) => it.src),
     destroy() { ro.disconnect(); closeMenu(); sc.remove(); },

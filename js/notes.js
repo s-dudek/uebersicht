@@ -3,6 +3,7 @@ import { catById, esc, nameOf, state } from './core.js';
 import { folderIc, itemTint, listLayout, noteFolders } from './folders.js';
 import { blocksHtml, noteKey } from './groups.js';
 import { ICON } from './icons.js';
+import { renderInk } from './ink.js';
 
 export const notesIn = (fid) => state.items.filter((i) => i.type === 'note' && (fid ? i.category_id === fid : !i.category_id || !catById(i.category_id)))
   .sort((a, b) => noteKey(a) - noteKey(b) || b.updated_at.localeCompare(a.updated_at));
@@ -27,6 +28,7 @@ export function renderNotes() {
 }
 
 function renderNoteList(fid) {
+  if (state.noteMode === 'ink') return listLayout(noteFolders(), fid, renderInk(fid), '', 'ink-split');
   const has = notesIn(fid).length > 0;
   const row = (n) => `
     <div class="trow ${n.meta?.color ? 'tinted' : ''}" data-drag="${n.id}" data-gid="${esc(n.meta?.group || '')}"${itemTint(n)}>
