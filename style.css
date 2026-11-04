@@ -1092,6 +1092,8 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .ink-bar.closed .ink-fold { padding: 0 12px 2px 8px; }
 .ink-seg button { padding: 6px 10px; }
 .ink-seg svg { width: 20px; height: 20px; }
+/* Stift, Radierer, Auswahl ganz rechts; bleibt beim Wischen der Leiste immer sichtbar */
+.ink-tools-in .ink-seg { margin-left: auto; position: sticky; right: 0; flex: none; box-shadow: -10px 0 12px rgba(255, 255, 255, .95); }
 .ink-pens { display: flex; align-items: center; gap: 8px; padding: 0 6px; flex: none; }
 .ink-dot { width: 22px; height: 22px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 2px var(--white), 0 0 0 3.5px transparent; flex: none; }
 .ink-dot.on { box-shadow: 0 0 0 2px var(--white), 0 0 0 3.5px var(--c); }
@@ -1113,7 +1115,7 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .pp-range { width: 100%; margin: 8px 0 4px; accent-color: var(--ink); }
 .pp-prev { display: block; width: 100%; height: 40px; border-radius: 10px; background: var(--bg); }
 /* Bemaßung: Feld zum Eintragen des Maßes */
-.ink-dim-input { position: absolute; z-index: 3; width: 120px; translate: -50% -50%; padding: 6px 10px; border-radius: 10px; border: 2px solid #3E7CA8; background: var(--white);
+.ink-field { position: absolute; z-index: 3; width: 120px; translate: -50% -50%; padding: 6px 10px; border-radius: 10px; border: 2px solid #3E7CA8; background: var(--white);
   font-size: 16px; font-weight: 500; text-align: center; color: var(--ink); outline: none; box-shadow: 0 8px 20px rgba(12, 55, 65, .2); }
 /* Bild zuschneiden */
 .ink-crop { position: absolute; z-index: 2; touch-action: none; }
@@ -1140,14 +1142,48 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .tree-ttl { height: 34px; width: auto; max-width: min(60vw, 420px); flex: none; }
 .tree-c { min-width: 24px; height: 24px; padding: 0 7px; border-radius: 999px; display: grid; place-items: center; background: var(--pale); font-size: 12px; font-weight: 700; }
 .tree-empty { margin: 12px 4px; }
+.tree-fr { position: relative; display: flex; align-items: center; }
+.tree-fr .tree-i { min-height: 44px; font-weight: 500; color: #3E7CA8; }
+.tree-fr .tree-i > svg:first-child { width: 18px; height: 18px; flex: none; }
+.tree-fn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-fr small { margin-left: auto; padding: 2px 8px; border-radius: 999px; background: rgba(62, 124, 168, .1); font-size: 12px; white-space: nowrap; }
+.tree-ren { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border-radius: 10px; color: var(--grey); }
+.tree-ren svg { width: 17px; height: 17px; }
+.tree-in { position: absolute; left: 34px; right: 44px; top: 4px; bottom: 4px; width: auto; z-index: 1; }
+@media (hover: hover) { .tree-ren:hover { background: var(--pale); color: var(--ink); } }
 @media (hover: hover) { .tree-i:hover { background: var(--pale); } }
 .dk.ink-b { flex: none; width: 44px; }
 .dk.ink-b.on { background: var(--pale); }
 .dk:disabled { opacity: .3; }
-.ph-in .ink-ttl + .ph-tools { margin-left: auto; }
-/* Notiz-Ordner: Notizen / Handschrift umschalten */
-.ph-in .note-mode { margin-left: auto; flex: none; }
-.ph-in .note-mode + .ph-tools { margin-left: 12px; }
+/* Name eines Bereichs: Feld genau über dem Reiter */
+.ink-field.ink-field-tab { translate: 0 calc(-100% - 4px); width: 200px; text-align: left; font-size: 14px; }
+/* Text auf der Fläche bearbeiten */
+.ink-text { position: absolute; z-index: 3; margin: -3px 0 0 -6px; padding: 2px 4px; border: 1.5px dashed #3E7CA8; border-radius: 6px; background: rgba(255, 255, 255, .7);
+  font-family: Outfit, system-ui, sans-serif; font-weight: 400; resize: none; overflow: hidden; outline: none; white-space: pre; }
+/* Kopfleiste der Handschrift: Rückgängig, Wiederholen, Bereich, Speichern | Finger, Gliederung */
+.ph-ink { margin-left: auto; display: flex; align-items: center; gap: 2px; flex: none; }
+.ph-ink .dk.ink-b { width: 38px; height: 38px; }
+.ph-ink .dk.ink-b svg { width: 20px; height: 20px; }
+.ph-ink .narrow-only { display: none; }
+@media (max-width: 600px) {
+  .ph-ink .wide-only { display: none; }
+  .ph-ink .narrow-only { display: flex; }
+  .ph-ink .dk.ink-b { width: 34px; height: 34px; }
+  .ph-ink .ink-sep { margin: 0 2px; }
+  .ph-drop .ph-ic { display: none; }
+}
+@media (hover: hover) { .ph-ink .dk.ink-b:hover:not(:disabled) { background: var(--pale); } }
+.ph-drop { min-width: 0; }
+/* Notiz-Ordner: Knopf in die Handschrift */
+.ink-open { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 16px; border-radius: 22px; text-align: left; color: var(--white); background: var(--ink);
+  box-shadow: 0 8px 22px rgba(12, 55, 65, .18); transition: transform .15s; }
+.ink-open > svg:first-child { width: 28px; height: 28px; flex: none; color: var(--green-l); }
+.ink-open > svg:last-child { width: 20px; height: 20px; margin-left: auto; flex: none; }
+.ink-open span { display: flex; flex-direction: column; min-width: 0; }
+.ink-open b { font-family: var(--font-head); font-size: 19px; }
+.ink-open small { font-size: 13px; opacity: .75; }
+.ink-open:active { transform: scale(.98); }
+.ink-open + .tbig { margin-top: 12px; }
 /* Handschrift: Ordnername als Auswahlknopf für die Kategorien */
 .ph-drop { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 4px 10px 4px 4px; margin-left: -4px; border-radius: 12px; color: var(--ink); }
 .ph-drop > svg { width: 18px; height: 18px; flex: none; }
@@ -1304,7 +1340,7 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 /* Handschrift am Desktop: Zeichenfläche über die ganze Breite, Werkzeuge mittig */
 @media (min-width: 1024px) {
   .main.is-ink { padding: 0; }
-  .ink-tools-in { justify-content: center; padding-inline: 24px; }
+  .ink-tools-in { padding-inline: 24px; }
   .ink-bar .dk.ink-b:hover:not(:disabled) { background: var(--pale); }
 }
 

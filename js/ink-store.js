@@ -53,18 +53,20 @@ function decodeRel(str) {
   });
 }
 
-const strokeOut = (s) => ({ c: s.c, w: s.w, p: encodePts(s.pts) });
-const strokeIn = (s) => ({ t: 's', c: safeColor(s?.c, '#0C3741'), w: num(s?.w, .5, 30, 2.2), pts: decodePts(s?.p) });
+const strokeOut = (s) => ({ c: s.c, w: s.w, p: encodePts(s.pts), ...(s.m ? { m: 1 } : {}) });
+const strokeIn = (s) => ({ t: 's', c: safeColor(s?.c, '#0C3741'), w: num(s?.w, .5, 60, 2.2), pts: decodePts(s?.p), ...(s?.m === 1 ? { m: 1 } : {}) });
 
 // Seiteninhalt für die Datenbank
 export const FRAMES = { a4p: [850, 1200], a4l: [1200, 850] };   // A4 hoch/quer, genau auf den Kästchen (25 Einheiten)
+const FRAME_BGS = ['lines', 'dots', 'blank'];                   // Hintergründe eines Bereichs (ohne: kariert wie die Fläche)
 
 export function serialize(items, h, w) {
   return {
     v: 1, h: Math.round(h), w: Math.round(w),
     items: items.map((it) => {
       const g = it.g ? { g: it.g } : {};
-      if (it.t === 'f') return { t: 'f', fmt: it.fmt, x: it.x, y: it.y };
+      if (it.t === 'f') return { t: 'f', fmt: it.fmt, x: it.x, y: it.y, ...(it.n ? { n: it.n } : {}), ...(it.bg ? { bg: it.bg } : {}) };
+      if (it.t === 'x') return { t: 'x', x: it.x, y: it.y, txt: it.txt, c: it.c, fs: it.fs, ...g };
       if (it.t === 's') return { t: 's', ...strokeOut(it), ...g };
       if (it.t === 'i') {
         const img = { t: 'i', src: it.src, x: it.x, y: it.y, w: it.w, h: it.h, ...g };
@@ -101,6 +103,10 @@ export function deserialize(data) {
     } else if (it?.t === 'f' && FRAMES[it.fmt]) {
       const snap = (v) => Math.round(num(v, -1e6, 1e6, 0) / 25) * 25;
       out = { t: 'f', fmt: it.fmt, x: snap(it.x), y: snap(it.y) };
+      if (typeof it.n === 'string' && it.n.trim()) out.n = it.n.trim().slice(0, 40);   // eigener Name
+      if (FRAME_BGS.includes(it.bg)) out.bg = it.bg;                                    // Hintergrund
+    } else if (it?.t === 'x' && typeof it.txt === 'string' && it.txt) {                 // Text
+      out = { t: 'x', x: num(it.x, -1e6, 1e6, 0), y: num(it.y, -1e6, 1e6, 0), txt: it.txt.slice(0, 2000), c: safeColor(it.c, '#0C3741'), fs: num(it.fs, 4, 400, 20) };
     }
     if (!out) continue;
     if (UUID.test(it.g || '')) out.g = it.g;   // Gruppe

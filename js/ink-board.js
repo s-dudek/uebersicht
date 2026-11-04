@@ -1,13 +1,13 @@
 // Handschrift: Zeichenfläche mit kariertem Papier
-// Stift (mit Druck), Radierer (ganze Striche, bei Bildern Teilbereiche), Auswahl (Lasso oder Antippen),
-// Formen, Bemaßung, Titel (ziehen zum Verschieben, tippen zum Öffnen), Bilder zuschneiden.
+// Stift (mit Druck), Textmarker, Text, Radierer (ganze Striche, bei Bildern Teilbereiche), Auswahl (Lasso oder Antippen),
+// Formen, Bemaßung, Titel (ziehen zum Verschieben, tippen zum Öffnen), Bilder zuschneiden, Bereiche mit Namen und Hintergrund.
 // Die Fläche ist unendlich in alle Richtungen und lässt sich verschieben und zoomen. Bei 100 % passen 1000 Einheiten in die Breite.
 // Gezeichnet wird in Kacheln fester Bildschirmgröße, damit auch große Flächen und starker Zoom wenig Speicher brauchen.
 import { ICON } from './icons.js';
 import { startCrop } from './ink-crop.js';
 import {
-  bbox, dimLabelAt, drawDim, drawGrid, drawImageItem, drawStroke, forgetBox, forgetErased, fullRect,
-  GRID, nearItem, shapeStrokes, share, transform, union,
+  bbox, dimLabelAt, distTo, drawDim, drawFrameBg, drawGrid, drawImageItem, drawStroke, drawText, FRAME_BG, forgetBox, forgetErased,
+  fullRect, GRID, LINE_H, nearItem, shapeStrokes, share, textSize, transform, union,
 } from './ink-draw.js';
 import { FRAMES, getImage, newId } from './ink-store.js';
 
@@ -22,11 +22,12 @@ const TOOLS = ['pen', 'eraser', 'lasso'];   // Reihenfolge für die Taste am Sti
 
 // ====================================================================
 // opts: { items, colors, onCommit(items, h, w), onOpenTitle(titleItem), onDeleteTitles(titles) -> Promise<bool>,
-//         onExport(frameIndex), onTool(tool), hold(bool) }
+//         onExport(frameIndex), onTool(tool), onFrames(), hold(bool) }
 // ====================================================================
 export function createBoard(opts) {
   let items = opts.items;
-  let tool = 'pen', shape = 'line', pen = { c: '#0C3741', w: 2.2 }, finger = false;
+  let tool = 'pen', shape = 'line', finger = false;
+  let pen = { c: '#0C3741', w: 2.2 }, marker = { c: '#F2D33B', w: 16 }, textStyle = { c: '#0C3741', fs: 22 };
   const past = [], future = [];
   let sel = null;            // { set: Set<item>, box: [x0,y0,x1,y1] }
   let crop = null;           // laufendes Zuschneiden: { item, ui }
@@ -106,7 +107,8 @@ export function createBoard(opts) {
     renderOverlays();
     renderSel();
     crop?.ui.rescale(scale);
-    dimInput?.blur();
+    field?.blur();
+    textEd?.el.blur();
   }
   const settle = () => { if (scale && scale !== cur()) rebuild(); };
 
@@ -233,7 +235,8 @@ export function createBoard(opts) {
   };
 
   function drawItem(ctx, it) {
-    if (it.t === 'f') return;   // Bereiche sind nur Markierungen (HTML darüber)
+    if (it.t === 'f') return it.bg && drawFrameBg(ctx, bbox(it), it.bg, scale);   // Rahmen und Reiter sind HTML darüber
+    if (it.t === 'x') return drawText(ctx, it);
     if (it.t === 's') return drawStroke(ctx, it);
     if (it.t === 't') return it.s.forEach((s) => drawStroke(ctx, s));
     if (it.t === 'd') return drawDim(ctx, it);
@@ -244,13 +247,20 @@ export function createBoard(opts) {
     getImage(it.src).then((bmp) => { if (bmp && !loaded.has(it.src)) { loaded.set(it.src, bmp); redrawBox(bbox(it)); renderSel(); } });
   }
 
+  // Reihenfolge: Hintergründe der Bereiche, dann Textmarker, dann alles andere
+  const layer = (it) => (it.t === 'f' ? 0 : it.m ? 1 : 2);
+  function drawList(ctx, list) {
+    for (let l = 0; l < 3; l++) for (const it of list) if (layer(it) === l) drawItem(ctx, it);
+  }
+
   function drawTile(cv) {
     const ctx = cv.getContext('2d');
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, cv.width, cv.height);
     tileCtx(cv);
-    for (const it of items) if (!sel?.set.has(it) && it !== crop?.item && hits(cv, bbox(it))) drawItem(ctx, it);
+    drawList(ctx, items.filter((it) => !sel?.set.has(it) && it !== crop?.item && it !== textEd?.item && hits(cv, bbox(it))));
   }
+  document.fonts?.ready.then(() => redrawAll());   // Text erst mit geladener Schrift richtig
 
   const redrawBox = (b) => tiles.forEach((cv) => { if (hits(cv, b)) drawTile(cv); });
   const redrawAll = () => tiles.forEach(drawTile);
@@ -283,7 +293,8 @@ export function createBoard(opts) {
 
   // ---------- Bereiche (A4): gestrichelter Rahmen mit Reiter zum Verschieben ----------
   const frameList = () => items.filter((it) => it.t === 'f');
-  const frameName = (f, n) => `${f.fmt === 'a4l' ? 'A4 quer' : 'A4 hoch'} · ${n}`;
+  const fmtName = (f) => (f.fmt === 'a4l' ? 'A4 quer' : 'A4 hoch');
+  const frameName = (f, n) => f.n || `${fmtName(f)} · ${n}`;
 
   function renderFrames() {
     frameLayer.innerHTML = '';
@@ -319,9 +330,19 @@ export function createBoard(opts) {
     });
   }
 
-  function setFrameFmt(f, fmt) {
-    if (f.fmt === fmt) return;
-    commit(items.map((it) => (it === f ? { ...it, fmt } : it)));
+  // Format, Name oder Hintergrund eines Bereichs ändern
+  function setFrame(f, patch) {
+    const next = { ...f, ...patch };
+    for (const k of ['n', 'bg']) if (!next[k]) delete next[k];
+    replace(f, next);
+    redrawBox(union([f, next]));
+    opts.onFrames?.();
+  }
+
+  function renameFrame(f) {
+    const b = bbox(f);
+    inlineField({ x: b[0], y: b[1], value: f.n || '', placeholder: frameName(f, frameList().indexOf(f) + 1), cls: 'ink-field ink-field-tab',
+      done: (txt) => { if (items.includes(f) && txt !== (f.n || '')) setFrame(f, { n: txt }); } });
   }
 
   // ---------- Verlauf ----------
@@ -363,7 +384,7 @@ export function createBoard(opts) {
     <div class="ink-selbar">
       <button type="button" data-sel="title">Als Titel</button>
       <button type="button" data-sel="crop">Zuschneiden</button>
-      <button type="button" data-sel="dim">Maß</button>
+      <button type="button" data-sel="edit">Bearbeiten</button>
       <button type="button" data-sel="delete" class="danger">Löschen</button>
     </div>`;
   pg.appendChild(selBox);
@@ -388,7 +409,7 @@ export function createBoard(opts) {
     const list = [...sel.set];
     selBox.querySelector('[data-sel="title"]').hidden = !list.some((it) => it.t === 's') || list.some((it) => it.t === 't');
     selBox.querySelector('[data-sel="crop"]').hidden = !single('i');
-    selBox.querySelector('[data-sel="dim"]').hidden = !single('d');
+    selBox.querySelector('[data-sel="edit"]').hidden = !single('d') && !single('x');
     if (dx || dy || k !== 1) return;   // beim Ziehen nur verschieben, nicht neu zeichnen
     const q = Math.min(dpr, SEL_PX / (Math.max(w, hh) * scale));   // bei starkem Zoom nicht riesig
     selCv.width = Math.max(1, Math.round(w * scale * q));
@@ -399,7 +420,7 @@ export function createBoard(opts) {
     const kk = scale * q;
     ctx.setTransform(kk, 0, 0, kk, (pad - x0) * kk, (pad - y0) * kk);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    items.forEach((it) => { if (sel.set.has(it)) drawItem(ctx, it); });
+    drawList(ctx, items.filter((it) => sel.set.has(it)));
   }
 
   function applySel(dx, dy, k) {
@@ -458,18 +479,25 @@ export function createBoard(opts) {
     renderOverlays();
     renderSel();
   }
-  const recolor = (c) => editSel((it) => (it.t === 's' || it.t === 'd' ? { ...it, c } : it.t === 't' ? { ...it, s: it.s.map((s) => ({ ...s, c })) } : it));
+  const editSingle = () => { const d = single('d'), x = single('x'); if (d) editDim(d); else if (x) editText(x); };
+  const recolor = (c) => editSel((it) => (it.t === 's' || it.t === 'd' || it.t === 'x' ? { ...it, c } : it.t === 't' ? { ...it, s: it.s.map((s) => ({ ...s, c })) } : it));
   const group = () => { const g = newId(); editSel((it) => ({ ...it, g })); };
   const ungroup = () => editSel(({ g, ...rest }) => rest);
   const unerase = () => editSel(({ er, ...rest }) => rest);
 
-  // obenauf liegendes Element an einem Punkt (Bereiche ausgenommen)
-  function hitAt(x, y) {
-    const r = 8 / view.z;
+  // Element genau unter dem Finger bzw. Stift: das nächstgelegene, nicht einfach das oberste in der Nähe.
+  // Bilder zählen nur, wenn man darauf tippt, und treten hinter Strichen darauf zurück.
+  function hitAt(x, y, touch = false) {
+    const r = (touch ? 16 : 8) / view.z;
+    let best = null, bestD = r;
     for (let i = items.length - 1; i >= 0; i--) {
-      if (items[i].t !== 'f' && nearItem(items[i], x, y, items[i].t === 'i' ? 0 : r)) return items[i];
+      const it = items[i];
+      if (it.t === 'f') continue;
+      let d = distTo(it, x, y);
+      if (it.t === 'i') d = d ? Infinity : r * .75;
+      if (d < bestD || (!best && d <= bestD)) { best = it; bestD = d; }
     }
-    return null;
+    return best;
   }
 
   // ---------- Bilder zuschneiden ----------
@@ -497,20 +525,19 @@ export function createBoard(opts) {
   }
   const finishCrop = () => crop?.ui?.apply();
 
-  // ---------- Bemaßung: Maß eintragen ----------
-  let dimInput = null;
-  function editDim(it) {
-    dimInput?.blur();
-    const [lx, ly] = dimLabelAt(it);
+  // ---------- kleines Eingabefeld auf der Fläche (Maß, Name eines Bereichs) ----------
+  let field = null;
+  function inlineField({ x, y, value, placeholder, cls, max = 40, done }) {
+    field?.blur();
     const inp = document.createElement('input');
-    inp.className = 'ink-dim-input';
-    inp.maxLength = 40;
-    inp.placeholder = 'Maß';
-    inp.value = it.txt || '';
-    inp.setAttribute('aria-label', 'Maß eintragen');
-    Object.assign(inp.style, { left: lx * scale + 'px', top: ly * scale + 'px' });
+    inp.className = cls;
+    inp.maxLength = max;
+    inp.placeholder = placeholder;
+    inp.value = value;
+    inp.setAttribute('aria-label', placeholder);
+    Object.assign(inp.style, { left: x * scale + 'px', top: y * scale + 'px' });
     pg.appendChild(inp);
-    dimInput = inp;
+    field = inp;
     let cancelled = false;
     inp.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') inp.blur();
@@ -519,14 +546,66 @@ export function createBoard(opts) {
     });
     inp.addEventListener('blur', () => {
       inp.remove();
-      if (dimInput === inp) dimInput = null;
-      const txt = inp.value.trim().slice(0, 40);
-      if (cancelled || txt === (it.txt || '') || !items.includes(it)) return;
+      if (field === inp) field = null;
+      if (!cancelled) done(inp.value.trim().slice(0, max));
+    });
+    inp.focus();
+  }
+
+  // Bemaßung: Maß eintragen
+  function editDim(it) {
+    const [lx, ly] = dimLabelAt(it);
+    inlineField({ x: lx, y: ly, value: it.txt || '', placeholder: 'Maß', cls: 'ink-field', done: (txt) => {
+      if (txt === (it.txt || '') || !items.includes(it)) return;
       const next = { ...it, txt };
       replace(it, next);
       redrawBox(union([it, next]));
+    } });
+  }
+
+  // ---------- Text: schreiben und bearbeiten direkt auf der Fläche ----------
+  let textEd = null;   // { el, item (bestehender Text oder null), x, y, st }
+  function editText(it, x, y) {
+    textEd?.el.blur();
+    clearSel();
+    const ed = { item: it, x: it ? it.x : x, y: it ? it.y : y, st: it ? { c: it.c, fs: it.fs } : { ...textStyle } };
+    const ta = ed.el = document.createElement('textarea');
+    ta.className = 'ink-text';
+    ta.maxLength = 2000;
+    ta.rows = 1;
+    ta.value = it?.txt || '';
+    ta.setAttribute('aria-label', 'Text');
+    pg.appendChild(ta);
+    textEd = ed;
+    const fit = () => {
+      const [w, h] = textSize(ta.value || 'M', ed.st.fs);
+      Object.assign(ta.style, {
+        left: ed.x * scale + 'px', top: ed.y * scale + 'px', color: ed.st.c,
+        fontSize: ed.st.fs * scale + 'px', lineHeight: LINE_H, width: w * scale + 28 + 'px', height: h * scale + 6 + 'px',
+      });
+    };
+    ed.fit = fit;
+    fit();
+    if (it) redrawBox(bbox(it));
+    let cancelled = false;
+    ta.addEventListener('input', fit);
+    ta.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { cancelled = true; ta.blur(); }
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) ta.blur();
+      e.stopPropagation();
     });
-    requestAnimationFrame(() => inp.focus());
+    ta.addEventListener('blur', () => {
+      ta.remove();
+      if (textEd === ed) textEd = null;
+      const txt = ta.value.replace(/\s+$/, '').slice(0, 2000);
+      if (cancelled || (it && !items.includes(it))) { if (it) redrawBox(bbox(it)); return; }
+      if (it && !txt) { commit(items.filter((o) => o !== it)); redrawBox(bbox(it)); return; }
+      if (!txt) return;
+      const next = { ...(it || { t: 'x' }), x: ed.x, y: ed.y, txt, c: ed.st.c, fs: ed.st.fs };
+      if (it) replace(it, next); else commit([...items, next]);
+      redrawBox(it ? union([it, next]) : bbox(next));
+    });
+    ta.focus();
   }
 
   // ---------- Menü: Rechtsklick oder lange drücken ----------
@@ -560,13 +639,14 @@ export function createBoard(opts) {
     const oneGroup = g && list.every((it) => it.g === g);
     const canTitle = list.some((it) => it.t === 's') && !list.some((it) => it.t === 't');
     const hasInk = list.some((it) => it.t !== 'i');
-    const img = single('i'), dim = single('d');
+    const img = single('i'), dim = single('d'), txt = single('x');
     const item = (m, icon, label, cls = '') => `<button class="cm-i ${cls}" data-m="${m}">${ICON[icon]}<span>${label}</span></button>`;
     showMenu(cx, cy, `
       ${hasInk ? `<div class="cm-colors" role="group" aria-label="Umfärben">${(opts.colors || []).map((c, i) => `<button class="cm-color" data-m="color" data-i="${i}" style="background:${c}" aria-label="Farbe ${i + 1}"></button>`).join('')}</div><hr>` : ''}
       ${img ? item('crop', 'crop', 'Zuschneiden') : ''}
       ${img?.er?.length ? item('unerase', 'undo', 'Radiertes zurückholen') : ''}
-      ${dim ? item('dim', 'ruler', 'Maß eintragen') : ''}
+      ${dim ? item('edit', 'ruler', 'Maß eintragen') : ''}
+      ${txt ? item('edit', 'text', 'Text bearbeiten') : ''}
       ${list.length > 1 && !oneGroup ? item('group', 'stack', 'Gruppieren') : ''}
       ${oneGroup ? item('ungroup', 'stack', 'Gruppierung aufheben') : ''}
       ${canTitle ? item('title', 'chevR', 'Als Titel') : ''}
@@ -574,7 +654,7 @@ export function createBoard(opts) {
       if (m === 'color') recolor(opts.colors[+i]);
       else if (m === 'crop') cropImage(img);
       else if (m === 'unerase') unerase();
-      else if (m === 'dim') editDim(dim);
+      else if (m === 'edit') editSingle();
       else if (m === 'group') group();
       else if (m === 'ungroup') ungroup();
       else if (m === 'title') makeTitle();
@@ -587,13 +667,17 @@ export function createBoard(opts) {
   function openFrameMenu(n, cx, cy) {
     const f = frameList()[n];
     if (!f) return;
-    const opt = (fmt, label) => `<button class="cm-i ${f.fmt === fmt ? 'on' : ''}" data-m="${fmt}">${ICON.frame}<span>${label}</span>${f.fmt === fmt ? ICON.check : ''}</button>`;
-    showMenu(cx, cy, `${opt('a4p', 'A4 hoch')}${opt('a4l', 'A4 quer')}<hr>
-      <button class="cm-i" data-m="export">${ICON.download}<span>Exportieren …</span></button>
+    const opt = (m, on, icon, label) => `<button class="cm-i ${on ? 'on' : ''}" data-m="${m}">${ICON[icon]}<span>${label}</span>${on ? ICON.check : ''}</button>`;
+    showMenu(cx, cy, `<button class="cm-i" data-m="rename">${ICON.pen}<span>Umbenennen …</span></button><hr>
+      ${opt('a4p', f.fmt === 'a4p', 'frame', 'A4 hoch')}${opt('a4l', f.fmt === 'a4l', 'frame', 'A4 quer')}<hr>
+      ${FRAME_BG.map(([k, l]) => opt('bg:' + k, (f.bg || '') === k, 'grid', l)).join('')}<hr>
+      <button class="cm-i" data-m="export">${ICON.download}<span>Speichern …</span></button>
       <button class="cm-i danger" data-m="remove">${ICON.trash}<span>Bereich entfernen</span></button>`, (m) => {
-      if (m === 'a4p' || m === 'a4l') setFrameFmt(f, m);
+      if (m === 'a4p' || m === 'a4l') setFrame(f, { fmt: m });
+      else if (m.startsWith('bg:')) setFrame(f, { bg: m.slice(3) });
+      else if (m === 'rename') renameFrame(f);
       else if (m === 'export') opts.onExport(n);
-      else if (m === 'remove') commit(items.filter((it) => it !== f));   // Inhalt bleibt stehen
+      else if (m === 'remove') { commit(items.filter((it) => it !== f)); redrawBox(bbox(f)); opts.onFrames?.(); }   // Inhalt bleibt stehen
     });
   }
   const onDocDown = (e) => { if (menu && !menu.contains(e.target)) closeMenu(); };
@@ -602,10 +686,10 @@ export function createBoard(opts) {
   document.addEventListener('keydown', onDocKey);
 
   // Punkt in der Auswahl: Menü dafür; sonst das Element darunter auswählen
-  function contextAt(cx, cy, x, y) {
+  function contextAt(cx, cy, x, y, touch) {
     const inSel = sel && x >= sel.box[0] - 6 && x <= sel.box[2] + 6 && y >= sel.box[1] - 6 && y <= sel.box[3] + 6;
     if (!inSel) {
-      const hit = hitAt(x, y);
+      const hit = hitAt(x, y, touch);
       if (!hit) { clearSel(); closeMenu(); return; }
       setSel(withGroups([hit]));
     }
@@ -624,11 +708,11 @@ export function createBoard(opts) {
   const cancelLp = () => { if (lp) { clearTimeout(lp.t); lp = null; } };
   function startLp(e) {
     cancelLp();
-    const cx = e.clientX, cy = e.clientY, [x, y] = pos(e);
+    const cx = e.clientX, cy = e.clientY, [x, y] = pos(e), touch = e.pointerType === 'touch';
     lp = { id: e.pointerId, cx, cy, t: setTimeout(() => {
       lp = null;
       cancelAct();
-      contextAt(cx, cy, x, y);
+      contextAt(cx, cy, x, y, touch);
     }, LONG) };
   }
 
@@ -636,7 +720,7 @@ export function createBoard(opts) {
     const b = e.target.closest('[data-sel]')?.dataset.sel;
     if (b === 'title') makeTitle();
     else if (b === 'crop') cropImage(single('i'));
-    else if (b === 'dim') editDim(single('d'));
+    else if (b === 'edit') editSingle();
     else if (b === 'delete') deleteSel();
   });
 
@@ -654,25 +738,27 @@ export function createBoard(opts) {
   const capture = (el, id) => { try { el.setPointerCapture(id); } catch { /* Zeiger schon weg */ } };
 
   // keine Browser-Gesten (Scrollen, Lupe, Doppeltipp-Zoom) auf der Fläche; Knöpfe und Eingabefelder bleiben antippbar
-  sc.addEventListener('touchstart', (e) => { if (!e.target.closest('button, input')) e.preventDefault(); }, { passive: false });
-  sc.addEventListener('touchmove', (e) => { if (!e.target.closest('input')) e.preventDefault(); }, { passive: false });
+  sc.addEventListener('touchstart', (e) => { if (!e.target.closest('button, input, textarea')) e.preventDefault(); }, { passive: false });
+  sc.addEventListener('touchmove', (e) => { if (!e.target.closest('input, textarea')) e.preventDefault(); }, { passive: false });
 
   function drawLasso() {
     const s = cur();
     lassoLine.setAttribute('points', act.poly.map((v, i) => ((v - (i % 2 ? view.y : view.x)) * s).toFixed(1)).join(' '));
   }
 
-  // vorhergesagte Punkte des Stifts (weniger Verzögerung beim Schreiben), werden bei jedem Ereignis ersetzt
-  function drawPredicted(e) {
+  // Ebene über allem, bei jedem Ereignis neu: der laufende Textmarker-Strich (in einem Zug, damit er gleichmäßig
+  // durchscheint) bzw. die vorhergesagten Punkte des Stifts (weniger Verzögerung beim Schreiben)
+  function drawLive(e) {
     const ctx = liveCv.getContext('2d');
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, liveCv.width, liveCv.height);
-    const pr = act?.kind === 'pen' && e?.getPredictedEvents?.();
-    if (!pr?.length) return;
-    const p = act.s.pts, n = p.length;
     const k = cur() * dpr;
     ctx.setTransform(k, 0, 0, k, -view.x * k, -view.y * k);
     ctx.lineCap = ctx.lineJoin = 'round';
+    if (act?.kind === 'marker') return drawStroke(ctx, act.s);
+    const pr = act?.kind === 'pen' && e?.getPredictedEvents?.();
+    if (!pr?.length) return;
+    const p = act.s.pts, n = p.length;
     drawStroke(ctx, { c: act.s.c, w: act.s.w, pts: [p[n - 3], p[n - 2], p[n - 1], ...pr.flatMap((ev) => { const q = pos(ev); q[2] = p[n - 1]; return q; })] });
   }
 
@@ -681,7 +767,8 @@ export function createBoard(opts) {
     if (!act) return;
     const a = act;
     act = null;
-    if (a.kind === 'pen') { items = a.before; redrawBox(bbox(a.s)); drawPredicted(); }
+    if (a.kind === 'pen') { items = a.before; redrawBox(bbox(a.s)); drawLive(); }
+    else if (a.kind === 'marker') drawLive();
     else if ((a.kind === 'erase' && a.hit) || a.kind === 'shape' || a.kind === 'dim') { items = a.before; redrawAll(); }
     else if (a.kind === 'lasso') { lassoSvg.classList.remove('on'); lassoLine.setAttribute('points', ''); }
     else if (a.kind === 'fmove') { a.tab.closest('.ink-frame').style.translate = ''; selBox.classList.remove('bare'); clearSel(); }
@@ -746,7 +833,8 @@ export function createBoard(opts) {
 
   sc.addEventListener('pointerdown', (e) => {
     stopAnim();
-    if (dimInput && e.target !== dimInput) dimInput.blur();
+    if (field && e.target !== field) field.blur();
+    if (textEd && e.target !== textEd.el) textEd.el.blur();
     const tab = e.target.closest('.ink-ftab');
     if (tab && !act) {   // Bereich samt Inhalt verschieben (Tippen ohne Bewegung: Menü)
       e.preventDefault();
@@ -771,7 +859,7 @@ export function createBoard(opts) {
       opts.hold(true);
       return;
     }
-    if (e.target.closest('button, input')) return;
+    if (e.target.closest('button, input, textarea')) return;
     if (e.pointerType === 'mouse' && e.button === 1 && !act) {   // mittlere Maustaste: verschieben
       e.preventDefault();
       capture(sc, e.pointerId);
@@ -803,7 +891,7 @@ export function createBoard(opts) {
     const touch = e.pointerType === 'touch';
     const eraserEnd = e.pointerType === 'pen' && ((e.buttons & 32) || e.button === 5);   // Radier-Ende des Stifts
     const t = eraserEnd ? 'eraser' : tool;
-    if (t !== 'shape' && t !== 'dim') startLp(e);
+    if (!['shape', 'dim', 'text', 'marker'].includes(t)) startLp(e);
 
     const onHandle = e.target.closest('.ink-sel-h');
     if (sel && onHandle) act = { kind: 'scale', id: e.pointerId, touch, x, y, k: 1 };
@@ -814,6 +902,12 @@ export function createBoard(opts) {
       act = { kind: 'pen', id: e.pointerId, touch, s, before: items, p };
       items = [...items, s];
       tilesFor([x - 5, y - 5, x + 5, y + 5]).forEach((cv) => drawStroke(tileCtx(cv), s));
+    } else if (t === 'marker') {
+      clearSel();
+      act = { kind: 'marker', id: e.pointerId, touch, s: { t: 's', m: 1, c: marker.c, w: marker.w, pts: [x, y, .5] } };
+      drawLive();
+    } else if (t === 'text') {
+      act = { kind: 'text', id: e.pointerId, touch, x, y };
     } else if (t === 'eraser') {
       clearSel();
       act = { kind: 'erase', id: e.pointerId, touch, before: items, hit: false, paths: new Map() };
@@ -843,7 +937,7 @@ export function createBoard(opts) {
     act.shift = e.shiftKey;
     const evs = e.getCoalescedEvents?.() || [e];
     for (const ev of evs.length ? evs : [e]) move(pos(ev), e.pointerType === 'pen');
-    if (act?.kind === 'pen') drawPredicted(e);
+    if (act?.kind === 'pen' || act?.kind === 'marker') drawLive(e);
   });
 
   function move([x, y, p], stylus) {
@@ -858,6 +952,9 @@ export function createBoard(opts) {
       const seg = { c: act.s.c, w: act.s.w, pts: pts.slice(Math.max(0, n - 6)) };
       const r = act.s.w * 2;
       tilesFor([Math.min(lx, x) - r, Math.min(ly, y) - r, Math.max(lx, x) + r, Math.max(ly, y) + r]).forEach((cv) => drawStroke(tileCtx(cv), seg));
+    } else if (act.kind === 'marker') {
+      const pts = act.s.pts, n = pts.length;
+      if ((x - pts[n - 3]) ** 2 + (y - pts[n - 2]) ** 2 > 1 / view.z ** 2) pts.push(x, y, .5);
     } else if (act.kind === 'erase') erase(x, y);
     else if (act.kind === 'shape' || act.kind === 'dim') { act.x = x; act.y = y; drawShape(); }
     else if (act.kind === 'lasso') {
@@ -906,10 +1003,10 @@ export function createBoard(opts) {
     redrawBox(union([...old, ...a.made]));
   }
 
-  // Radierer: Striche und Maße ganz, bei Bildern nur die überfahrene Stelle
+  // Radierer: Striche, Maße und Texte ganz, bei Bildern nur die überfahrene Stelle
   function erase(x, y) {
     const r = ERASE_R / view.z;
-    const gone = items.filter((it) => (it.t === 's' || it.t === 'd') && nearItem(it, x, y, r));
+    const gone = items.filter((it) => (it.t === 's' || it.t === 'd' || it.t === 'x') && nearItem(it, x, y, r));
     if (gone.length) {
       act.hit = true;
       items = items.filter((it) => !gone.includes(it));
@@ -958,8 +1055,16 @@ export function createBoard(opts) {
       opts.hold(false);
       opts.onOpenTitle(a.it);
       return;
+    } else if (a.kind === 'marker') {
+      drawLive();
+      commit([...items, a.s]);
+      redrawBox(bbox(a.s));
+    } else if (a.kind === 'text') {
+      const hit = hitAt(a.x, a.y, a.touch);   // vorhandenen Text bearbeiten, sonst neuen beginnen
+      if (hit?.t === 'x') editText(hit);
+      else editText(null, a.x, a.y - textStyle.fs * .65);
     } else if (a.kind === 'pen') {
-      drawPredicted();
+      drawLive();
       forgetBox(a.s);
       items = a.before;
       commit([...a.before, a.s]);
@@ -972,7 +1077,7 @@ export function createBoard(opts) {
       items = a.before;
       if (Math.hypot(a.x - a.x0, a.y - a.y0) < 4 / view.z) {   // nur angetippt
         if (a.made.length) redrawBox(union(a.made));
-        const hit = a.kind === 'dim' && hitAt(a.x0, a.y0);    // Maßlinie antippen: Maß bearbeiten
+        const hit = a.kind === 'dim' && hitAt(a.x0, a.y0, a.touch);   // Maßlinie antippen: Maß bearbeiten
         if (hit?.t === 'd') editDim(hit);
       } else {
         commit([...a.before, ...a.made]);
@@ -983,7 +1088,11 @@ export function createBoard(opts) {
       lassoLine.setAttribute('points', '');
       const xs = a.poly.filter((_, i) => i % 2 === 0), ys = a.poly.filter((_, i) => i % 2);
       const tap = Math.max(...xs) - Math.min(...xs) < 6 / view.z && Math.max(...ys) - Math.min(...ys) < 6 / view.z;
-      if (tap) { const hit = hitAt(a.poly[0], a.poly[1]); setSel(hit ? withGroups([hit]) : []); }   // Antippen wählt ein Element
+      if (tap) {   // Antippen wählt ein Element; ein ausgewählter Text wird beim zweiten Antippen bearbeitet
+        const hit = hitAt(a.poly[0], a.poly[1], a.touch);
+        if (hit?.t === 'x' && single('x') === hit) editText(hit);
+        else setSel(hit ? withGroups([hit]) : []);
+      }
       else setSel(withGroups(items.filter((it) => share(it, a.poly) >= .5)));
     } else if (a.kind === 'move') {
       applySel(a.dx, a.dy, 1);
@@ -1028,6 +1137,9 @@ export function createBoard(opts) {
     setShape(k) { shape = k; },
     get tool() { return tool; },
     setPen(p) { pen = { ...pen, ...p }; },
+    setMarker(p) { marker = { ...marker, ...p }; },
+    // Schrift für neue Texte; ein gerade bearbeiteter Text übernimmt sie sofort
+    setTextStyle(p) { textStyle = { ...textStyle, ...p }; if (textEd) { textEd.st = { ...textEd.st, ...p }; textEd.fit(); } },
     setFinger(on) { finger = on; },
     zoomIn: () => zoomStep(1.25),
     zoomOut: () => zoomStep(.8),
@@ -1048,30 +1160,23 @@ export function createBoard(opts) {
     },
     addFrame,
     // Bereiche für den Export: Name und Rechteck in Einheiten
-    frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, box: bbox(f) })),
-    // Bereich als Bild zeichnen; bg: 'grid' (weiß mit Kästchen) oder 'none' (durchsichtig)
+    frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, bg: f.bg || 'grid', box: bbox(f) })),
+    renameFrame(n, name) { const f = frameList()[n]; if (f) setFrame(f, { n: name.trim().slice(0, 40) }); },
+    showFrame(n) { const f = frameList()[n]; if (f) goTo(f.x - GRID * 2, f.y - GRID * 3, view.z); },
+    // Bereich als Bild zeichnen; bg: 'grid' (Kästchen), 'lines', 'dots', 'blank' (alle auf Weiß) oder 'none' (durchsichtig)
     async renderBox(box, pxW, bg) {
       const [x0, y0, x1, y1] = box, k = pxW / (x1 - x0);
       const cv = document.createElement('canvas');
       cv.width = Math.round(pxW);
       cv.height = Math.round((y1 - y0) * k);
-      const inside = items.filter((it) => it.t !== 'f' && (() => { const b = bbox(it); return b[2] >= x0 && b[0] <= x1 && b[3] >= y0 && b[1] <= y1; })());
+      const inside = items.filter((it) => { const b = bbox(it); return it.t !== 'f' && b[2] >= x0 && b[0] <= x1 && b[3] >= y0 && b[1] <= y1; });
       await Promise.all(inside.filter((it) => it.t === 'i').map(async (it) => { const bmp = await getImage(it.src); if (bmp) loaded.set(it.src, bmp); }));
       const ctx = cv.getContext('2d');
-      if (bg === 'grid') {
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(0, 0, cv.width, cv.height);
-        ctx.strokeStyle = 'rgba(12,55,65,.09)';
-        ctx.lineWidth = Math.max(1, k * 1.1);
-        ctx.beginPath();
-        for (let gx = Math.ceil(x0 / GRID) * GRID; gx <= x1; gx += GRID) { const p = Math.round((gx - x0) * k) + .5; ctx.moveTo(p, 0); ctx.lineTo(p, cv.height); }
-        for (let gy = Math.ceil(y0 / GRID) * GRID; gy <= y1; gy += GRID) { const p = Math.round((gy - y0) * k) + .5; ctx.moveTo(0, p); ctx.lineTo(cv.width, p); }
-        ctx.stroke();
-      }
       ctx.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
+      if (bg !== 'none') drawFrameBg(ctx, box, bg, 1);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      inside.forEach((it) => drawItem(ctx, it));
+      drawList(ctx, inside);
       return cv;
     },
     imagePaths: () => items.filter((it) => it.t === 'i').map((it) => it.src),

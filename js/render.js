@@ -6,7 +6,7 @@ import { $app, catById, esc, isDesktop, state } from './core.js';
 import { addDays, isoWeek, ymd } from './dates.js';
 import { folderIc } from './folders.js';
 import { renderHome, resetHomeIntro } from './home.js';
-import { inkHead, leaveInk, mountInk } from './ink.js';
+import { inkHead, inkHeadTools, leaveInk, mountInk } from './ink.js';
 import { ICON, LOGO_MARK, LOGO_WORD } from './icons.js';
 import { renderMeals } from './meals.js';
 import { NAV } from './nav.js';
@@ -124,7 +124,7 @@ function pageCount(tab) {
 
 function pageHead(tab, desk) {
   if (!TITLES[tab]) return '';
-  const tools = desk ? `<div class="ph-tools">${actionsFor(tab)}</div>` : '';
+  const tools = isInkView() ? inkHeadTools() : desk ? `<div class="ph-tools">${actionsFor(tab)}</div>` : '';
   const cnt = (n) => `<span class="cnt ${n ? '' : 'zero'}">${n}</span>`;
   let left;
   if (tab === 'calendar') {
@@ -135,14 +135,14 @@ function pageHead(tab, desk) {
   } else if ((tab === 'todos' || tab === 'notes') && state.list !== null) {
     const c = catById(state.list);
     const n = tab === 'todos' ? todosIn(state.list).filter((i) => !i.done).length : notesIn(state.list).length;
-    // Notizen: umschalten zwischen getippten Notizen und Handschrift
-    const mode = tab === 'notes' ? `<div class="seg-view note-mode">${[['text', 'notes', 'Notizen'], ['ink', 'ink', 'Handschrift']].map(([k, ic, l]) =>
-      `<button class="${(state.noteMode || 'text') === k ? 'on' : ''}" data-act="note-mode" data-id="${k}" aria-label="${l}">${ICON[ic]}<span>${l}</span></button>`).join('')}</div>` : '';
     const title = `${c ? folderIc(c, 'ph-ic') : ''}<b class="ph-t">${esc(c ? c.name : tab === 'todos' ? 'Allgemein' : 'Ohne Kategorie')}</b>`;
-    // Handschrift: Titel als Knopf, der die Kategorien zum Wechseln zeigt
-    left = (isInkView() && inkHead()) || `${desk ? '' : `<button class="ph-back" data-act="close-list" aria-label="Zurück zu den Listen">${ICON.chevL}</button>`}
-      ${isInkView() ? `<button class="ph-drop" data-act="ink-cats" aria-haspopup="menu" aria-label="Kategorie wechseln" title="Kategorie wechseln">${title}${ICON.chevD}</button>` : title + cnt(n)}`;
-    left += mode;
+    // Handschrift: zurück zu den getippten Notizen; Titel als Knopf, der die Kategorien zum Wechseln zeigt
+    if (isInkView()) {
+      left = inkHead() || `<button class="ph-back" data-act="ink-notes" aria-label="Zurück zu den Notizen" title="Zurück zu den Notizen">${ICON.chevL}</button>
+        <button class="ph-drop" data-act="ink-cats" aria-haspopup="menu" aria-label="Kategorie wechseln" title="Kategorie wechseln">${title}${ICON.chevD}</button>`;
+    } else {
+      left = `${desk ? '' : `<button class="ph-back" data-act="close-list" aria-label="Zurück zu den Listen">${ICON.chevL}</button>`}${title}${cnt(n)}`;
+    }
   } else {
     left = `<b>${TITLES[tab]}</b>${cnt(pageCount(tab))}`;
   }

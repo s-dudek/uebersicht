@@ -36,8 +36,8 @@ js/
   ink-board.js      Handschrift: unendliche Zeichenfläche mit Zoom (Stift, Radierer, Auswahl, Formen, Bemaßung, Titel)
   ink-draw.js       Handschrift: Geometrie und Zeichnen (Striche, Formen, Maße, Bilder, Kästchen)
   ink-crop.js       Handschrift: Bild zuschneiden
-  ink-pen.js        Handschrift: Fenster für Farbe und Strichstärke
-  ink-tree.js       Handschrift: Seitenübersicht (Titel und Unterseiten)
+  ink-pen.js        Handschrift: Fenster für Farbe und Stärke (Stift, Textmarker, Text)
+  ink-tree.js       Handschrift: Gliederung (Bereiche, Titel und Unterseiten)
   ink-store.js      Handschrift: Datenbank und Bilder (Supabase Storage)
   ink-export.js     Handschrift: Bereiche als PDF, PNG oder JPEG
   groups.js         Reihenfolge und Gruppen in Listen

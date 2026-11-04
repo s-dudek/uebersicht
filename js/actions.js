@@ -36,7 +36,7 @@ export function initActions() {
       case 'cal-goto': if (state.calView === 'month' && state.calDate !== id) { state.calDate = id; render(); } else { state.calDate = id; state.calView = 'day'; store('calView', 'day'); render(); scrollCal(); } break;
       case 'cal-move': calMove(+id); break;
       case 'new-event-menu': openNewEventMenu(); break;
-      case 'open-list': state.list = id || ''; render(); document.querySelector('.main')?.scrollTo({ top: 0 }); break;
+      case 'open-list': state.list = id || ''; state.noteMode = 'text'; render(); document.querySelector('.main')?.scrollTo({ top: 0 }); break;
       case 'close-list': state.list = null; render(); break;
       case 'open': openItem(id); break;
       case 'toggle-done': state.doneOpen.has(id || '') ? state.doneOpen.delete(id || '') : state.doneOpen.add(id || ''); render(); break;
@@ -53,7 +53,7 @@ export function initActions() {
       case 'new-cat': openNewList({ mode: 'category' }); break;
       case 'list-edit': openCategory(id); break;
       case 'new-note': createNote(); break;
-      case 'note-mode': state.noteMode = id === 'ink' ? 'ink' : 'text'; store('noteMode', state.noteMode); render(); break;
+      case 'note-mode': state.noteMode = id === 'ink' ? 'ink' : 'text'; render(); break;
       default: if (t.dataset.act.startsWith('ink-')) inkAction(t.dataset.act, id, t);
     }
   });

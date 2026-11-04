@@ -36,7 +36,8 @@ function renderNoteList(fid) {
       ${n.remind_at && !n.reminded ? `<span class="tbell" title="Erinnerung">${ICON.bell}</span>` : ''}
       ${n.owner_id !== state.me ? `<span class="tby">${esc(nameOf(n.owner_id))}</span>` : ''}
     </div>`;
-  const body = `<section class="tbig" data-drop="${fid}">
+  const body = `<button class="ink-open" data-act="note-mode" data-id="ink">${ICON.ink}<span><b>Handschrift</b><small>Seiten mit Stift, Text, Formen und Bereichen</small></span>${ICON.chevR}</button>
+  <section class="tbig" data-drop="${fid}">
     <button class="addrow tadd tnew" data-act="new-note-in" data-id="${fid}"><span class="xic">${ICON.plus}</span><span>Neue Notiz …</span></button>
     ${has ? blocksHtml(fid, 'note', row) : '<p class="kempty">Noch keine Notizen.</p>'}
   </section>`;

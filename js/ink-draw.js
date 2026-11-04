@@ -1,5 +1,5 @@
 // Handschrift: Geometrie und Zeichnen (ohne Zustand der Zeichenfläche)
-// Elemente: s = Strich, t = Titel (Striche), i = Bild, f = Bereich (A4), d = Bemaßung
+// Elemente: s = Strich (m: Textmarker), t = Titel (Striche), i = Bild, f = Bereich (A4), d = Bemaßung, x = Text
 import { FRAMES } from './ink-store.js';
 
 export const GRID = 25;   // Kästchengröße in Einheiten
@@ -11,6 +11,7 @@ export function bbox(it) {
   if (b) return b;
   if (it.t === 'i') b = [it.x, it.y, it.x + it.w, it.y + it.h];
   else if (it.t === 'f') { const [w, h] = FRAMES[it.fmt]; b = [it.x, it.y, it.x + w, it.y + h]; }
+  else if (it.t === 'x') { const [w, h] = textSize(it.txt, it.fs); b = [it.x, it.y, it.x + w, it.y + h]; }
   else if (it.t === 'd') {
     const m = dimSize(it).fs * 1.6 + 10;
     b = [Math.min(it.a[0], it.b[0]) - m, Math.min(it.a[1], it.b[1]) - m, Math.max(it.a[0], it.b[0]) + m, Math.max(it.a[1], it.b[1]) + m];
@@ -42,7 +43,7 @@ export function inPolygon(x, y, poly) {
 // Anteil eines Elements innerhalb der Lasso-Linie (0–1)
 export function share(it, poly) {
   if (it.t === 'f') return 0;   // Bereiche werden über ihren Reiter verschoben, nicht ausgewählt
-  if (it.t === 'i') return inPolygon(it.x + it.w / 2, it.y + it.h / 2, poly) ? 1 : 0;
+  if (it.t === 'i' || it.t === 'x') { const b = bbox(it); return inPolygon((b[0] + b[2]) / 2, (b[1] + b[3]) / 2, poly) ? 1 : 0; }
   if (it.t === 'd') return (inPolygon(it.a[0], it.a[1], poly) + inPolygon(it.b[0], it.b[1], poly)) / 2;
   let n = 0, hit = 0;
   for (const s of it.t === 't' ? it.s : [it]) {
@@ -75,6 +76,21 @@ export function nearItem(it, x, y, r) {
   return true;
 }
 
+// Abstand eines Punktes zu einem Element (0 = darauf); Grundlage für Antippen und langes Drücken
+const rectDist = (b, x, y) => Math.hypot(Math.max(b[0] - x, 0, x - b[2]), Math.max(b[1] - y, 0, y - b[3]));
+const strokeDist = (s, x, y) => {
+  const p = s.pts;
+  let d = Infinity;
+  for (let i = 0; i < p.length; i += 3) d = Math.min(d, segDist2(x, y, p[i], p[i + 1], p[i + 3] ?? p[i], p[i + 4] ?? p[i + 1]));
+  return Math.max(0, Math.sqrt(d) - s.w / 2);
+};
+export function distTo(it, x, y) {
+  if (it.t === 's') return strokeDist(it, x, y);
+  if (it.t === 't') return rectDist(bbox(it), x, y) && Math.min(...it.s.map((s) => strokeDist(s, x, y)));   // im Titel: 0
+  if (it.t === 'd') return Math.sqrt(segDist2(x, y, it.a[0], it.a[1], it.b[0], it.b[1]));
+  return rectDist(bbox(it), x, y);   // Bild, Text, Bereich
+}
+
 // Verschieben/Skalieren: neue Objekte, die alten bleiben für "Rückgängig" unverändert
 export function transform(it, ox, oy, k, dx, dy) {
   const tx = (x) => ox + (x - ox) * k + dx, ty = (y) => oy + (y - oy) * k + dy;
@@ -83,6 +99,7 @@ export function transform(it, ox, oy, k, dx, dy) {
   if (it.t === 't') return { ...it, s: it.s.map(st) };
   if (it.t === 'f') return { ...it, x: it.x + dx, y: it.y + dy };   // Bereiche werden nur verschoben
   if (it.t === 'd') return { ...it, w: it.w * k, a: [tx(it.a[0]), ty(it.a[1])], b: [tx(it.b[0]), ty(it.b[1])] };
+  if (it.t === 'x') return { ...it, x: tx(it.x), y: ty(it.y), fs: it.fs * k };
   return { ...it, x: tx(it.x), y: ty(it.y), w: it.w * k, h: it.h * k };   // Zuschnitt und Radierung sind relativ und wandern mit
 }
 
@@ -92,6 +109,7 @@ const widthAt = (s, p) => s.w * (0.35 + 0.95 * p);
 export function drawStroke(ctx, s) {
   const p = s.pts, n = p.length / 3;
   if (!n) return;
+  if (s.m) return drawMarker(ctx, s);
   ctx.strokeStyle = ctx.fillStyle = s.c;
   if (n === 1) {
     ctx.beginPath(); ctx.arc(p[0], p[1], widthAt(s, p[2]) / 2, 0, Math.PI * 2); ctx.fill();
@@ -116,6 +134,66 @@ export function drawStroke(ctx, s) {
   }
   ctx.lineWidth = curW;
   ctx.stroke();
+}
+
+// Textmarker: gleich breit, durchscheinend, in einem Zug (keine dunkleren Überlappungen)
+export const MARKER_ALPHA = .38;
+function drawMarker(ctx, s) {
+  const p = s.pts, n = p.length / 3;
+  ctx.save();
+  ctx.globalAlpha = MARKER_ALPHA;
+  ctx.strokeStyle = s.c;
+  ctx.lineWidth = s.w;
+  ctx.beginPath();
+  ctx.moveTo(p[0], p[1]);
+  if (n === 1) ctx.lineTo(p[0] + .01, p[1]);
+  for (let j = 1; j < n; j++) {
+    const last = j === n - 1;
+    ctx.quadraticCurveTo(p[j * 3], p[j * 3 + 1], last ? p[j * 3] : (p[j * 3] + p[j * 3 + 3]) / 2, last ? p[j * 3 + 1] : (p[j * 3 + 1] + p[j * 3 + 4]) / 2);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- Text: mehrzeilig, ohne Umbruch; gemessen mit einer kleinen Zeichenfläche ----------
+export const LINE_H = 1.3;
+const font = (fs) => `400 ${fs}px Outfit, system-ui, sans-serif`;
+let measureCtx = null;
+export function textSize(txt, fs) {
+  measureCtx ??= document.createElement('canvas').getContext('2d');
+  measureCtx.font = font(fs);
+  const lines = String(txt || ' ').split('\n');
+  return [Math.max(fs * .5, ...lines.map((l) => measureCtx.measureText(l).width)), lines.length * fs * LINE_H];
+}
+export function drawText(ctx, it) {
+  ctx.fillStyle = it.c;
+  ctx.font = font(it.fs);
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  it.txt.split('\n').forEach((l, i) => ctx.fillText(l, it.x, it.y + i * it.fs * LINE_H + it.fs * .15));
+}
+
+// ---------- Bereiche: eigener Hintergrund (weiß, darauf Linien oder Punkte), deckt die Kästchen der Fläche ab ----------
+export const FRAME_BG = [['', 'Kariert (wie die Fläche)'], ['lines', 'Liniert'], ['dots', 'Punktiert'], ['blank', 'Leer (weiß)']];
+
+export function drawFrameBg(ctx, box, bg, k = 1) {
+  const [x0, y0, x1, y1] = box;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+  if (bg === 'grid' || bg === 'lines') {
+    ctx.strokeStyle = 'rgba(12, 55, 65, .12)';
+    ctx.lineWidth = 1.1 / k;
+    ctx.beginPath();
+    for (let gy = Math.ceil(y0 / GRID) * GRID; gy <= y1; gy += GRID) { ctx.moveTo(x0, gy); ctx.lineTo(x1, gy); }
+    if (bg === 'grid') for (let gx = Math.ceil(x0 / GRID) * GRID; gx <= x1; gx += GRID) { ctx.moveTo(gx, y0); ctx.lineTo(gx, y1); }
+    ctx.stroke();
+  } else if (bg === 'dots') {
+    ctx.fillStyle = 'rgba(12, 55, 65, .32)';
+    const r = 1.4;
+    for (let gy = Math.ceil(y0 / GRID) * GRID; gy <= y1; gy += GRID) {
+      for (let gx = Math.ceil(x0 / GRID) * GRID; gx <= x1; gx += GRID) ctx.fillRect(gx - r / 2, gy - r / 2, r, r);
+    }
+  }
 }
 
 // ---------- Formen: werden zu gewöhnlichen Strichen (radierbar, auswählbar, umfärbbar) ----------

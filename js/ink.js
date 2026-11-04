@@ -6,24 +6,29 @@ import { ICON } from './icons.js';
 import { createBoard } from './ink-board.js';
 import { SHAPES } from './ink-draw.js';
 import { deliver, exportWidth, fileName, toImage, toPdf } from './ink-export.js';
-import { clampWidth, openPenPanel, PALETTE } from './ink-pen.js';
-import { deletePageTree, deserialize, loadChild, loadRoot, removeImages, savePage, titleIn, uploadImage } from './ink-store.js';
+import { clampSize, openPenPanel, PALETTE } from './ink-pen.js';
+import { deletePageTree, deserialize, loadChild, loadRoot, removeImages, savePage, serialize, titleIn, uploadImage } from './ink-store.js';
 import { openTree, titleSvg } from './ink-tree.js';
 import { render } from './render.js';
 import { closeSheet, openSheet } from './sheet.js';
 
-// Einstellungen der Werkzeuge (Farbe, Stärke und zuletzt benutzte Farben bleiben gespeichert)
-const saved = (() => { try { return JSON.parse(store('inkPen')) || {}; } catch { return {}; } })();
+// Einstellungen der Werkzeuge: Farbe und Stärke je Art (Stift, Textmarker, Text) und zuletzt benutzte Farben bleiben gespeichert
+const saved = (() => { try { return JSON.parse(store('inkStyle')) || {}; } catch { return {}; } })();
+const style = (kind, c) => ({ c: safeColor(saved[kind]?.c, c), w: clampSize(kind, saved[kind]?.w) });
 const ui = {
   tool: 'pen',
   shape: SHAPES.some(([k]) => k === store('inkShape')) ? store('inkShape') : 'line',
-  color: safeColor(saved.c, PALETTE[0]),
-  width: clampWidth(saved.w),
+  pen: style('pen', PALETTE[0]),
+  marker: style('marker', '#F2D33B'),
+  text: style('text', PALETTE[0]),
   recent: (Array.isArray(saved.r) ? saved.r.map((c) => safeColor(c)).filter(Boolean) : []).concat(['#0C3741', '#3E7CA8', '#C2575A']).filter((c, i, a) => a.indexOf(c) === i).slice(0, 3),
   finger: store('inkFinger') === '1',
   bar: store('inkBar') !== '0',
 };
-const savePen = () => store('inkPen', JSON.stringify({ c: ui.color, w: ui.width, r: ui.recent }));
+const saveStyle = () => store('inkStyle', JSON.stringify({ pen: ui.pen, marker: ui.marker, text: ui.text, r: ui.recent }));
+// welche Einstellung Farbe und Stärke gerade betreffen (Formen und Bemaßung zeichnen mit dem Stift)
+const kindOf = () => (ui.tool === 'text' || ui.tool === 'marker' ? ui.tool : 'pen');
+const DRAW = ['pen', 'marker', 'text', 'shape', 'dim'];   // Werkzeuge mit Farbe
 const SHAPE_ICON = { line: 'shLine', arrow: 'shArrow', rect: 'shRect', ellipse: 'shEllipse', tri: 'shTri' };
 
 const stack = [];      // geöffnete Seiten: [Startseite, Unterseite, …]
@@ -79,11 +84,33 @@ async function openTitle(parent, it, quiet = false) {
   }
 }
 
-// aus der Seitenübersicht: zurück zur Startseite, dann Titel für Titel hinein
-async function openPath(path) {
+// aus der Gliederung: zurück zur Startseite, dann Titel für Titel hinein; frame: Bereich, der gezeigt werden soll
+async function openPath(path, frame) {
   while (stack.length > 1) closePage(stack.pop());
-  for (const it of path) if (!(await openTitle(top(), it, true))) break;
+  for (const it of path) if (!(await openTitle(top(), it, true))) return render();
   render();
+  if (frame !== undefined) top().board.showFrame(frame);
+}
+
+// Bereich umbenennen (aus der Gliederung): offene Seite direkt, sonst in der gespeicherten Seite
+async function renameFrame(row, n, name) {
+  const open = stack.find((p) => p.id === row.id);
+  if (open) { open.board.renameFrame(n, name); return null; }
+  const { items } = deserialize(row.data);
+  const f = items.filter((it) => it.t === 'f')[n];
+  if (!f) return null;
+  if (name) f.n = name; else delete f.n;
+  row.data = serialize(items, row.data?.h || 0, row.data?.w || 0);
+  return savePage(row.id, items, row.data.h, row.data.w);
+}
+
+// schmale Kopfleiste (Smartphone): Bereich und Speichern im Menü „Mehr“
+function openMore(btn) {
+  dropMenu(btn, `<button class="cm-i" data-a="ink-frame">${ICON.frame}<span>Bereich (A4) anlegen</span></button>
+    <button class="cm-i" data-a="ink-export">${ICON.download}<span>Speichern als PDF, PNG, JPEG</span></button>`, (b) => {
+    if (b.dataset.a === 'ink-frame') openFrameChoice(btn);
+    else { flushAll(); openExport(); }
+  });
 }
 
 function closePage(page) {
@@ -143,7 +170,9 @@ function applyUi() {
   if (!b) return;
   if (b.tool !== ui.tool) b.setTool(ui.tool);
   b.setShape(ui.shape);
-  b.setPen({ c: ui.color, w: ui.width });
+  b.setPen(ui.pen);
+  b.setMarker(ui.marker);
+  b.setTextStyle({ c: ui.text.c, fs: ui.text.w });
   b.setFinger(ui.finger);
 }
 
@@ -215,20 +244,18 @@ function openShapes(btn) {
 
 // Farbe und Stärke: Fenster mit allen Farben, eigener Farbe und Regler
 function openPen(btn) {
-  if (ui.tool === 'eraser' || ui.tool === 'lasso') ui.tool = 'pen';
-  applyUi();
-  render();
+  if (!DRAW.includes(ui.tool)) { ui.tool = 'pen'; applyUi(); render(); }
+  const kind = kindOf();
   const anchor = $app.querySelector('[data-act="ink-pen"]') || btn;
-  openPenPanel(anchor, { c: ui.color, w: ui.width }, ({ c, w }) => {
-    ui.color = c;
-    ui.width = w;
+  openPenPanel(anchor, kind, ui[kind], (v) => {
+    ui[kind] = v;
     applyUi();
     const chip = $app.querySelector('.ink-penchip');
-    chip?.style.setProperty('--c', c);
-    chip?.style.setProperty('--w', penDot(w));
-  }, () => { remember(ui.color); savePen(); render(); });
+    chip?.style.setProperty('--c', v.c);
+    chip?.style.setProperty('--w', penDot(kind, v.w));
+  }, () => { remember(ui[kind].c); saveStyle(); render(); });
 }
-const penDot = (w) => Math.round(6 + w * 1.1) + 'px';
+const penDot = (kind, w) => Math.round(Math.min(24, kind === 'text' ? 6 + w / 4 : kind === 'marker' ? 6 + w * .5 : 6 + w * 1.1)) + 'px';
 const remember = (c) => { ui.recent = [c, ...ui.recent.filter((x) => x !== c)].slice(0, 3); };
 
 // Kategorien (Notiz-Ordner) aus der Kopfleiste wählen; nochmal tippen schließt
@@ -259,9 +286,17 @@ export async function inkAction(act, id, btn) {
   const b = top()?.board;
   switch (act) {
     case 'ink-tool': if (id === 'shape') { openShapes(btn); return; } ui.tool = id; break;
-    case 'ink-color': ui.color = ui.recent[+id] || ui.color; if (ui.tool === 'eraser' || ui.tool === 'lasso') ui.tool = 'pen'; savePen(); break;
+    case 'ink-color': {
+      if (!DRAW.includes(ui.tool)) ui.tool = 'pen';
+      const kind = kindOf();
+      ui[kind] = { ...ui[kind], c: ui.recent[+id] || ui[kind].c };
+      saveStyle();
+      break;
+    }
     case 'ink-pen': openPen(btn); return;
-    case 'ink-tree': flushAll(); openTree({ cat, open: stack.map((p) => p.id), onOpen: openPath }); return;
+    case 'ink-tree': flushAll(); openTree({ cat, open: stack.map((p) => p.id), onOpen: openPath, onRename: renameFrame }); return;
+    case 'ink-more': openMore(btn); return;
+    case 'ink-notes': state.noteMode = 'text'; render(); return;
     case 'ink-finger': ui.finger = !ui.finger; store('inkFinger', ui.finger ? '1' : '0'); toast(ui.finger ? 'Mit dem Finger schreiben, mit zwei Fingern verschieben und zoomen' : 'Stift und Maus schreiben, der Finger verschiebt'); break;
     case 'ink-undo': b?.undo(); return;
     case 'ink-redo': b?.redo(); return;
@@ -270,7 +305,7 @@ export async function inkAction(act, id, btn) {
     case 'ink-cats': openCats(btn); return;
     case 'ink-fold': toggleBar(); return;
     case 'ink-zoom': id === 'in' ? b?.zoomIn() : b?.zoomOut(); return;
-    case 'ink-export': openExport(); return;
+    case 'ink-export': flushAll(); openExport(); return;
     case 'ink-back': if (stack.length > 1) closePage(stack.pop()); break;
     default: return;
   }
@@ -302,27 +337,27 @@ function openExport(preselect) {
   const chosen = new Set(preselect ?? frames.map((f) => f.n));
   const seg = (key, opts) => `<div class="seg-view exp-seg" data-key="${key}">${opts.map(([v, l]) => `<button type="button" class="${exp[key] === v ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>`;
   const sheet = openSheet(`
-    <div class="sheet-head"><h2>Exportieren</h2><button class="link-btn" data-close>Fertig</button></div>
+    <div class="sheet-head"><h2>Speichern</h2><button class="link-btn" data-close>Fertig</button></div>
     ${frames.length ? `
       <p class="muted exp-lead">Bereiche auswählen:</p>
       <div class="exp-grid">${frames.map((f) => `<button type="button" class="exp-card ${chosen.has(f.n) ? 'on' : ''}" data-n="${f.n}"><span class="exp-th ${f.fmt}"></span><span>${esc(f.name)}</span></button>`).join('')}</div>
       <div class="exp-row"><span>Format</span>${seg('fmt', [['pdf', 'PDF'], ['png', 'PNG'], ['jpeg', 'JPEG']])}</div>
-      <div class="exp-row"><span>Hintergrund</span>${seg('bg', [['grid', 'Mit Kästchen'], ['none', 'Ohne']])}</div>
+      <div class="exp-row"><span>Hintergrund</span>${seg('bg', [['grid', 'Mit Hintergrund'], ['none', 'Ohne']])}</div>
       <p class="hint exp-note"></p>
-      <button class="btn block" id="exp-go">${ICON.download} Exportieren</button>`
+      <button class="btn block" id="exp-go">${ICON.download} Speichern</button>`
     : `<p class="exp-lead">Noch kein Bereich auf dieser Seite. Lege einen Bereich an, schreibe hinein und exportiere ihn dann.</p>
       <div class="exp-new"><button class="btn" data-f="a4p">${ICON.frame} A4 hoch</button><button class="btn" data-f="a4l">${ICON.frame} A4 quer</button></div>`}`);
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
 
   const note = () => {
     const el = sheet.querySelector('.exp-note');
-    if (el) el.textContent = exp.bg === 'none' ? (exp.fmt === 'png' ? 'PNG ohne Hintergrund ist durchsichtig.' : 'Ohne Kästchen, auf weißem Hintergrund.') : '';
+    if (el) el.textContent = exp.bg === 'none' ? (exp.fmt === 'png' ? 'PNG ohne Hintergrund ist durchsichtig.' : 'Ohne Kästchen, Linien oder Punkte, auf Weiß.') : 'Jeder Bereich mit seinem eigenen Hintergrund (Kästchen, Linien, Punkte oder leer).';
   };
   note();
 
   // kleine Vorschau je Bereich
   frames.forEach(async (f) => {
-    const cv = await b.renderBox(f.box, 220, 'grid');
+    const cv = await b.renderBox(f.box, 220, f.bg);
     sheet.querySelector(`.exp-card[data-n="${f.n}"] .exp-th`)?.appendChild(cv);
   });
 
@@ -350,7 +385,7 @@ function openExport(preselect) {
     } catch (err) {
       toast('Export fehlgeschlagen: ' + (err.message || err), 4000);
       go.disabled = false;
-      go.innerHTML = `${ICON.download} Exportieren`;
+      go.innerHTML = `${ICON.download} Speichern`;
     }
   });
 }
@@ -358,8 +393,8 @@ function openExport(preselect) {
 async function runExport(b, list) {
   const base = `Handschrift ${cat ? catById(cat)?.name || '' : ''} ${new Date().toISOString().slice(0, 10)}`;
   // PDF und JPEG brauchen Weiß, PNG darf durchsichtig sein
-  const bg = exp.bg === 'grid' ? 'grid' : 'none';
   const render1 = async (f) => {
+    const bg = exp.bg === 'grid' ? f.bg : 'none';
     const cv = await b.renderBox(f.box, exportWidth(f.fmt), bg);
     if (bg === 'none' && exp.fmt !== 'png') {
       const white = document.createElement('canvas');
@@ -394,7 +429,7 @@ export function renderInk(fid) {
   if (status === 'error') return '<div class="ink-slot"><p class="empty ink-msg">Die Handschrift ist gerade nicht erreichbar. Bitte später nochmal versuchen.</p></div>';
   if (!top()) return '<div class="ink-slot"><p class="center muted ink-msg">Lädt …</p></div>';
   return `${inkBar()}<div class="ink-slot">
-    <p class="ink-hint" ${stack.length === 1 && top().board.isEmpty ? '' : 'hidden'}>Mit dem Stift schreiben, mit dem Finger verschieben, mit zwei Fingern zoomen. Etwas mit der Auswahl umkreisen und „Als Titel“ wählen: der Titel öffnet eine eigene Seite und lässt sich ziehen (mit dem Finger: lange drücken). Mit „Bereich“ ein A4-Blatt markieren und später exportieren.</p>
+    <p class="ink-hint" ${stack.length === 1 && top().board.isEmpty ? '' : 'hidden'}>Mit dem Stift schreiben, mit dem Finger verschieben, mit zwei Fingern zoomen. Etwas mit der Auswahl umkreisen und „Als Titel“ wählen: der Titel öffnet eine eigene Seite und lässt sich ziehen (mit dem Finger: lange drücken). Oben rechts mit „Bereich“ ein A4-Blatt markieren und später speichern.</p>
   </div>`;
 }
 
@@ -432,32 +467,46 @@ export function inkHead() {
   return `<button class="ph-back" data-act="ink-back" aria-label="Zurück">${ICON.chevL}</button>${titleSvg(top().title)}`;
 }
 
-const tb = (act, icon, label, { on = false, dis = false, id = '' } = {}) =>
-  `<button class="dk ink-b ${on ? 'on' : ''}" data-act="${act}" ${id ? `data-id="${id}"` : ''} aria-label="${label}" title="${label}" ${dis ? 'disabled' : ''}>${ICON[icon]}</button>`;
+const tb = (act, icon, label, { on = false, dis = false, id = '', cls = '' } = {}) =>
+  `<button class="dk ink-b ${on ? 'on' : ''} ${cls}" data-act="${act}" ${id ? `data-id="${id}"` : ''} aria-label="${label}" title="${label}" ${dis ? 'disabled' : ''}>${ICON[icon]}</button>`;
 
-// Werkzeugleiste unter der Kopfleiste, lässt sich einfahren
-function inkBar() {
+// rechts in der Kopfleiste: Rückgängig, Wiederholen, Bereich, Speichern, Finger, Gliederung
+export function inkHeadTools() {
   const b = top()?.board;
+  return `<div class="ph-ink">
+    ${tb('ink-undo', 'undo', 'Rückgängig', { dis: !b?.canUndo })}
+    ${tb('ink-redo', 'redo', 'Wiederholen', { dis: !b?.canRedo })}
+    ${tb('ink-frame', 'frame', 'Bereich (A4) anlegen', { cls: 'wide-only' })}
+    ${tb('ink-export', 'download', 'Speichern als PDF, PNG, JPEG', { cls: 'wide-only' })}
+    ${tb('ink-more', 'dots', 'Mehr', { cls: 'narrow-only' })}
+    <i class="ink-sep"></i>
+    ${tb('ink-finger', 'hand', 'Mit Finger schreiben', { on: ui.finger })}
+    ${tb('ink-tree', 'tree', 'Gliederung')}
+  </div>`;
+}
+
+// Werkzeugleiste unter der Kopfleiste (einfahrbar): links Text, Textmarker, Formen, Bemaßung, Bild, Farben, Zoom;
+// ganz rechts die drei wichtigsten: Stift, Radierer, Auswahl
+function inkBar() {
+  const kind = kindOf(), cur = ui[kind];
+  const tool = (id, icon, label) => tb('ink-tool', icon, label, { id, on: ui.tool === id });
   const seg = (id, icon, label) => `<button class="${ui.tool === id ? 'on' : ''}" data-act="ink-tool" data-id="${id}" aria-label="${label}" title="${label}">${ICON[icon]}</button>`;
   return `<div class="ink-bar ${ui.bar ? '' : 'closed'}">
     <div class="ink-tools"><div class="ink-tools-in">
-      <div class="seg-view ink-seg">${seg('pen', 'pen', 'Stift')}${seg('eraser', 'eraser', 'Radierer')}${seg('lasso', 'lasso', 'Auswählen')}${seg('shape', SHAPE_ICON[ui.shape], 'Formen')}${seg('dim', 'ruler', 'Bemaßung')}</div>
-      <div class="ink-pens">
-        ${ui.recent.map((c, i) => `<button class="ink-dot ${ui.color === c ? 'on' : ''}" data-act="ink-color" data-id="${i}" style="--c:${c}" aria-label="Farbe ${i + 1}"></button>`).join('')}
-        <button class="ink-penchip" data-act="ink-pen" style="--c:${ui.color};--w:${penDot(ui.width)}" aria-label="Farbe und Strichstärke" title="Farbe und Strichstärke"><i></i></button>
-      </div>
-      <i class="ink-sep"></i>
+      ${tool('text', 'text', 'Text')}
+      ${tool('marker', 'marker', 'Textmarker')}
+      ${tool('shape', SHAPE_ICON[ui.shape], 'Formen')}
+      ${tool('dim', 'ruler', 'Bemaßung')}
       ${tb('ink-img', 'image', 'Bild hinzufügen')}
-      ${tb('ink-frame', 'frame', 'Bereich (A4) anlegen')}
-      ${tb('ink-export', 'download', 'Exportieren')}
       <i class="ink-sep"></i>
-      ${tb('ink-undo', 'undo', 'Rückgängig', { dis: !b?.canUndo })}
-      ${tb('ink-redo', 'redo', 'Wiederholen', { dis: !b?.canRedo })}
+      <div class="ink-pens">
+        ${ui.recent.map((c, i) => `<button class="ink-dot ${cur.c === c ? 'on' : ''}" data-act="ink-color" data-id="${i}" style="--c:${c}" aria-label="Farbe ${i + 1}"></button>`).join('')}
+        <button class="ink-penchip" data-act="ink-pen" style="--c:${cur.c};--w:${penDot(kind, cur.w)}" aria-label="Farbe und Stärke" title="Farbe und Stärke"><i></i></button>
+      </div>
       <i class="ink-sep"></i>
       ${tb('ink-zoom', 'minus', 'Verkleinern', { id: 'out' })}
       ${tb('ink-zoom', 'plus', 'Vergrößern', { id: 'in' })}
-      ${tb('ink-finger', 'hand', 'Mit Finger schreiben', { on: ui.finger })}
-      ${tb('ink-tree', 'tree', 'Seitenübersicht')}
+      <div class="seg-view ink-seg">${seg('pen', 'pen', 'Stift')}${seg('eraser', 'eraser', 'Radierer')}${seg('lasso', 'lasso', 'Auswählen')}</div>
     </div></div>
     <button class="ink-fold" data-act="ink-fold" aria-expanded="${ui.bar}" aria-label="Werkzeuge ein- oder ausfahren" title="Werkzeuge">${ICON.chevD}<span>Werkzeuge</span></button>
   </div>`;
