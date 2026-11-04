@@ -74,7 +74,7 @@ async function start(fid) {
 
 async function openTitle(parent, it, quiet = false) {
   try {
-    const row = await loadChild(it.page, parent.id, cat, it.s);
+    const row = await loadChild(it.page, parent.id, cat, it);
     openPage(row);
     if (!quiet) render();
     return true;
@@ -454,10 +454,25 @@ export function mountInk() {
 // speichern, nicht mehr benutzte Bilder entfernen; beim nächsten Öffnen frisch laden (Änderungen der anderen Person)
 export function leaveInk() {
   active = false;
+  fitViewport();
   stack.splice(0).reverse().forEach(closePage);
   cat = null;
   status = 'idle';
 }
+
+// Bildschirmtastatur (iPad): die App auf den sichtbaren Teil begrenzen, damit Kopf- und Werkzeugleiste stehen bleiben
+// und die Zeichenfläche darunter kleiner wird; das Eingabefeld bleibt dabei im Blick
+const vv = window.visualViewport;
+function fitViewport() {
+  const app = document.getElementById('app');
+  if (!app) return;
+  const keyboard = active && vv && vv.height < window.innerHeight - 80;
+  app.style.height = keyboard ? vv.height + 'px' : '';
+  app.style.transform = keyboard && vv.offsetTop ? `translateY(${vv.offsetTop}px)` : '';
+  if (keyboard) requestAnimationFrame(() => top()?.board.reveal());
+}
+vv?.addEventListener('resize', fitViewport);
+vv?.addEventListener('scroll', fitViewport);
 
 // Abmelden: nichts von dieser Person im Speicher lassen
 export function resetInk() {

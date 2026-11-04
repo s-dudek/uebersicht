@@ -20,8 +20,9 @@ const SEL_PX = 4096;     // größte Kantenlänge der Auswahl-Vorschau in Pixel
 const LONG = 480;        // lange drücken (ms)
 const TOOLS = ['pen', 'eraser', 'lasso'];   // Reihenfolge für die Taste am Stift
 const PALM = 70;         // Berührung ab dieser Breite (Punkte) ist ein Handballen, kein Finger
-const PEN_REST = 1200;   // so lange nach dem Stift gilt ein einzelner neuer Finger als aufgelegte Hand (ms)
-const UNDO_PAN = 600;    // setzt der Stift so kurz nach einem Verschieben auf, war es die Hand: zurück (ms)
+const PEN_REST = 1500;   // so lange nach dem Stift gilt ein einzelner neuer Finger als aufgelegte Hand (ms)
+const UNDO_PAN = 900;    // setzt der Stift so kurz nach einem Verschieben auf, war es die Hand: zurück (ms)
+const NEAR = [280, 6000];   // Berührung so nah (Punkte) an der letzten Stiftstelle und so bald danach (ms): Hand
 
 // ====================================================================
 // opts: { items, colors, onCommit(items, h, w), onOpenTitle(titleItem), onDeleteTitles(titles) -> Promise<bool>,
@@ -269,7 +270,7 @@ export function createBoard(opts) {
     if (it.t === 'f') return it.bg && drawFrameBg(ctx, bbox(it), it.bg, scale);   // Rahmen und Reiter sind HTML darüber
     if (it.t === 'x') return drawText(ctx, it);
     if (it.t === 's') return drawStroke(ctx, it);
-    if (it.t === 't') return it.s.forEach((s) => drawStroke(ctx, s));
+    if (it.t === 't') { it.s.forEach((s) => drawStroke(ctx, s)); (it.tx || []).forEach((t) => drawText(ctx, t)); return; }
     if (it.t === 'd') return drawDim(ctx, it);
     const img = loaded.get(it.src);
     if (img) return drawImageItem(ctx, it, img);
@@ -292,7 +293,7 @@ export function createBoard(opts) {
     drawList(ctx, items.filter((it) => !sel?.set.has(it) && it !== crop?.item && it !== textEd?.item && hits(cv, bbox(it))));
   }
   // sobald eine Schrift geladen ist: Texte neu messen und zeichnen
-  const fontReady = () => { items.forEach((it) => it.t === 'x' && forgetBox(it)); redrawAll(); renderSel(); textEd?.fit(); };
+  const fontReady = () => { items.forEach((it) => (it.t === 'x' || it.tx) && forgetBox(it)); redrawAll(); renderSel(); textEd?.fit(); };
   fontListeners.add(fontReady);
 
   const redrawBox = (b) => tiles.forEach((cv) => { if (hits(cv, b)) drawTile(cv); });
@@ -442,7 +443,7 @@ export function createBoard(opts) {
     Object.assign(selBox.style, { left: (x0 - pad + dx) * scale + 'px', top: (y0 - pad + dy) * scale + 'px', width: w * scale + 'px', height: hh * scale + 'px' });
     selBox.classList.toggle('below', (y0 - view.y) * cur() < 56);
     const list = [...sel.set];
-    selBox.querySelector('[data-sel="title"]').hidden = !list.some((it) => it.t === 's') || list.some((it) => it.t === 't');
+    selBox.querySelector('[data-sel="title"]').hidden = !list.some(titlePart) || list.some((it) => it.t === 't');
     selBox.querySelector('[data-sel="crop"]').hidden = !single('i');
     selBox.querySelector('[data-sel="edit"]').hidden = !single('d') && !single('x');
     if (dx || dy || k !== 1) return;   // beim Ziehen nur verschieben, nicht neu zeichnen
@@ -482,13 +483,16 @@ export function createBoard(opts) {
     renderSel();
   }
 
+  // Titel aus den ausgewählten Strichen und Texten (Gruppen fallen weg, der Titel ist selbst eine Einheit)
+  const titlePart = (it) => it.t === 's' || it.t === 'x';
   function makeTitle() {
     if (!sel) return;
-    const strokes = items.filter((it) => sel.set.has(it) && it.t === 's');
-    if (!strokes.length) return;
-    const title = { t: 't', page: newId(), s: strokes.map(({ c, w, pts }) => ({ t: 's', c, w, pts })) };
-    const first = items.findIndex((it) => sel.set.has(it) && it.t === 's');
-    const next = items.filter((it) => !(sel.set.has(it) && it.t === 's'));
+    const parts = items.filter((it) => sel.set.has(it) && titlePart(it));
+    if (!parts.length) return;
+    const tx = parts.filter((it) => it.t === 'x').map(({ g, ...t }) => t);
+    const title = { t: 't', page: newId(), s: parts.filter((it) => it.t === 's').map(({ c, w, pts, m }) => ({ t: 's', c, w, pts, ...(m ? { m } : {}) })), ...(tx.length ? { tx } : {}) };
+    const first = items.findIndex((it) => sel.set.has(it) && titlePart(it));
+    const next = items.filter((it) => !(sel.set.has(it) && titlePart(it)));
     next.splice(Math.min(first, next.length), 0, title);
     sel = null;
     commit(next);
@@ -515,7 +519,7 @@ export function createBoard(opts) {
     renderSel();
   }
   const editSingle = () => { const d = single('d'), x = single('x'); if (d) editDim(d); else if (x) editText(x); };
-  const recolor = (c) => editSel((it) => (it.t === 's' || it.t === 'd' || it.t === 'x' ? { ...it, c } : it.t === 't' ? { ...it, s: it.s.map((s) => ({ ...s, c })) } : it));
+  const recolor = (c) => editSel((it) => (it.t === 's' || it.t === 'd' || it.t === 'x' ? { ...it, c } : it.t === 't' ? { ...it, s: it.s.map((s) => ({ ...s, c })), ...(it.tx ? { tx: it.tx.map((t) => ({ ...t, c })) } : {}) } : it));
   const group = () => { const g = newId(); editSel((it) => ({ ...it, g })); };
   const ungroup = () => editSel(({ g, ...rest }) => rest);
   const unerase = () => editSel(({ er, ...rest }) => rest);
@@ -682,7 +686,7 @@ export function createBoard(opts) {
     const list = [...sel.set];
     const g = list[0].g;
     const oneGroup = g && list.every((it) => it.g === g);
-    const canTitle = list.some((it) => it.t === 's') && !list.some((it) => it.t === 't');
+    const canTitle = list.some(titlePart) && !list.some((it) => it.t === 't');
     const hasInk = list.some((it) => it.t !== 'i');
     const img = single('i'), dim = single('d'), txt = single('x');
     const item = (m, icon, label, cls = '') => `<button class="cm-i ${cls}" data-m="${m}">${ICON[icon]}<span>${label}</span></button>`;
@@ -887,6 +891,8 @@ export function createBoard(opts) {
 
   // Handballen: die Hand liegt oft schon auf, bevor der Stift aufsetzt. Wurde dadurch verschoben, wird das zurückgenommen.
   let lastPen = 0, penUsed = false, handPan = null;   // handPan: { from, end } des letzten Verschiebens mit dem Finger
+  const penAt = [0, 0];                               // letzte Stelle des Stifts am Bildschirm
+  const notePen = (e) => { penUsed = true; lastPen = performance.now(); penAt[0] = e.clientX; penAt[1] = e.clientY; };
   function undoHandPan(a) {
     const from = a?.from || (handPan && performance.now() - handPan.end < UNDO_PAN ? handPan.from : null);
     handPan = null;
@@ -895,11 +901,19 @@ export function createBoard(opts) {
     moveView();
     settle();
   }
-  const isPalm = (e) => penUsed && (Math.max(e.width || 0, e.height || 0) > PALM || (!fingers.size && performance.now() - lastPen < PEN_REST));
+  // Hand statt Finger: große Auflage, ein einzelner Finger kurz nach dem Stift, oder eine Berührung rund um die Stelle,
+  // an der gerade geschrieben wurde (dort liegt beim Schreiben der Handballen)
+  function isPalm(e) {
+    if (!penUsed) return false;
+    const since = performance.now() - lastPen;
+    return Math.max(e.width || 0, e.height || 0) > PALM
+      || (!fingers.size && since < PEN_REST)
+      || (since < NEAR[1] && Math.hypot(e.clientX - penAt[0], e.clientY - penAt[1]) < NEAR[0]);
+  }
 
   sc.addEventListener('pointerdown', (e) => {
     stopAnim();
-    if (e.pointerType === 'pen') { penUsed = true; lastPen = performance.now(); }
+    if (e.pointerType === 'pen') notePen(e);
     if (outline) {   // Gliederung auf der Fläche: Antippen beendet sie (Titel und Reiter bleiben antippbar)
       endOutline();
       if (e.pointerType !== 'touch' && !e.target.closest('.ink-title, .ink-ftab')) return;
@@ -998,7 +1012,7 @@ export function createBoard(opts) {
   });
 
   sc.addEventListener('pointermove', (e) => {
-    if (e.pointerType === 'pen') lastPen = performance.now();   // auch schwebender Stift (neuere iPads)
+    if (e.pointerType === 'pen') notePen(e);   // auch schwebender Stift (neuere iPads)
     if (lp && e.pointerId === lp.id && Math.hypot(e.clientX - lp.cx, e.clientY - lp.cy) > 8) cancelLp();
     if (fingers.has(e.pointerId)) fingers.set(e.pointerId, [e.clientX, e.clientY]);
     if (act?.kind === 'pinch') { if (fingers.has(e.pointerId)) pinchMove(); return; }
@@ -1253,6 +1267,14 @@ export function createBoard(opts) {
     frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, bg: f.bg || 'grid', box: bbox(f) })),
     renameFrame(n, name) { const f = frameList()[n]; if (f) setFrame(f, { n: name.trim().slice(0, 40) }); },
     showOutline,
+    // offenes Eingabefeld sichtbar halten (z. B. wenn am iPad die Tastatur die Fläche verkleinert)
+    reveal() {
+      const el = textEd?.el || field;
+      if (!el) return;
+      const r = el.getBoundingClientRect(), v = sc.getBoundingClientRect(), m = 16;
+      const dy = r.bottom > v.bottom - m ? v.bottom - m - r.bottom : r.top < v.top + m ? v.top + m - r.top : 0;
+      if (dy) panBy(0, dy);
+    },
     showFrame(n) { const f = frameList()[n]; if (f) goTo(f.x - GRID * 2, f.y - GRID * 3, view.z); },
     // Bereich als Bild zeichnen; bg: 'grid' (Kästchen), 'lines', 'dots', 'blank' (alle auf Weiß) oder 'none' (durchsichtig)
     async renderBox(box, pxW, bg) {

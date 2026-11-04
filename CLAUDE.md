@@ -30,7 +30,8 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   Formen (als Striche), Textmarker (Strich mit `m`), Text (Element `x`), Bemaßung (Element `d`), Bilder mit Zuschnitt `cr` und Radierspuren `er`,
   Bereiche mit Name `n`, Hintergrund `bg` (lines/dots/blank) und Farbe `fc`, Gliederung (Bereiche und Titel je Seite, „Auf der Fläche zeigen“),
   Text mit Schriftart `ff` (FONTS in ink-draw.js, Google Fonts in index.html), Schnitt `fw`, kursiv `i`; Ursprungsansicht = erster Bereich,
-  Handballen: großer Kontakt, Finger kurz nach dem Stift und Verschieben direkt vor dem Stift werden ignoriert bzw. zurückgenommen.
+  Titel aus Strichen und Texten (`tx`). Handballen: großer Kontakt, Finger kurz nach dem Stift oder nahe der letzten Stiftstelle,
+  Verschieben direkt vor dem Stift werden ignoriert bzw. zurückgenommen. Bildschirmtastatur: `#app` auf `visualViewport` begrenzt (ink.js).
   Einstieg über den Knopf „Handschrift“ in den Notizen,
   Stifttaste wechselt Werkzeug (nur wo der Browser sie meldet – Apple-Pencil-Doppeltippen/Drücken erreicht Webseiten nicht),
   Export als PDF/PNG/JPEG (eigener PDF-Schreiber in `ink-export.js`). Bilder im privaten Storage-Bucket `ink` (`c/<ordner-id>/…`, `u/<user-id>/…`).

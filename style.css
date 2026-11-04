@@ -1155,7 +1155,9 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .tree-fr { position: relative; display: flex; align-items: center; }
 .tree-fr { --fc: #3E7CA8; }
 .tree-fr .tree-i { min-height: 44px; font-weight: 500; color: var(--fc); }
-.tree-show { margin-bottom: 12px; }
+.tree-show { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--soft); }
+.tree-show svg { width: 17px; height: 17px; }
+@media (hover: hover) { .tree-show:hover { background: var(--pale); } }
 .tree-fr .tree-i > svg:first-child { width: 18px; height: 18px; flex: none; }
 .tree-fn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tree-fr small { margin-left: auto; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--fc) 10%, transparent); font-size: 12px; white-space: nowrap; }

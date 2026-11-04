@@ -2,24 +2,32 @@
 // Bereiche lassen sich hier umbenennen; Tippen öffnet die Seite bzw. zeigt den Bereich.
 import { esc, toast } from './core.js';
 import { ICON } from './icons.js';
+import { fontCss, LINE_H, textSize } from './ink-draw.js';
 import { deserialize, loadTree } from './ink-store.js';
 import { closeSheet, openSheet } from './sheet.js';
 
-// Titel als Bild aus den eigenen Strichen (nur Zahlen und geprüfte Farben).
+// Titel als Bild aus den eigenen Strichen und Texten (nur Zahlen, geprüfte Farben und maskierter Text).
 // Die Linien behalten ihre Bildschirmstärke, damit ein verkleinerter oder vergrößerter Titel nicht fetter wirkt.
-export function titleSvg(strokes, cls = 'ink-ttl') {
-  if (!strokes.length) return '';
+export function titleSvg({ s: strokes = [], tx = [] }, cls = 'ink-ttl') {
+  if (!strokes.length && !tx.length) return '';
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const s of strokes) for (let i = 0; i < s.pts.length; i += 3) {
     x0 = Math.min(x0, s.pts[i]); y0 = Math.min(y0, s.pts[i + 1]); x1 = Math.max(x1, s.pts[i]); y1 = Math.max(y1, s.pts[i + 1]);
   }
+  for (const t of tx) {
+    const [w, h] = textSize(t.txt, t);
+    x0 = Math.min(x0, t.x); y0 = Math.min(y0, t.y); x1 = Math.max(x1, t.x + w); y1 = Math.max(y1, t.y + h);
+  }
+  // Texte: je Zeile ein <text>, Grundlinie wie auf der Fläche
+  const texts = tx.map((t) => t.txt.split('\n').map((l, i) =>
+    `<text x="${t.x.toFixed(1)}" y="${(t.y + i * t.fs * LINE_H + t.fs * 1.05).toFixed(1)}" fill="${esc(t.c)}" stroke="none" style="font:${esc(fontCss(t))}">${esc(l)}</text>`).join('')).join('');
   const pad = 6;
   const paths = strokes.map((s) => {
     const d = [];
     for (let i = 0; i < s.pts.length; i += 3) d.push(`${i ? 'L' : 'M'}${s.pts[i].toFixed(1)} ${s.pts[i + 1].toFixed(1)}`);
     if (d.length === 1) d.push(`L${(s.pts[0] + .1).toFixed(1)} ${s.pts[1].toFixed(1)}`);
     return `<path d="${d.join('')}" stroke="${esc(s.c)}" stroke-width="${Math.min(3, Math.max(1.3, s.w * .75)).toFixed(2)}" vector-effect="non-scaling-stroke"/>`;
-  }).join('');
+  }).join('') + texts;
   return `<svg class="${cls}" viewBox="${(x0 - pad).toFixed(1)} ${(y0 - pad).toFixed(1)} ${(x1 - x0 + pad * 2).toFixed(1)} ${(y1 - y0 + pad * 2).toFixed(1)}" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Handschriftlicher Titel">${paths}</svg>`;
 }
 
@@ -30,8 +38,8 @@ const frameName = (f, n) => f.n || `${fmtName(f)} · ${n + 1}`;
 // onOpen(pfad aus Titeln, bereich?); onRename(seite, bereich, name) -> Promise<Fehler | null>;
 // onShow(): Bereiche und Titel der geöffneten Seite auf der Fläche hervorheben
 export async function openTree({ cat, open, onOpen, onRename, onShow }) {
-  const sheet = openSheet(`<div class="sheet-head"><h2>Gliederung</h2><button class="link-btn" data-close>Fertig</button></div>
-    <button class="btn secondary block tree-show">${ICON.eye} Auf der Fläche zeigen</button>
+  const sheet = openSheet(`<div class="sheet-head"><h2>Gliederung</h2>
+      <span class="sh-btns"><button class="tree-show" aria-label="Auf der Fläche zeigen" title="Auf der Fläche zeigen">${ICON.eye}</button><button class="link-btn" data-close>Fertig</button></span></div>
     <div class="tree-body"><p class="muted">Lädt …</p></div>`);
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
   sheet.querySelector('.tree-show').addEventListener('click', () => { closeSheet(); onShow(); });
@@ -59,7 +67,7 @@ export async function openTree({ cat, open, onOpen, onRename, onShow }) {
       if (child) pages.push(child);
       const sub = child && depth < 12 ? branch(child, paths.length - 1, p, depth + 1) : '';
       return `<li><button class="tree-i ${open.includes(it.page) ? 'on' : ''}" data-n="${paths.length - 1}">
-          ${titleSvg(it.s, 'tree-ttl')}${ICON.chevR}</button>${sub ? `<ul>${sub}</ul>` : ''}</li>`;
+          ${titleSvg(it, 'tree-ttl')}${ICON.chevR}</button>${sub ? `<ul>${sub}</ul>` : ''}</li>`;
     }).join('');
     return frames + titles;
   }

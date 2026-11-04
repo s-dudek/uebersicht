@@ -54,6 +54,15 @@ function decodeRel(str) {
   });
 }
 
+// Text: gespeichert und beim Laden geprüft (auch Texte in Titeln)
+const textOut = (it) => ({ t: 'x', x: it.x, y: it.y, txt: it.txt, c: it.c, fs: it.fs, ff: it.ff, fw: it.fw, ...(it.i ? { i: 1 } : {}) });
+function textIn(it) {
+  if (it?.t !== 'x' || typeof it.txt !== 'string' || !it.txt) return null;
+  return { t: 'x', x: num(it.x, -1e6, 1e6, 0), y: num(it.y, -1e6, 1e6, 0), txt: it.txt.slice(0, 2000), c: safeColor(it.c, '#0C3741'), fs: num(it.fs, 4, 400, 20),
+    ff: FONTS[it.ff] ? it.ff : 'sans', fw: [300, 400, 500, 700].includes(it.fw) ? it.fw : 400, ...(it.i === 1 ? { i: 1 } : {}) };
+}
+const textsIn = (list) => (Array.isArray(list) ? list.slice(0, 50).map(textIn).filter(Boolean) : []);
+
 const strokeOut = (s) => ({ c: s.c, w: s.w, p: encodePts(s.pts), ...(s.m ? { m: 1 } : {}) });
 const strokeIn = (s) => ({ t: 's', c: safeColor(s?.c, '#0C3741'), w: num(s?.w, .5, 60, 2.2), pts: decodePts(s?.p), ...(s?.m === 1 ? { m: 1 } : {}) });
 
@@ -67,7 +76,7 @@ export function serialize(items, h, w) {
     items: items.map((it) => {
       const g = it.g ? { g: it.g } : {};
       if (it.t === 'f') return { t: 'f', fmt: it.fmt, x: it.x, y: it.y, ...(it.n ? { n: it.n } : {}), ...(it.bg ? { bg: it.bg } : {}), ...(it.fc ? { fc: it.fc } : {}) };
-      if (it.t === 'x') return { t: 'x', x: it.x, y: it.y, txt: it.txt, c: it.c, fs: it.fs, ff: it.ff, fw: it.fw, ...(it.i ? { i: 1 } : {}), ...g };
+      if (it.t === 'x') return { ...textOut(it), ...g };
       if (it.t === 's') return { t: 's', ...strokeOut(it), ...g };
       if (it.t === 'i') {
         const img = { t: 'i', src: it.src, x: it.x, y: it.y, w: it.w, h: it.h, ...g };
@@ -76,7 +85,7 @@ export function serialize(items, h, w) {
         return img;
       }
       if (it.t === 'd') return { t: 'd', a: it.a, b: it.b, c: it.c, w: it.w, txt: it.txt, ...g };
-      return { t: 't', page: it.page, s: it.s.map(strokeOut), ...g };
+      return { t: 't', page: it.page, ...titleOut(it), ...g };
     }),
   };
 }
@@ -100,17 +109,14 @@ export function deserialize(data) {
       const pt = (p) => [num(p[0], -1e6, 1e6, 0), num(p[1], -1e6, 1e6, 0)];
       out = { t: 'd', a: pt(it.a), b: pt(it.b), c: safeColor(it.c, '#0C3741'), w: num(it.w, .5, 30, 2.2), txt: typeof it.txt === 'string' ? it.txt.slice(0, 40) : '' };
     } else if (it?.t === 't' && UUID.test(it.page || '') && Array.isArray(it.s)) {
-      out = { t: 't', page: it.page, s: it.s.map(strokeIn) };
+      out = { t: 't', page: it.page, ...titleIn(it) };
     } else if (it?.t === 'f' && FRAMES[it.fmt]) {
       const snap = (v) => Math.round(num(v, -1e6, 1e6, 0) / 25) * 25;
       out = { t: 'f', fmt: it.fmt, x: snap(it.x), y: snap(it.y) };
       if (typeof it.n === 'string' && it.n.trim()) out.n = it.n.trim().slice(0, 40);   // eigener Name
       if (FRAME_BGS.includes(it.bg)) out.bg = it.bg;                                    // Hintergrund
       if (safeColor(it.fc)) out.fc = it.fc;                                             // Farbe von Rahmen und Reiter
-    } else if (it?.t === 'x' && typeof it.txt === 'string' && it.txt) {                 // Text
-      out = { t: 'x', x: num(it.x, -1e6, 1e6, 0), y: num(it.y, -1e6, 1e6, 0), txt: it.txt.slice(0, 2000), c: safeColor(it.c, '#0C3741'), fs: num(it.fs, 4, 400, 20),
-        ff: FONTS[it.ff] ? it.ff : 'sans', fw: [300, 400, 500, 700].includes(it.fw) ? it.fw : 400, ...(it.i === 1 ? { i: 1 } : {}) };
-    }
+    } else if (it?.t === 'x') out = textIn(it);   // Text
     if (!out) continue;
     if (UUID.test(it.g || '')) out.g = it.g;   // Gruppe
     items.push(out);
@@ -118,8 +124,14 @@ export function deserialize(data) {
   return { items, h: num(data?.h, 0, 1e6, 0), w: num(data?.w, 0, 1e6, 0) };
 }
 
-export const titleOut = (strokes) => ({ s: strokes.map(strokeOut) });
-export const titleIn = (t) => (Array.isArray(t?.s) ? t.s.map(strokeIn) : []);
+// Titel: Striche (s) und Texte (tx)
+export const titleOut = (t) => ({ s: (t.s || []).map(strokeOut), ...(t.tx?.length ? { tx: t.tx.map(textOut) } : {}) });
+export function titleIn(t) {
+  const out = { s: Array.isArray(t?.s) ? t.s.map(strokeIn) : [] };
+  const tx = textsIn(t?.tx);
+  if (tx.length) out.tx = tx;
+  return out;
+}
 
 // ---------- Seiten ----------
 // Startseite eines Notiz-Ordners (catId leer: "Ohne Kategorie", nur die eigene)
@@ -145,11 +157,11 @@ export async function loadRoot(catId) {
 }
 
 // Unterseite eines Titels: wird erst beim ersten Öffnen angelegt
-export async function loadChild(id, parentId, catId, titleStrokes) {
+export async function loadChild(id, parentId, catId, title) {
   const { data, error } = await sb.from('ink_pages').select('*').eq('id', id);
   if (error) throw error;
   if (data[0]) return data[0];
-  const row = { id, owner_id: state.me, parent_id: parentId, category_id: catId || null, title: titleOut(titleStrokes), data: { v: 1, items: [] } };
+  const row = { id, owner_id: state.me, parent_id: parentId, category_id: catId || null, title: titleOut(title), data: { v: 1, items: [] } };
   const ins = await sb.from('ink_pages').insert(row);
   if (ins.error) throw ins.error;
   return row;

@@ -1,5 +1,5 @@
 // Handschrift: Geometrie und Zeichnen (ohne Zustand der Zeichenfläche)
-// Elemente: s = Strich (m: Textmarker), t = Titel (Striche), i = Bild, f = Bereich (A4), d = Bemaßung, x = Text
+// Elemente: s = Strich (m: Textmarker), t = Titel (Striche s, Texte tx), i = Bild, f = Bereich (A4), d = Bemaßung, x = Text
 import { FRAMES } from './ink-store.js';
 
 export const GRID = 25;   // Kästchengröße in Einheiten
@@ -23,6 +23,10 @@ export function bbox(it) {
         b[0] = Math.min(b[0], s.pts[i] - r); b[1] = Math.min(b[1], s.pts[i + 1] - r);
         b[2] = Math.max(b[2], s.pts[i] + r); b[3] = Math.max(b[3], s.pts[i + 1] + r);
       }
+    }
+    for (const x of it.tx || []) {   // Texte im Titel
+      const t = bbox(x);
+      b = [Math.min(b[0], t[0]), Math.min(b[1], t[1]), Math.max(b[2], t[2]), Math.max(b[3], t[3])];
     }
   }
   boxes.set(it, b);
@@ -49,6 +53,7 @@ export function share(it, poly) {
   for (const s of it.t === 't' ? it.s : [it]) {
     for (let i = 0; i < s.pts.length; i += 3) { n++; if (inPolygon(s.pts[i], s.pts[i + 1], poly)) hit++; }
   }
+  for (const x of it.tx || []) { n++; hit += share(x, poly); }
   return n ? hit / n : 0;
 }
 
@@ -71,7 +76,7 @@ export function nearItem(it, x, y, r) {
   const b = bbox(it);
   if (x < b[0] - r || x > b[2] + r || y < b[1] - r || y > b[3] + r) return false;
   if (it.t === 's') return nearStroke(it, x, y, r);
-  if (it.t === 't') return it.s.some((s) => nearStroke(s, x, y, r));
+  if (it.t === 't') return it.s.some((s) => nearStroke(s, x, y, r)) || (it.tx || []).some((t) => nearItem(t, x, y, r));
   if (it.t === 'd') return segDist2(x, y, it.a[0], it.a[1], it.b[0], it.b[1]) <= (r + dimSize(it).fs) ** 2;
   return true;
 }
@@ -86,7 +91,7 @@ const strokeDist = (s, x, y) => {
 };
 export function distTo(it, x, y) {
   if (it.t === 's') return strokeDist(it, x, y);
-  if (it.t === 't') return rectDist(bbox(it), x, y) && Math.min(...it.s.map((s) => strokeDist(s, x, y)));   // im Titel: 0
+  if (it.t === 't') return rectDist(bbox(it), x, y) && Math.min(...it.s.map((s) => strokeDist(s, x, y)), ...(it.tx || []).map((t) => rectDist(bbox(t), x, y)));   // im Titel: 0
   if (it.t === 'd') return Math.sqrt(segDist2(x, y, it.a[0], it.a[1], it.b[0], it.b[1]));
   return rectDist(bbox(it), x, y);   // Bild, Text, Bereich
 }
@@ -96,7 +101,7 @@ export function transform(it, ox, oy, k, dx, dy) {
   const tx = (x) => ox + (x - ox) * k + dx, ty = (y) => oy + (y - oy) * k + dy;
   const st = (s) => ({ ...s, w: s.w * k, pts: s.pts.map((v, i) => (i % 3 === 0 ? tx(v) : i % 3 === 1 ? ty(v) : v)) });
   if (it.t === 's') return st(it);
-  if (it.t === 't') return { ...it, s: it.s.map(st) };
+  if (it.t === 't') return { ...it, s: it.s.map(st), ...(it.tx ? { tx: it.tx.map((t) => transform(t, ox, oy, k, dx, dy)) } : {}) };
   if (it.t === 'f') return { ...it, x: it.x + dx, y: it.y + dy };   // Bereiche werden nur verschoben
   if (it.t === 'd') return { ...it, w: it.w * k, a: [tx(it.a[0]), ty(it.a[1])], b: [tx(it.b[0]), ty(it.b[1])] };
   if (it.t === 'x') return { ...it, x: tx(it.x), y: ty(it.y), fs: it.fs * k };
