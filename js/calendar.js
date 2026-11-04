@@ -25,7 +25,7 @@ export function dayContent(d) {
   }
   for (const m of mealsOn(d)) { const st = toMin(MEAL_AT[m.meta?.slot] || '12:00'); timed.push({ kind: 'meal', item: m, start: st, end: st + 45, label: m.title }); }
   for (const t of state.items.filter((i) => i.type === 'todo' && i.due_date === d)) allday.push({ kind: 'todo', item: t, label: t.title || 'Todo' });
-  for (const r of state.items.filter((i) => i.type !== 'event' && i.type !== 'meal' && i.remind_at && !i.done && !i.reminded && ymd(new Date(i.remind_at)) === d)) {
+  for (const r of state.items.filter((i) => i.type !== 'event' && i.type !== 'meal' && i.type !== 'training' && i.remind_at && !i.done && !i.reminded && ymd(new Date(i.remind_at)) === d)) {
     const t = new Date(r.remind_at); const st = t.getHours() * 60 + t.getMinutes();
     timed.push({ kind: 'rem', item: r, start: st, end: st + 30, label: r.title || 'Erinnerung' });
   }

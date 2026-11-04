@@ -47,6 +47,8 @@ js/
   events.js         Termine und Geburtstage
   calendar.js       Kalender (Tag, Woche, Monat)
   meals.js          Gerichte, Wochenplan, Einkaufsliste
+  training.js       Training: Woche, Einheiten mit Übungen zum Abhaken
+  plan-import.js    Code einfügen: Gerichte, Einkauf und Training (Tag oder Woche)
   reminders.js      Erinnerungen und Push
   panels.js         Schnelle Notiz, Einstellungen
   vendor/supabase.js  Supabase-Bibliothek, lokal gebündelt (kein CDN)

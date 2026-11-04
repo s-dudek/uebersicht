@@ -58,7 +58,7 @@ const remindTag = (i) => i.remind_at && !i.reminded && !i.done
 
 function explorer(tab, folders) {
 
-  const pool = state.items.filter((i) => (tab === 'todos' ? i.type === 'todo' : tab === 'notes' ? i.type === 'note' : i.type !== 'meal'));
+  const pool = state.items.filter((i) => (tab === 'todos' ? i.type === 'todo' : tab === 'notes' ? i.type === 'note' : i.type !== 'meal' && i.type !== 'training'));
   const inFolder = (f) => pool
     .filter((i) => (f.id ? i.category_id === f.id : !i.category_id || !catById(i.category_id)))
     .sort((a, b) => (a.type === 'todo' && b.type === 'todo' && a.done !== b.done) ? (a.done ? 1 : -1) : b.updated_at.localeCompare(a.updated_at));
@@ -107,7 +107,7 @@ function explorer(tab, folders) {
 
 export function renderCategoryPage() {
   const cats = state.categories;
-  const uncategorized = state.items.filter((i) => (!i.category_id || !catById(i.category_id)) && i.type !== 'meal');
+  const uncategorized = state.items.filter((i) => (!i.category_id || !catById(i.category_id)) && i.type !== 'meal' && i.type !== 'training');
   const itemLine = (i) => `<button class="use-item ${i.done ? 'done' : ''}" data-act="open" data-id="${i.id}" data-drag="${i.id}">
       <span class="ui-ic">${i.type === 'todo' ? (i.done ? ICON.check : '<i class="ui-ring"></i>') : ICON.notes}</span>
       <span class="ui-t">${esc(i.title) || 'Ohne Titel'}</span>

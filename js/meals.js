@@ -1,8 +1,8 @@
-// Bereich Gerichte: Wochenplan, Einkaufsliste, Import
+// Bereich Gerichte: Wochenplan, Einkaufsliste, Übernahme aus einem Code
 import { isTile, toggleTile } from './categories.js';
 import { canDeleteItem, debounce, esc, itemById, sb, state, toast } from './core.js';
 import { deleteItem, insertCategory, loadAll, saveItem } from './data.js';
-import { addDays, dayName, isoWeek, mondayOf, parseYmd, ymd } from './dates.js';
+import { addDays, dayName, isoWeek, parseYmd, ymd } from './dates.js';
 import { ICON } from './icons.js';
 import { render } from './render.js';
 import { closeSheet, openSheet } from './sheet.js';
@@ -72,11 +72,11 @@ export function renderMeals() {
       </div>
       <div class="wsum-act">
         ${cat ? `<button class="btn secondary" data-act="goto-shop">${ICON.cart} Wocheneinkauf · ${openShop} offen</button>` : ''}
-        <button class="btn" data-act="import-plan">${ICON.plus} Wochenplan einfügen</button>
+        <button class="btn" data-act="import-plan">${ICON.plus} Code einfügen</button>
       </div>
     </section>`;
   if (!weekMeals.length) {
-    return summary + `<section class="tile"><p class="empty">Für diese Woche ist noch nichts geplant. Lass dir mit dem Skill „Wochenplan“ einen Plan erstellen und füge den Code hier ein.</p>
+    return summary + `<section class="tile"><p class="empty">Für diese Woche ist noch nichts geplant. Stell dir mit Claude das Essen zusammen (für einen Tag oder die ganze Woche) und füge den Code hier ein.</p>
       ${window.__DEMO ? '<button class="btn block" data-act="demo-plan">Beispielwoche laden</button>' : ''}</section>`;
   }
   return summary + `<div class="tgrid days">${days.map((d) => {
@@ -128,58 +128,7 @@ export function openMeal(id) {
   sheet.querySelector('#m-delete')?.addEventListener('click', async () => { if (await deleteItem(id)) closeSheet(); });
 }
 
-// ---------- Wochenplan einfügen ----------
-function parsePlan(text) {
-  const a = text.indexOf('{'), b = text.lastIndexOf('}');
-  if (a < 0 || b < a) throw new Error('Kein Wochenplan-Code gefunden. Bitte den ganzen Code aus dem Chat einfügen.');
-  let plan;
-  try { plan = JSON.parse(text.slice(a, b + 1)); } catch { throw new Error('Der Code ist unvollständig oder beschädigt. Bitte noch einmal komplett kopieren.'); }
-  if (!Array.isArray(plan.gerichte) && !Array.isArray(plan.einkauf)) throw new Error('Im Code fehlen Gerichte und Einkaufsliste.');
-  return plan;
-}
-
-export function openImport() {
-  const sheet = openSheet(`
-    <div class="sheet-head"><h2>Wochenplan einfügen</h2><button class="link-btn" data-close>Fertig</button></div>
-    <p class="hint" style="margin:0 2px 12px">Den Code, den dir Claude mit dem Skill „Wochenplan“ gibt, hier komplett einfügen.</p>
-    <textarea class="textarea" id="imp-text" rows="7" placeholder="WOCHENPLAN { … }"></textarea>
-    <div id="imp-preview"></div>
-    <div class="row-inline" style="margin-top:12px">
-      ${window.__DEMO ? '<button class="btn secondary" id="imp-demo" type="button">Beispiel</button>' : ''}
-      <button class="btn" id="imp-go" type="button" style="flex:1" disabled>Übernehmen</button>
-    </div>`);
-  const $t = sheet.querySelector('#imp-text'), $p = sheet.querySelector('#imp-preview'), $go = sheet.querySelector('#imp-go');
-  let plan = null;
-  const check = () => {
-    plan = null; $go.disabled = true;
-    if (!$t.value.trim()) { $p.innerHTML = ''; return; }
-    try {
-      plan = parsePlan($t.value);
-      const g = plan.gerichte || [], e = plan.einkauf || [];
-      const dates = g.map((x) => x.datum).filter(Boolean).sort();
-      $p.innerHTML = `<div class="imp-ok">${ICON.check}<div><b>${g.length} Gerichte, ${e.length} Einkäufe</b>
-        <small>${dates.length ? `${esc(dayName(dates[0], { weekday: 'short', day: 'numeric', month: 'numeric' }))} bis ${esc(dayName(dates[dates.length - 1], { weekday: 'short', day: 'numeric', month: 'numeric' }))}` : ''}</small>
-        <small>Abgehakte Einkäufe werden gelöscht, offene bleiben. Gerichte an denselben Tagen und Mahlzeiten werden ersetzt.</small></div></div>`;
-      $go.disabled = false;
-    } catch (err) { $p.innerHTML = `<div class="imp-err">${esc(err.message)}</div>`; }
-  };
-  $t.addEventListener('input', check);
-  sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
-  sheet.querySelector('#imp-demo')?.addEventListener('click', () => { $t.value = JSON.stringify(window.__DEMO_PLAN(), null, 1); check(); });
-  $go.addEventListener('click', async () => {
-    if (!plan) return;
-    $go.disabled = true; $go.textContent = 'Übernehme …';
-    try {
-      const r = await importPlan(plan);
-      closeSheet();
-      if (r.firstDate) state.weekStart = mondayOf(parseYmd(r.firstDate));
-      state.tab = 'meals'; render();
-      toast(`${r.meals} Gerichte und ${r.added} Einkäufe übernommen${r.merged ? `, ${r.merged} zusammengeführt` : ''}`, 4000);
-    } catch (err) { toast('Fehler: ' + err.message, 5000); $go.disabled = false; $go.textContent = 'Übernehmen'; }
-  });
-  setTimeout(() => $t.focus(), 60);
-}
-
+// ---------- Wochenplan aus einem Code übernehmen (Fenster: plan-import.js) ----------
 export async function importPlan(plan) {
   const gerichte = (plan.gerichte || []).filter((g) => g && g.datum && g.titel);
   const einkauf = (plan.einkauf || []).filter((e) => e && e.name);

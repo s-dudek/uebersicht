@@ -11,7 +11,7 @@ export const NAV = [
   { key: 'notes', label: 'Notizen', icon: 'notes' },
   { key: 'meals', label: 'Gerichte', icon: 'pot' },
   { key: 'calendar', label: 'Kalender', icon: 'calendar' },
-  { key: 'training', label: 'Training', icon: 'dumbbell', soon: true },
+  { key: 'training', label: 'Training', icon: 'dumbbell' },
   { key: 'quick', label: 'Neue Notiz', icon: 'notePlus' },
   { key: 'categories', label: 'Kategorien', icon: 'tag' },
 ];

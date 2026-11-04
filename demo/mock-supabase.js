@@ -295,6 +295,20 @@
         { datum: day(2), mahlzeit: 'abend', titel: 'Vollkornbrot mit Hüttenkäse und Gemüse', portionen: 2, tags: ['fettarm'], naehrwerte: { kcal: 420, eiweiss: 28, fett: 8, kohlenhydrate: 54 },
           zutaten: ['4 Scheiben Vollkornbrot', '200 g Hüttenkäse', '1 Gurke', '2 Paradeiser'] },
       ],
+      training: [
+        { datum: day(0), titel: 'Ganzkörper Kraft', art: 'kraft', dauer_min: 45, fuer: 'Simon',
+          aufwaermen: ['5 Min. Seilspringen', 'Schulterkreisen, Hüftkreisen'],
+          uebungen: [
+            { name: 'Kniebeugen', saetze: 3, wdh: '10', gewicht: '40 kg', pause: '90 s' },
+            { name: 'Liegestütz', saetze: 3, wdh: '12', pause: '60 s', hinweis: 'Körper gerade halten' },
+            { name: 'Rudern mit Kurzhanteln', saetze: 3, wdh: '10', gewicht: '2 × 12 kg', pause: '60 s' },
+            { name: 'Unterarmstütz', saetze: 3, dauer: '40 s', pause: '30 s' },
+          ],
+          abschluss: ['5 Min. Dehnen'] },
+        { datum: day(2), titel: 'Lockerer Lauf', art: 'ausdauer', dauer_min: 30, fuer: 'Simon', hinweis: 'Puls um 140, man soll noch reden können.' },
+        { datum: day(4), titel: 'Mobilität & Rumpf', art: 'mobilitaet', dauer_min: 25,
+          uebungen: [{ name: 'Katze-Kuh', saetze: 2, wdh: '10' }, { name: 'Weltbeste Dehnung', saetze: 2, wdh: '5 je Seite' }, { name: 'Dead Bug', saetze: 3, wdh: '10' }] },
+      ],
       einkauf: [
         { name: 'Brokkoli', menge: '2 Stück', abteilung: 'Obst & Gemüse', fuer: 'Mo/Di' },
         { name: 'Paprika rot', menge: '2 Stück', abteilung: 'Obst & Gemüse', fuer: 'Mo/Di' },

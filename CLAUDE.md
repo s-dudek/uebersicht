@@ -39,6 +39,22 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   Stifttaste wechselt Werkzeug (nur wo der Browser sie meldet – Apple-Pencil-Doppeltippen/Drücken erreicht Webseiten nicht),
   Export als PDF/PNG/JPEG (eigener PDF-Schreiber in `ink-export.js`). Bilder im privaten Storage-Bucket `ink` (`c/<ordner-id>/…`, `u/<user-id>/…`).
 
+## Codes für Gerichte und Training
+Simon stellt mit Claude im Chat Essen oder Training zusammen; Claude gibt einen Code aus, den Simon in der App unter
+Gerichte bzw. Training → „Code einfügen“ einfügt (`js/plan-import.js`). Ein Code kann Gerichte, Einkauf und Training enthalten,
+für einen Tag oder eine Woche. Format (JSON, Text davor wie `PLAN` ist egal, Datum immer `JJJJ-MM-TT`):
+```
+PLAN {
+  "gerichte": [{ "datum", "mahlzeit": "fruehstueck|mittag|abend", "kochen_am", "titel", "symbol", "portionen", "dauer_min",
+                 "tags": [], "naehrwerte": { "kcal", "eiweiss", "fett", "kohlenhydrate" }, "zutaten": [], "zubereitung": [], "hinweis" }],
+  "einkauf":  [{ "name", "menge", "abteilung": "Obst & Gemüse|Brot & Backwaren|Kühlregal|Fleisch & Fisch|Tiefkühl|Trockenware & Konserven|Gewürze & Öle|Getränke|Süßes & Snacks|Drogerie & Haushalt|Sonstiges", "fuer" }],
+  "training": [{ "datum", "titel", "art": "kraft|ausdauer|mobilitaet|sport|ruhe", "dauer_min", "fuer",
+                 "aufwaermen": [], "uebungen": [{ "name", "saetze", "wdh", "gewicht", "dauer", "pause", "hinweis" }], "abschluss": [], "hinweis" }]
+}
+```
+Übernahme ersetzt Gerichte gleicher Tage und Mahlzeit bzw. die eigenen Trainingseinheiten an den Tagen des Codes. Training ist privat
+(ohne Kategorie); für Anna-Lena den Code in ihrem Konto einfügen. Nur Felder verwenden, die oben stehen.
+
 ## Supabase
 - Alle Datenbank-Änderungen als wiederholbares SQL (`if not exists`, `drop policy if exists`) unten an `supabase-setup.sql` anhängen.
 - Ausführen im SQL Editor des Projekts; den Bestätigungsdialog bei Live-Änderungen klickt Simon selbst.
@@ -57,7 +73,7 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
 4. Committen und auf `main` pushen.
 
 ## Stand und offene Punkte (November 2026)
-- Datenbank ist auf dem Stand von `supabase-setup.sql` (inkl. Handschrift in Ordnern).
+- Datenbank ist auf dem Stand von `supabase-setup.sql` (inkl. Handschrift in Ordnern) – außer dem letzten Abschnitt „Training“ (Eintragstyp), den Simon noch ausführen muss.
 - Push-Erinnerungen: App-Teil fertig; Edge Function deployen, Secrets setzen und Zeitplan (`supabase/push-zeitplan.sql`) einrichten ist noch offen.
 - Ideen, die Simon angeboten wurden: Wochenansicht im Kalender mit 7 Spalten am Desktop, Pinnwand der Startseite auch am Smartphone.
 - Handschrift am iPad mit Apple Pencil noch von Simon zu testen (Handballen, langes Drücken, Export über das Teilen-Menü).

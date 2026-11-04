@@ -9,6 +9,7 @@ import { renderHome, resetHomeIntro } from './home.js';
 import { inkHead, inkHeadTools, leaveInk, mountInk } from './ink.js';
 import { ICON, LOGO_MARK, LOGO_WORD } from './icons.js';
 import { renderMeals } from './meals.js';
+import { renderTraining } from './training.js';
 import { NAV } from './nav.js';
 import { notesIn, renderNotes } from './notes.js';
 import { splashReady } from './splash.js';
@@ -17,7 +18,7 @@ import { renderTodos, todosIn } from './todos.js';
 // Dudek-Zeichen als Wasserzeichen hinter allem
 const WATERMARK = `<div class="watermark" aria-hidden="true">${LOGO_MARK}</div>`;
 
-const PAGES = { home: renderHome, todos: renderTodos, notes: renderNotes, categories: renderCategoryPage, meals: renderMeals, calendar: renderCalendar };
+const PAGES = { home: renderHome, todos: renderTodos, notes: renderNotes, categories: renderCategoryPage, meals: renderMeals, training: renderTraining, calendar: renderCalendar };
 
 export function render() {
   if (!state.me || !state.loaded) return;
@@ -105,20 +106,24 @@ function actionsFor(tab) {
     return `${actBtn('close-list', 'chevL', 'Ordner')}${actBtn('new-note-in', 'plus', 'Notiz', { id: state.list, primary: true })}${state.list ? actBtn('list-edit', 'dots', 'Ordner bearbeiten', { id: state.list, text: false }) : ''}`;
   }
   if (tab === 'meals') {
-    return `${actBtn('week-prev', 'chevL', 'Vorige Woche', { text: false })}<button class="dk wk-now" data-act="week-today"><span>KW ${isoWeek(state.weekStart)}</span></button>${actBtn('week-next', 'chevR', 'Nächste Woche', { text: false })}${actBtn('import-plan', 'plus', 'Plan', { primary: true })}`;
+    return `${actBtn('week-prev', 'chevL', 'Vorige Woche', { text: false })}<button class="dk wk-now" data-act="week-today"><span>KW ${isoWeek(state.weekStart)}</span></button>${actBtn('week-next', 'chevR', 'Nächste Woche', { text: false })}${actBtn('import-plan', 'plus', 'Code', { primary: true })}`;
+  }
+  if (tab === 'training') {
+    return `${actBtn('week-prev', 'chevL', 'Vorige Woche', { text: false })}<button class="dk wk-now" data-act="week-today"><span>KW ${isoWeek(state.weekStart)}</span></button>${actBtn('week-next', 'chevR', 'Nächste Woche', { text: false })}${actBtn('import-plan', 'plus', 'Code', { primary: true })}`;
   }
   if (tab === 'categories') return actBtn('new-cat', 'plus', 'Neue Kategorie', { primary: true });
   return '';
 }
 
 // ---------- Kopfleiste (hängt am oberen Rand) ----------
-const TITLES = { todos: 'Todos', notes: 'Notizen', categories: 'Kategorien', meals: 'Gerichte', calendar: 'Kalender' };
+const TITLES = { todos: 'Todos', notes: 'Notizen', categories: 'Kategorien', meals: 'Gerichte', training: 'Training', calendar: 'Kalender' };
 
 function pageCount(tab) {
   if (tab === 'todos') return state.items.filter((i) => i.type === 'todo' && !i.done).length;
   if (tab === 'notes') return state.items.filter((i) => i.type === 'note').length;
   if (tab === 'categories') return state.categories.length;
   if (tab === 'meals') return state.items.filter((i) => i.type === 'meal' && i.due_date >= state.weekStart && i.due_date <= addDays(state.weekStart, 6)).length;
+  if (tab === 'training') return state.items.filter((i) => i.type === 'training' && i.due_date >= state.weekStart && i.due_date <= addDays(state.weekStart, 6)).length;
   return 0;
 }
 

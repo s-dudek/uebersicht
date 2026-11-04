@@ -383,3 +383,9 @@ drop policy if exists ink_img_delete on storage.objects;
 create policy ink_img_select on storage.objects for select to authenticated using (bucket_id = 'ink' and public.can_access_ink_file(name));
 create policy ink_img_insert on storage.objects for insert to authenticated with check (bucket_id = 'ink' and public.can_access_ink_file(name));
 create policy ink_img_delete on storage.objects for delete to authenticated using (bucket_id = 'ink' and public.can_access_ink_file(name));
+
+-- ==========================================================================
+-- Training: eigener Eintragstyp (Einheiten mit Übungen, per Code eingefügt)
+-- ==========================================================================
+alter table public.items drop constraint if exists items_type_check;
+alter table public.items add constraint items_type_check check (type in ('todo', 'note', 'meal', 'event', 'training'));

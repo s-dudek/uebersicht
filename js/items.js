@@ -20,6 +20,7 @@ import { remindLabel, toLocalInput } from './dates.js';
 import { openEvent } from './events.js';
 import { ICON } from './icons.js';
 import { openMeal } from './meals.js';
+import { openTraining } from './training.js';
 import { pushOn, pushSupport, remindHint } from './reminders.js';
 import { render } from './render.js';
 import { categoryOptions, closeSheet, colorPick, openSheet } from './sheet.js';
@@ -57,6 +58,7 @@ export function openItem(id, { isNew = false, edit = false } = {}) {
   const i = itemById(id);
   if (!i) return;
   if (i.type === 'meal') return openMeal(id);
+  if (i.type === 'training') return openTraining(id);
   if (i.type === 'event') return openEvent(id);
   if (i.type === 'note' && !isNew && !edit) return openNoteView(id);
   const isNote = i.type === 'note';
