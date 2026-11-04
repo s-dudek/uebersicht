@@ -6,7 +6,7 @@ import { $app, catById, esc, isDesktop, state } from './core.js';
 import { addDays, isoWeek, ymd } from './dates.js';
 import { folderIc } from './folders.js';
 import { renderHome, resetHomeIntro } from './home.js';
-import { inkActions, inkHead, leaveInk, mountInk } from './ink.js';
+import { inkHead, leaveInk, mountInk } from './ink.js';
 import { ICON, LOGO_MARK, LOGO_WORD } from './icons.js';
 import { renderMeals } from './meals.js';
 import { NAV } from './nav.js';
@@ -50,8 +50,8 @@ export function render() {
     : `<div class="app">
         ${WATERMARK}
         ${home ? '' : pageHead(tab, false)}
-        <main class="main ${home ? 'is-home' : 'has-dock'} ${ink}">${content}</main>
-        ${home ? '' : `<nav class="dock" aria-label="Aktionen">${actionsFor(tab)}</nav>`}
+        <main class="main ${home ? 'is-home' : inkOn ? '' : 'has-dock'} ${ink}">${content}</main>
+        ${home || inkOn ? '' : `<nav class="dock" aria-label="Aktionen">${actionsFor(tab)}</nav>`}
       </div>`;
   ctl.show(!desk, home ? 'center' : null);
   if (inkOn) mountInk();
@@ -101,7 +101,7 @@ function actionsFor(tab) {
   }
   if (tab === 'notes') {
     if (state.list === null) return actBtn('new-note', 'plus', 'Neue Notiz', { primary: true });
-    if (isInkView()) return inkActions();
+    if (isInkView()) return '';   // Werkzeuge stehen in der eigenen Leiste der Handschrift
     return `${actBtn('close-list', 'chevL', 'Ordner')}${actBtn('new-note-in', 'plus', 'Notiz', { id: state.list, primary: true })}${state.list ? actBtn('list-edit', 'dots', 'Ordner bearbeiten', { id: state.list, text: false }) : ''}`;
   }
   if (tab === 'meals') {
@@ -138,9 +138,10 @@ function pageHead(tab, desk) {
     // Notizen: umschalten zwischen getippten Notizen und Handschrift
     const mode = tab === 'notes' ? `<div class="seg-view note-mode">${[['text', 'notes', 'Notizen'], ['ink', 'ink', 'Handschrift']].map(([k, ic, l]) =>
       `<button class="${(state.noteMode || 'text') === k ? 'on' : ''}" data-act="note-mode" data-id="${k}" aria-label="${l}">${ICON[ic]}<span>${l}</span></button>`).join('')}</div>` : '';
+    const title = `${c ? folderIc(c, 'ph-ic') : ''}<b class="ph-t">${esc(c ? c.name : tab === 'todos' ? 'Allgemein' : 'Ohne Kategorie')}</b>`;
+    // Handschrift: Titel als Knopf, der die Kategorien zum Wechseln zeigt
     left = (isInkView() && inkHead()) || `${desk ? '' : `<button class="ph-back" data-act="close-list" aria-label="Zurück zu den Listen">${ICON.chevL}</button>`}
-      ${c ? folderIc(c, 'ph-ic') : ''}
-      <b class="ph-t">${esc(c ? c.name : tab === 'todos' ? 'Allgemein' : 'Ohne Kategorie')}</b>${isInkView() ? '' : cnt(n)}`;
+      ${isInkView() ? `<button class="ph-drop" data-act="ink-cats" aria-haspopup="menu" aria-label="Kategorie wechseln" title="Kategorie wechseln">${title}${ICON.chevD}</button>` : title + cnt(n)}`;
     left += mode;
   } else {
     left = `<b>${TITLES[tab]}</b>${cnt(pageCount(tab))}`;

@@ -1,17 +1,18 @@
 // Handschrift: Zeichenfläche mit kariertem Papier
 // Stift (mit Druck), Radierer (ganze Striche), Auswahl (Lasso) zum Verschieben, Vergrößern, Löschen und "Als Titel".
-// Die Fläche ist unbegrenzt: sie wächst nach rechts und unten mit. 1000 Einheiten passen in die Fensterbreite.
-// Gezeichnet wird in Kacheln, damit große Flächen wenig Speicher brauchen.
+// Die Fläche ist unendlich in alle Richtungen und lässt sich verschieben und zoomen. Bei 100 % passen 1000 Einheiten in die Breite.
+// Gezeichnet wird in Kacheln fester Bildschirmgröße, damit auch große Flächen und starker Zoom wenig Speicher brauchen.
 // Bereiche (A4 hoch/quer) markieren, was exportiert wird; sie liegen immer genau auf den Kästchen.
 import { ICON } from './icons.js';
 import { FRAMES, getImage, newId } from './ink-store.js';
 
-const VIEW = 1000;       // so viele Einheiten passen in die Fensterbreite
-const TILE = 800;        // Kachelgröße in Einheiten
+const VIEW = 1000;       // so viele Einheiten passen bei 100 % in die Breite
+const TILE_PX = 512;     // Kachelgröße in Bildschirmpunkten
 const GRID = 25;         // Kästchengröße in Einheiten
-const MIN_H = 1414;      // Seitenhöhe am Anfang (Verhältnis wie A4)
+const ZOOM = [.25, 4];   // kleinster und größter Zoom
 const ERASE_R = 9;       // Radierer-Radius in Einheiten
 const HISTORY = 60;      // Schritte zum Rückgängigmachen
+const SEL_PX = 4096;     // größte Kantenlänge der Auswahl-Vorschau in Pixel
 
 // ---------- Geometrie ----------
 const boxes = new WeakMap();
@@ -108,61 +109,156 @@ function drawStroke(ctx, s) {
   ctx.stroke();
 }
 
+
 // ====================================================================
 // Zeichenfläche
-// opts: { items, h, w, colors, onCommit(items, h, w), onOpenTitle(titleItem), onDeleteTitles(titles) -> Promise<bool>,
+// opts: { items, colors, onCommit(items, h, w), onOpenTitle(titleItem), onDeleteTitles(titles) -> Promise<bool>,
 //         onExport(frameIndex), hold(bool) }
 // ====================================================================
 export function createBoard(opts) {
   let items = opts.items;
-  let h = Math.max(MIN_H, opts.h || 0);
-  let pw = Math.max(VIEW, opts.w || 0);   // Breite der Fläche in Einheiten
   let tool = 'pen', pen = { c: '#0C3741', w: 2.2 }, finger = false;
   const past = [], future = [];
   let sel = null;            // { set: Set<item>, box: [x0,y0,x1,y1] }
-  let scale = 1, dpr = 1, savedTop = 0, savedLeft = 0;
+  // Ansicht: linke obere Ecke in Einheiten und Zoom (1 = 100 %)
+  const view = { x: 0, y: 0, z: 1 };
+  let base = 0;              // Punkte je Einheit bei 100 %
+  let scale = 0;             // Maßstab, in dem Kacheln und Markierungen zuletzt aufgebaut wurden
+  let tileU = 1;             // Kachelgröße in Einheiten (passend zu scale)
+  let dpr = 1;
+  const cur = () => base * view.z;   // aktueller Maßstab (beim Zoomen schon der neue)
   const tiles = new Map();   // "spalte:zeile" -> Canvas
   const loaded = new Map();  // Bildpfad -> ImageBitmap
 
   // ---------- Aufbau ----------
   const sc = document.createElement('div');
-  sc.className = 'ink-scroll';
+  sc.className = 'ink-view';
   sc.innerHTML = `<div class="ink-page">
       <div class="ink-tiles"></div>
       <div class="ink-frames"></div>
       <div class="ink-titles"></div>
-      <svg class="ink-lasso" preserveAspectRatio="none" aria-hidden="true"><polyline/></svg>
+    </div>
+    <svg class="ink-lasso" aria-hidden="true"><polyline/></svg>
+    <div class="ink-zoom" hidden>
+      <button type="button" data-zoom="out" aria-label="Verkleinern" title="Verkleinern">${ICON.minus}</button>
+      <span class="ink-zpct"></span>
+      <button type="button" data-zoom="in" aria-label="Vergrößern" title="Vergrößern">${ICON.plus}</button>
+      <button type="button" data-zoom="reset" class="ink-zreset">${ICON.target}<span>Ursprungsansicht</span></button>
     </div>`;
   const pg = sc.firstElementChild;
   const tileLayer = pg.querySelector('.ink-tiles');
   const titleLayer = pg.querySelector('.ink-titles');
   const frameLayer = pg.querySelector('.ink-frames');
-  const lassoSvg = pg.querySelector('.ink-lasso');
+  const lassoSvg = sc.querySelector('.ink-lasso');
   const lassoLine = lassoSvg.firstElementChild;
+  const zoomBar = sc.querySelector('.ink-zoom');
+  const zoomPct = zoomBar.querySelector('.ink-zpct');
 
   const setTool = (t) => { tool = t; clearSel(); sc.dataset.tool = t; };
   setTool('pen');
 
-  // ---------- Maße ----------
-  function sizePage() {
-    pg.style.width = pw * scale + 'px';
-    pg.style.height = h * scale + 'px';
-    lassoSvg.setAttribute('viewBox', `0 0 ${pw} ${h}`);
+  // ---------- Ansicht ----------
+  // Ebene verschieben und (bis zum nächsten Neuaufbau) per CSS skalieren; Kästchen als Hintergrund
+  function place() {
+    const s = cur(), ox = -view.x * s, oy = -view.y * s;
+    pg.style.transform = `translate(${ox}px, ${oy}px) scale(${s / scale})`;
+    sc.style.backgroundSize = `${GRID * s}px ${GRID * s}px`;
+    sc.style.backgroundPosition = `${ox}px ${oy}px`;
+    zoomBar.hidden = Math.abs(view.z - 1) < .005 && Math.abs(view.x) < 1 && view.y > -1;
+    zoomPct.textContent = Math.round(view.z * 100) + ' %';
   }
 
   function layout() {
     const w = sc.clientWidth;
     if (!w) return;
-    scale = w / VIEW;
+    base = w / VIEW;
     dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-    h = Math.max(h, MIN_H, Math.ceil(sc.clientHeight / scale));
-    pg.style.setProperty('--g', GRID * scale + 'px');
-    sizePage();
+    rebuild();
+  }
+
+  // Kacheln und Markierungen im aktuellen Maßstab neu aufbauen (nach Größenänderung oder Zoom)
+  function rebuild() {
+    clearTimeout(settleT);
+    scale = cur();
+    tileU = TILE_PX / scale;
     tiles.forEach((cv) => cv.remove());
     tiles.clear();
+    place();
     ensureTiles();
     renderOverlays();
     renderSel();
+  }
+  const settle = () => { if (scale && scale !== cur()) rebuild(); };
+
+  // nach jeder Bewegung: Ebene versetzen, fehlende Kacheln nachzeichnen; bei starkem Zoom neu aufbauen
+  let tileRaf = 0, settleT = 0;
+  function moveView() {
+    closeMenu();
+    const k = cur() / scale;
+    if (k < .6 || k > 1.6) return rebuild();
+    place();
+    if (act?.kind === 'lasso') drawLasso();
+    if (!tileRaf) tileRaf = requestAnimationFrame(() => { tileRaf = 0; ensureTiles(); });
+  }
+
+  const clampZ = (z) => Math.min(ZOOM[1], Math.max(ZOOM[0], z));
+  const panBy = (dx, dy) => { view.x -= dx / cur(); view.y -= dy / cur(); moveView(); };
+
+  // Zoomen um einen Punkt am Bildschirm: der Punkt bleibt, wo er ist
+  function zoomAt(cx, cy, z) {
+    const r = sc.getBoundingClientRect(), px = cx - r.left, py = cy - r.top, s0 = cur();
+    const ux = view.x + px / s0, uy = view.y + py / s0;
+    view.z = clampZ(z);
+    view.x = ux - px / cur();
+    view.y = uy - py / cur();
+    moveView();
+  }
+
+  // sanft zu einer Ansicht gleiten (Knöpfe, Ursprungsansicht, neuer Bereich)
+  let anim = 0;
+  const stopAnim = () => { cancelAnimationFrame(anim); anim = 0; };
+  function goTo(tx, ty, tz) {
+    stopAnim();
+    const from = { ...view }, t0 = performance.now();
+    const frame = (now) => {
+      const t = Math.min(1, (now - t0) / 280), e = 1 - (1 - t) ** 3;
+      view.x = from.x + (tx - from.x) * e;
+      view.y = from.y + (ty - from.y) * e;
+      view.z = from.z + (tz - from.z) * e;
+      moveView();
+      if (t < 1) anim = requestAnimationFrame(frame);
+      else { anim = 0; settle(); }
+    };
+    anim = requestAnimationFrame(frame);
+  }
+
+  // Zoom-Stufe um die Mitte (Knöpfe, Tastatur)
+  function zoomStep(f) {
+    const w = sc.clientWidth / 2, h = sc.clientHeight / 2, s = cur();
+    const z = clampZ(Math.round(view.z * f * 20) / 20);
+    goTo(view.x + w / s - w / (base * z), view.y + h / s - h / (base * z), z);
+  }
+  const resetView = () => goTo(0, 0, 1);
+
+  zoomBar.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-zoom]');
+    if (b?.dataset.zoom === 'reset') resetView();
+    else if (b) zoomStep(b.dataset.zoom === 'in' ? 1.25 : .8);
+  });
+
+  // Schwung nach dem Verschieben mit dem Finger
+  function glide(vx, vy) {
+    if (Math.hypot(vx, vy) < .15) return;
+    let last = performance.now();
+    const frame = (now) => {
+      const dt = now - last, f = .995 ** dt;
+      last = now;
+      vx *= f; vy *= f;
+      if (Math.hypot(vx, vy) < .02) { anim = 0; return; }
+      panBy(vx * dt, vy * dt);
+      anim = requestAnimationFrame(frame);
+    };
+    anim = requestAnimationFrame(frame);
   }
 
   let lastW = 0;
@@ -176,19 +272,20 @@ export function createBoard(opts) {
     if (cv) return cv;
     cv = document.createElement('canvas');
     cv.ix = ix; cv.iy = iy;
-    Object.assign(cv.style, { left: ix * TILE * scale + 'px', top: iy * TILE * scale + 'px', width: TILE * scale + 'px', height: TILE * scale + 'px' });
-    cv.width = cv.height = Math.round(TILE * scale * dpr);
+    Object.assign(cv.style, { left: ix * TILE_PX + 'px', top: iy * TILE_PX + 'px', width: TILE_PX + 'px', height: TILE_PX + 'px' });
+    cv.width = cv.height = Math.round(TILE_PX * dpr);
     tiles.set(key, cv);
     tileLayer.appendChild(cv);
     drawTile(cv);
     return cv;
   }
 
-  // Kacheln im sichtbaren Bereich (plus Rand) anlegen, weit entfernte freigeben
+  // Kacheln im sichtbaren Bereich anlegen, weit entfernte freigeben
   function ensureTiles() {
     if (!scale) return;
-    const range = (pos, size, max) => [Math.max(0, Math.floor(pos / scale / TILE) - 1), Math.min(Math.ceil(max / TILE) - 1, Math.floor((pos + size) / scale / TILE) + 1)];
-    const [xa, xb] = range(sc.scrollLeft, sc.clientWidth, pw), [ya, yb] = range(sc.scrollTop, sc.clientHeight, h);
+    const s = cur();
+    const xa = Math.floor(view.x / tileU), xb = Math.floor((view.x + sc.clientWidth / s) / tileU);
+    const ya = Math.floor(view.y / tileU), yb = Math.floor((view.y + sc.clientHeight / s) / tileU);
     for (let iy = ya; iy <= yb; iy++) for (let ix = xa; ix <= xb; ix++) tileCanvas(ix, iy);
     tiles.forEach((cv, key) => { if (cv.ix < xa - 1 || cv.ix > xb + 1 || cv.iy < ya - 1 || cv.iy > yb + 1) { cv.remove(); tiles.delete(key); } });
   }
@@ -196,17 +293,17 @@ export function createBoard(opts) {
   function tileCtx(cv) {
     const ctx = cv.getContext('2d');
     const k = scale * dpr;
-    ctx.setTransform(k, 0, 0, k, -cv.ix * TILE * k, -cv.iy * TILE * k);
+    ctx.setTransform(k, 0, 0, k, -cv.ix * tileU * k, -cv.iy * tileU * k);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     return ctx;
   }
-  const hits = (cv, b) => b[2] >= cv.ix * TILE && b[0] <= (cv.ix + 1) * TILE && b[3] >= cv.iy * TILE && b[1] <= (cv.iy + 1) * TILE;
-  // alle Kacheln, die ein Rechteck berühren (legt sichtbare bei Bedarf an)
+  const hits = (cv, b) => b[2] >= cv.ix * tileU && b[0] <= (cv.ix + 1) * tileU && b[3] >= cv.iy * tileU && b[1] <= (cv.iy + 1) * tileU;
+  // alle Kacheln, die ein Rechteck berühren (legt sie bei Bedarf an)
   const tilesFor = (b) => {
     const out = [];
-    for (let iy = Math.max(0, Math.floor(b[1] / TILE)); iy <= Math.floor(b[3] / TILE); iy++) {
-      for (let ix = Math.max(0, Math.floor(b[0] / TILE)); ix <= Math.floor(b[2] / TILE); ix++) out.push(tileCanvas(ix, iy));
+    for (let iy = Math.floor(b[1] / tileU); iy <= Math.floor(b[3] / tileU); iy++) {
+      for (let ix = Math.floor(b[0] / tileU); ix <= Math.floor(b[2] / tileU); ix++) out.push(tileCanvas(ix, iy));
     }
     return out;
   };
@@ -277,12 +374,12 @@ export function createBoard(opts) {
   // freier Platz rechts neben dem sichtbaren Bereich bzw. unter vorhandenen Bereichen, auf den Kästchen
   function addFrame(fmt) {
     const [w, fh] = FRAMES[fmt];
-    const snap = (v) => Math.max(GRID * 2, Math.round(v / GRID) * GRID);
-    let x = snap(sc.scrollLeft / scale + GRID * 2), y = snap(sc.scrollTop / scale + GRID * 3);
+    const snap = (v) => Math.round(v / GRID) * GRID;
+    let x = snap(view.x + GRID * 2), y = snap(view.y + GRID * 3);
     const overlaps = (ax, ay) => frameList().some((f) => { const b = bbox(f); return ax < b[2] && ax + w > b[0] && ay < b[3] && ay + fh > b[1]; });
     while (overlaps(x, y)) y += GRID * 4;
     commit([...items, { t: 'f', fmt, x, y }]);
-    sc.scrollTo({ top: Math.max(0, (y - GRID * 3) * scale), left: Math.max(0, (x - GRID * 2) * scale), behavior: 'smooth' });
+    goTo(x - GRID * 2, y - GRID * 3, view.z);
   }
 
   // Inhalt eines Bereichs: alles, dessen Mitte darin liegt
@@ -301,16 +398,11 @@ export function createBoard(opts) {
   }
 
   // ---------- Verlauf ----------
-  // Fläche wächst nach rechts und unten, sobald man in die Nähe des Randes kommt
-  function grow() {
-    let maxX = 0, maxY = 0;
-    for (const it of items) { const b = bbox(it); maxX = Math.max(maxX, b[2]); maxY = Math.max(maxY, b[3]); }
-    const nh = maxY > h - 500 ? Math.ceil((maxY + 800) / TILE) * TILE : h;
-    const nw = maxX > pw - 300 ? Math.ceil((maxX + 600) / TILE) * TILE : pw;
-    if (nh === h && nw === pw) return;
-    h = nh; pw = nw;
-    sizePage();
-    ensureTiles();
+  // Ausdehnung des Inhalts (nur zur Information beim Speichern)
+  function extent() {
+    let w = 0, h = 0;
+    for (const it of items) { const b = bbox(it); w = Math.max(w, b[2]); h = Math.max(h, b[3]); }
+    return [h, w];
   }
 
   function commit(next) {
@@ -318,9 +410,8 @@ export function createBoard(opts) {
     if (past.length > HISTORY) past.shift();
     future.length = 0;
     items = next;
-    grow();
     renderOverlays();
-    opts.onCommit(items, h, pw);
+    opts.onCommit(items, ...extent());
   }
 
   function step(from, to) {
@@ -330,7 +421,7 @@ export function createBoard(opts) {
     items = from.pop();
     redrawAll();
     renderOverlays();
-    opts.onCommit(items, h, pw);
+    opts.onCommit(items, ...extent());
   }
 
   // ---------- Auswahl ----------
@@ -359,16 +450,17 @@ export function createBoard(opts) {
     const w = (x1 - x0) * k + pad * 2, hh = (y1 - y0) * k + pad * 2;
     selBox.hidden = false;
     Object.assign(selBox.style, { left: (x0 - pad + dx) * scale + 'px', top: (y0 - pad + dy) * scale + 'px', width: w * scale + 'px', height: hh * scale + 'px' });
-    selBox.classList.toggle('below', y0 * scale - sc.scrollTop < 56);
+    selBox.classList.toggle('below', (y0 - view.y) * cur() < 56);
     const strokes = [...sel.set].filter((it) => it.t === 's');
     selBox.querySelector('[data-sel="title"]').hidden = !strokes.length || [...sel.set].some((it) => it.t === 't');
     if (dx || dy || k !== 1) return;   // beim Ziehen nur verschieben, nicht neu zeichnen
-    selCv.width = Math.max(1, Math.round(w * scale * dpr));
-    selCv.height = Math.max(1, Math.round(hh * scale * dpr));
+    const q = Math.min(dpr, SEL_PX / (Math.max(w, hh) * scale));   // bei starkem Zoom nicht riesig
+    selCv.width = Math.max(1, Math.round(w * scale * q));
+    selCv.height = Math.max(1, Math.round(hh * scale * q));
     selCv.style.width = w * scale + 'px';
     selCv.style.height = hh * scale + 'px';
     const ctx = selCv.getContext('2d');
-    const kk = scale * dpr;
+    const kk = scale * q;
     ctx.setTransform(kk, 0, 0, kk, (pad - x0) * kk, (pad - y0) * kk);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     items.forEach((it) => { if (sel.set.has(it)) drawItem(ctx, it); });
@@ -506,7 +598,6 @@ export function createBoard(opts) {
   }
   document.addEventListener('pointerdown', (e) => { if (menu && !menu.contains(e.target)) closeMenu(); }, true);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
-  sc.addEventListener('scroll', closeMenu, { passive: true });
 
   // Punkt in der Auswahl: Menü dafür; sonst das Element darunter auswählen
   function contextAt(cx, cy, x, y) {
@@ -519,7 +610,7 @@ export function createBoard(opts) {
     openMenu(cx, cy);
   }
 
-  pg.addEventListener('contextmenu', (e) => {
+  sc.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     if (Date.now() - menuAt < 700) return;   // schon durch langes Drücken geöffnet
     const [x, y] = pos(e);
@@ -534,9 +625,7 @@ export function createBoard(opts) {
     const cx = e.clientX, cy = e.clientY, [x, y] = pos(e);
     lp = { id: e.pointerId, cx, cy, t: setTimeout(() => {
       lp = null;
-      if (act?.kind === 'pen') { items = act.before; redrawBox(bbox(act.s)); }
-      if (act?.kind === 'lasso') { lassoSvg.classList.remove('on'); lassoLine.setAttribute('points', ''); }
-      if (act) { act = null; opts.hold(false); }
+      cancelAct();
       contextAt(cx, cy, x, y);
     }, 520) };
   }
@@ -547,104 +636,153 @@ export function createBoard(opts) {
     if (b?.dataset.sel === 'delete') deleteSel();
   });
 
-  // ---------- Eingabe: Stift, Maus, wahlweise Finger ----------
+  // ---------- Eingabe: Stift und Maus schreiben, Finger verschieben und zoomen (wahlweise schreibt ein Finger) ----------
   let act = null;               // laufende Geste
   let penDown = false;
-  const blocked = new Set();    // Berührungen (Handballen), die während des Schreibens begonnen haben
-  const fingers = new Map();    // Finger-Modus: zwei Finger verschieben die Seite
+  const fingers = new Map();    // Finger auf der Fläche: id -> [x, y]
 
   const pos = (e) => {
-    const r = pg.getBoundingClientRect();
-    return [(e.clientX - r.left) / scale, (e.clientY - r.top) / scale, e.pointerType === 'mouse' || !e.pressure ? .5 : e.pressure];
+    const r = sc.getBoundingClientRect(), s = cur();
+    return [view.x + (e.clientX - r.left) / s, view.y + (e.clientY - r.top) / s, e.pointerType === 'mouse' || !e.pressure ? .5 : e.pressure];
   };
 
-  // Apple Pencil darf die Seite nicht verschieben, Handballen beim Schreiben auch nicht
-  const stopTouch = (e) => {
-    if (e.target.closest('button')) return;
-    const stylus = [...e.changedTouches].some((t) => t.touchType === 'stylus');
-    if (e.type === 'touchstart' && penDown) [...e.changedTouches].forEach((t) => blocked.add(t.identifier));
-    if (stylus || penDown || finger || [...e.changedTouches].some((t) => blocked.has(t.identifier))) e.preventDefault();
-  };
-  const endTouch = (e) => [...e.changedTouches].forEach((t) => blocked.delete(t.identifier));
-  sc.addEventListener('touchstart', stopTouch, { passive: false });
-  sc.addEventListener('touchmove', stopTouch, { passive: false });
-  sc.addEventListener('touchend', endTouch);
-  sc.addEventListener('touchcancel', endTouch);
+  // Zeiger festhalten, damit die Geste auch außerhalb der Fläche weiterläuft (schlägt bei schon beendeten Zeigern fehl)
+  const capture = (el, id) => { try { el.setPointerCapture(id); } catch { /* Zeiger schon weg */ } };
 
-  pg.addEventListener('pointerdown', (e) => {
+  // keine Browser-Gesten (Scrollen, Lupe, Doppeltipp-Zoom) auf der Fläche; Knöpfe bleiben antippbar
+  sc.addEventListener('touchstart', (e) => { if (!e.target.closest('button')) e.preventDefault(); }, { passive: false });
+  sc.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+
+  function drawLasso() {
+    const s = cur();
+    lassoLine.setAttribute('points', act.poly.map((v, i) => ((v - (i % 2 ? view.y : view.x)) * s).toFixed(1)).join(' '));
+  }
+
+  // laufende Geste verwerfen, ohne etwas zu übernehmen
+  function cancelAct() {
+    if (!act) return;
+    const a = act;
+    act = null;
+    if (a.kind === 'pen') { items = a.before; redrawBox(bbox(a.s)); }
+    else if (a.kind === 'erase' && a.hit) { items = a.before; redrawAll(); }
+    else if (a.kind === 'lasso') { lassoSvg.classList.remove('on'); lassoLine.setAttribute('points', ''); }
+    else if (a.kind === 'fmove') { a.tab.closest('.ink-frame').style.translate = ''; selBox.classList.remove('bare'); clearSel(); }
+    else if (a.kind === 'move' || a.kind === 'scale') { selCv.style.transform = ''; renderSel(); }
+    sc.classList.remove('panning');
+    opts.hold(false);
+  }
+
+  function startPan(e) {
+    act = { kind: 'pan', id: e.pointerId, touch: e.pointerType === 'touch', lx: e.clientX, ly: e.clientY, vx: 0, vy: 0, t: performance.now() };
+    if (!act.touch) sc.classList.add('panning');
+    opts.hold(true);
+  }
+
+  function startPinch() {
+    const [[ax, ay], [bx, by]] = [...fingers.values()];
+    const r = sc.getBoundingClientRect(), s = cur();
+    const mx = (ax + bx) / 2 - r.left, my = (ay + by) / 2 - r.top;
+    act = { kind: 'pinch', touch: true, d: Math.hypot(bx - ax, by - ay) || 1, z: view.z, ux: view.x + mx / s, uy: view.y + my / s };
+    opts.hold(true);
+  }
+
+  // zwei Finger: Abstand zoomt, Mitte verschiebt
+  function pinchMove() {
+    const [[ax, ay], [bx, by]] = [...fingers.values()];
+    const r = sc.getBoundingClientRect();
+    const mx = (ax + bx) / 2 - r.left, my = (ay + by) / 2 - r.top;
+    view.z = clampZ(act.z * Math.hypot(bx - ax, by - ay) / act.d);
+    view.x = act.ux - mx / cur();
+    view.y = act.uy - my / cur();
+    moveView();
+  }
+
+  function panMove(e) {
+    const now = performance.now(), dt = Math.max(1, now - act.t);
+    const dx = e.clientX - act.lx, dy = e.clientY - act.ly;
+    act.vx = act.vx * .3 + (dx / dt) * .7;
+    act.vy = act.vy * .3 + (dy / dt) * .7;
+    act.lx = e.clientX; act.ly = e.clientY; act.t = now;
+    panBy(dx, dy);
+  }
+
+  sc.addEventListener('pointerdown', (e) => {
+    stopAnim();
     const tab = e.target.closest('.ink-ftab');
     if (tab && !act) {   // Bereich samt Inhalt verschieben (Tippen ohne Bewegung: Menü)
       e.preventDefault();
-      tab.setPointerCapture(e.pointerId);
+      capture(tab, e.pointerId);
       opts.hold(true);
       const n = +tab.dataset.frame, f = frameList()[n];
       const [x, y] = pos(e);
       setSel([f, ...frameContent(f)]);
       selBox.classList.add('bare');   // nur der Inhalt wandert mit, ohne Auswahlrahmen
-      act = { kind: 'fmove', id: e.pointerId, n, x, y, dx: 0, dy: 0, cx: e.clientX, cy: e.clientY, tab };
+      act = { kind: 'fmove', id: e.pointerId, n, x, y, dx: 0, dy: 0, tab };
       return;
     }
     if (e.target.closest('button')) return;
+    if (e.pointerType === 'mouse' && e.button === 1 && !act) {   // mittlere Maustaste: verschieben
+      e.preventDefault();
+      capture(sc, e.pointerId);
+      startPan(e);
+      return;
+    }
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     if (e.pointerType === 'touch') {
-      if (penDown) return;
-      if (!finger) { startLp(e); return; }        // Finger scrollt; lange drücken öffnet das Menü
+      if (penDown) return;                          // Handballen beim Schreiben
       fingers.set(e.pointerId, [e.clientX, e.clientY]);
-      if (fingers.size > 1) {                       // zweiter Finger: Zeichnen abbrechen, verschieben
-        if (act?.kind === 'pen') { items = act.before; redrawBox(bbox(act.s)); }
-        if (act) opts.hold(false);
-        act = { kind: 'pan', id: null };
-        return;
-      }
+      capture(sc, e.pointerId);
+      if (fingers.size === 2) { cancelLp(); cancelAct(); startPinch(); return; }
+      if (fingers.size > 2 || act) return;
+      if (!finger) { startPan(e); startLp(e); return; }   // Finger verschiebt; lange drücken öffnet das Menü
+    } else if (e.pointerType === 'pen' && act?.touch) {
+      cancelLp(); cancelAct();                      // der Stift hat Vorrang vor der Hand
+      fingers.clear();
     }
     if (act) return;                                 // nur eine Geste gleichzeitig
     e.preventDefault();
-    pg.setPointerCapture(e.pointerId);
+    capture(sc, e.pointerId);
     if (e.pointerType === 'pen') penDown = true;
     opts.hold(true);
     const [x, y, p] = pos(e);
+    const touch = e.pointerType === 'touch';
     startLp(e);
 
     const onHandle = e.target.closest('.ink-sel-h'), onSel = e.target.closest('.ink-sel');
-    if (sel && onHandle) act = { kind: 'scale', id: e.pointerId, x, y, k: 1 };
-    else if (sel && onSel) act = { kind: 'move', id: e.pointerId, x, y, dx: 0, dy: 0 };
+    if (sel && onHandle) act = { kind: 'scale', id: e.pointerId, touch, x, y, k: 1 };
+    else if (sel && onSel) act = { kind: 'move', id: e.pointerId, touch, x, y, dx: 0, dy: 0 };
     else if (tool === 'pen') {
       clearSel();
       const s = { t: 's', c: pen.c, w: pen.w, pts: [x, y, p] };
-      act = { kind: 'pen', id: e.pointerId, s, before: items };
+      act = { kind: 'pen', id: e.pointerId, touch, s, before: items };
       items = [...items, s];
       tilesFor([x - 5, y - 5, x + 5, y + 5]).forEach((cv) => drawStroke(tileCtx(cv), s));
     } else if (tool === 'eraser') {
       clearSel();
-      act = { kind: 'erase', id: e.pointerId, before: items, hit: false };
+      act = { kind: 'erase', id: e.pointerId, touch, before: items, hit: false };
       erase(x, y);
     } else {
       clearSel();
-      act = { kind: 'lasso', id: e.pointerId, poly: [x, y] };
+      act = { kind: 'lasso', id: e.pointerId, touch, poly: [x, y] };
       lassoSvg.classList.add('on');
     }
   });
 
-  const onMove = (e) => {
+  sc.addEventListener('pointermove', (e) => {
     if (lp && e.pointerId === lp.id && Math.hypot(e.clientX - lp.cx, e.clientY - lp.cy) > 8) cancelLp();
-    if (act?.kind === 'pan' && fingers.has(e.pointerId)) {
-      const [px, py] = fingers.get(e.pointerId);
-      fingers.set(e.pointerId, [e.clientX, e.clientY]);
-      sc.scrollLeft -= (e.clientX - px) / fingers.size;
-      sc.scrollTop -= (e.clientY - py) / fingers.size;
-      return;
-    }
+    if (fingers.has(e.pointerId)) fingers.set(e.pointerId, [e.clientX, e.clientY]);
+    if (act?.kind === 'pinch') { if (fingers.has(e.pointerId)) pinchMove(); return; }
     if (!act || e.pointerId !== act.id) return;
+    if (act.kind === 'pan') return panMove(e);
     const evs = e.getCoalescedEvents?.() || [e];
     for (const ev of evs.length ? evs : [e]) move(pos(ev));
-  };
-  pg.addEventListener('pointermove', onMove);
+  });
 
   function move([x, y, p]) {
     if (act.kind === 'pen') {
       const pts = act.s.pts, n = pts.length;
       const lx = pts[n - 3], ly = pts[n - 2];
-      if ((x - lx) ** 2 + (y - ly) ** 2 < .36) return;   // zu nah am letzten Punkt
+      if ((x - lx) ** 2 + (y - ly) ** 2 < .36 / view.z ** 2) return;   // zu nah am letzten Punkt
       pts.push(x, y, p);
       boxes.delete(act.s);
       // nur das neue Stück zeichnen; am Ende wird die Kachel sauber neu gezeichnet
@@ -654,15 +792,14 @@ export function createBoard(opts) {
     } else if (act.kind === 'erase') erase(x, y);
     else if (act.kind === 'lasso') {
       act.poly.push(x, y);
-      lassoLine.setAttribute('points', act.poly.map((v) => v.toFixed(1)).join(' '));
+      drawLasso();
     } else if (act.kind === 'move') {
       act.dx = x - act.x; act.dy = y - act.y;
       renderSel(act.dx, act.dy, 1);
     } else if (act.kind === 'fmove') {
       // immer ganze Kästchen weit, damit der Bereich auf dem Raster bleibt
-      const f = frameList()[act.n];
-      act.dx = Math.max(-f.x, Math.round((x - act.x) / GRID) * GRID);
-      act.dy = Math.max(-f.y, Math.round((y - act.y) / GRID) * GRID);
+      act.dx = Math.round((x - act.x) / GRID) * GRID;
+      act.dy = Math.round((y - act.y) / GRID) * GRID;
       renderSel(act.dx, act.dy, 1);
       act.tab.closest('.ink-frame').style.translate = `${act.dx * scale}px ${act.dy * scale}px`;
     } else if (act.kind === 'scale') {
@@ -676,10 +813,11 @@ export function createBoard(opts) {
   }
 
   function erase(x, y) {
+    const r = ERASE_R / view.z;
     const gone = items.filter((it) => {
       if (it.t !== 's') return false;
       const b = bbox(it);
-      return x > b[0] - ERASE_R && x < b[2] + ERASE_R && y > b[1] - ERASE_R && y < b[3] + ERASE_R && nearStroke(it, x, y, ERASE_R);
+      return x > b[0] - r && x < b[2] + r && y > b[1] - r && y < b[3] + r && nearStroke(it, x, y, r);
     });
     if (!gone.length) return;
     act.hit = true;
@@ -690,11 +828,24 @@ export function createBoard(opts) {
   function end(e) {
     if (lp?.id === e.pointerId) cancelLp();
     if (e.pointerType === 'pen') penDown = false;
-    if (fingers.delete(e.pointerId) && act?.kind === 'pan') { if (!fingers.size) { act = null; } return; }
+    const wasFinger = fingers.delete(e.pointerId);
+    if (act?.kind === 'pinch') {
+      if (!wasFinger) return;
+      act = null;
+      opts.hold(false);
+      settle();
+      // ein Finger bleibt liegen: mit ihm weiter verschieben
+      const [rest] = fingers.keys();
+      if (rest !== undefined) { const [cx, cy] = fingers.get(rest); startPan({ pointerId: rest, pointerType: 'touch', clientX: cx, clientY: cy }); }
+      return;
+    }
     if (!act || e.pointerId !== act.id) return;
     const a = act;
     act = null;
-    if (a.kind === 'pen') {
+    if (a.kind === 'pan') {
+      sc.classList.remove('panning');
+      if (a.touch && performance.now() - a.t < 80) glide(a.vx, a.vy);
+    } else if (a.kind === 'pen') {
       boxes.delete(a.s);
       items = a.before;
       commit([...a.before, a.s]);
@@ -716,26 +867,38 @@ export function createBoard(opts) {
     else if (a.kind === 'scale') { selCv.style.transform = ''; applySel(0, 0, a.k); }
     opts.hold(false);
   }
-  pg.addEventListener('pointerup', end);
-  pg.addEventListener('pointercancel', end);
+  sc.addEventListener('pointerup', end);
+  sc.addEventListener('pointercancel', end);
 
-  // ---------- Scrollen ----------
-  let raf = 0;
-  sc.addEventListener('scroll', () => {
-    savedTop = sc.scrollTop;
-    savedLeft = sc.scrollLeft;
-    if (!raf) raf = requestAnimationFrame(() => { raf = 0; ensureTiles(); });
-  }, { passive: true });
+  // ---------- Mausrad und Trackpad: verschieben; mit Strg (oder Trackpad-Zwicken) zoomen ----------
+  sc.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    stopAnim();
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? sc.clientHeight : 1;
+    if (e.ctrlKey) zoomAt(e.clientX, e.clientY, view.z * Math.exp(-Math.max(-60, Math.min(60, e.deltaY * unit)) * .006));   // Mausrad höchstens ~40 % je Raste
+    else panBy(-e.deltaX * unit, -e.deltaY * unit);
+    clearTimeout(settleT);
+    settleT = setTimeout(settle, 160);
+  }, { passive: false });
+
+  // Safari am Mac meldet das Zwicken am Trackpad als eigene Geste (am iPad übernehmen das die Finger oben)
+  let gz = 1;
+  sc.addEventListener('gesturestart', (e) => { e.preventDefault(); gz = view.z; });
+  sc.addEventListener('gesturechange', (e) => { e.preventDefault(); if (!fingers.size) zoomAt(e.clientX, e.clientY, gz * e.scale); });
+  sc.addEventListener('gestureend', (e) => { e.preventDefault(); settle(); });
 
   // ---------- nach außen ----------
   return {
     el: sc,
     // nach dem Einhängen ins Dokument (auch nach jedem Neuzeichnen der Ansicht)
-    attach() { if (!scale || sc.clientWidth !== lastW) { lastW = sc.clientWidth; layout(); } sc.scrollTop = savedTop; sc.scrollLeft = savedLeft; ensureTiles(); },
+    attach() { if (!scale || sc.clientWidth !== lastW) { lastW = sc.clientWidth; layout(); } else { place(); ensureTiles(); } },
     setTool,
     get tool() { return tool; },
     setPen(p) { pen = { ...pen, ...p }; },
-    setFinger(on) { finger = on; sc.classList.toggle('finger', on); },
+    setFinger(on) { finger = on; },
+    zoomIn: () => zoomStep(1.25),
+    zoomOut: () => zoomStep(.8),
+    resetView,
     undo: () => step(past, future),
     redo: () => step(future, past),
     get canUndo() { return past.length > 0; },
@@ -745,9 +908,9 @@ export function createBoard(opts) {
     get isEmpty() { return !items.length; },
     // Bild in der Mitte des sichtbaren Bereichs einfügen (unter die Striche)
     addImage({ path, w, h: ih }) {
-      const bw = Math.min(480, VIEW - 80), bh = bw * (ih / w);
-      const cx = (sc.scrollLeft + sc.clientWidth / 2) / scale, cy = (sc.scrollTop + sc.clientHeight / 2) / scale;
-      commit([{ t: 'i', src: path, x: Math.max(20, cx - bw / 2), y: Math.max(20, cy - bh / 2), w: bw, h: bh }, ...items]);
+      const bw = Math.min(480, VIEW - 80) / view.z, bh = bw * (ih / w);
+      const cx = view.x + sc.clientWidth / 2 / cur(), cy = view.y + sc.clientHeight / 2 / cur();
+      commit([{ t: 'i', src: path, x: cx - bw / 2, y: cy - bh / 2, w: bw, h: bh }, ...items]);
       redrawAll();
     },
     addFrame,
@@ -779,6 +942,6 @@ export function createBoard(opts) {
       return cv;
     },
     imagePaths: () => items.filter((it) => it.t === 'i').map((it) => it.src),
-    destroy() { ro.disconnect(); closeMenu(); sc.remove(); },
+    destroy() { ro.disconnect(); stopAnim(); closeMenu(); sc.remove(); },
   };
 }

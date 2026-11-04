@@ -64,11 +64,11 @@ export function deserialize(data) {
     let out = null;
     if (it?.t === 's') out = strokeIn(it);
     else if (it?.t === 'i' && IMG_PATH.test(it.src || '')) {
-      out = { t: 'i', src: it.src, x: num(it.x, -5000, 5000, 0), y: num(it.y, -5000, 1e6, 0), w: num(it.w, 10, 5000, 300), h: num(it.h, 10, 5000, 200) };
+      out = { t: 'i', src: it.src, x: num(it.x, -1e6, 1e6, 0), y: num(it.y, -1e6, 1e6, 0), w: num(it.w, 10, 5000, 300), h: num(it.h, 10, 5000, 200) };
     } else if (it?.t === 't' && UUID.test(it.page || '') && Array.isArray(it.s)) {
       out = { t: 't', page: it.page, s: it.s.map(strokeIn) };
     } else if (it?.t === 'f' && FRAMES[it.fmt]) {
-      const snap = (v) => Math.round(num(v, 0, 1e6, 0) / 25) * 25;
+      const snap = (v) => Math.round(num(v, -1e6, 1e6, 0) / 25) * 25;
       out = { t: 'f', fmt: it.fmt, x: snap(it.x), y: snap(it.y) };
     }
     if (!out) continue;

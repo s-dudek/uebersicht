@@ -1018,16 +1018,30 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
    ========================================================================== */
 .main.is-ink { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
 .ink-slot { position: relative; flex: 1; min-height: 0; display: flex; width: 100%; max-width: none; margin: 0; }
-.ink-scroll { flex: 1; min-width: 0; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
-  touch-action: pan-x pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-.ink-scroll.finger { touch-action: none; }
-.main.is-ink.has-dock .ink-scroll { padding-bottom: calc(var(--safe-bottom) + 96px); }
-.ink-page { position: relative; overflow: hidden; cursor: crosshair; background-color: var(--white);
-  background-image: linear-gradient(rgba(12, 55, 65, .09) 1px, transparent 1px), linear-gradient(90deg, rgba(12, 55, 65, .09) 1px, transparent 1px);
-  background-size: var(--g, 25px) var(--g, 25px); }
-.ink-scroll[data-tool="lasso"] .ink-page { cursor: default; }
-.ink-tiles canvas { position: absolute; left: 0; width: 100%; pointer-events: none; }
+/* unendliche Fläche: Kästchen als Hintergrund, Inhalt in einer verschobenen Ebene */
+.ink-view { position: relative; flex: 1; min-width: 0; overflow: hidden; cursor: crosshair; touch-action: none; overscroll-behavior: contain;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; background-color: var(--white);
+  background-image: linear-gradient(rgba(12, 55, 65, .09) 1px, transparent 1px), linear-gradient(90deg, rgba(12, 55, 65, .09) 1px, transparent 1px); }
+.ink-view[data-tool="lasso"] { cursor: default; }
+.ink-view.panning { cursor: grabbing; }
+.ink-page { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
+.ink-tiles canvas { position: absolute; pointer-events: none; }
 .ink-titles, .ink-frames { position: absolute; inset: 0; pointer-events: none; }
+/* Zoom: erscheint, sobald die Ansicht nicht mehr die ursprüngliche ist */
+.ink-zoom { position: absolute; z-index: 3; left: 50%; bottom: calc(var(--safe-bottom) + 18px); translate: -50% 0; display: flex; align-items: center; gap: 2px; padding: 4px;
+  border-radius: 999px; background: var(--ink); color: var(--white); box-shadow: 0 8px 22px rgba(12, 55, 65, .28); animation: fade .15s ease; cursor: default; }
+.ink-zoom[hidden] { display: none; }
+.ink-zoom button { height: 36px; min-width: 36px; display: grid; place-items: center; border-radius: 999px; color: var(--white); }
+.ink-zoom button svg { width: 18px; height: 18px; }
+.ink-zoom button:active { background: rgba(255, 255, 255, .16); }
+.ink-zpct { min-width: 50px; text-align: center; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ink-zoom .ink-zreset { display: flex; align-items: center; gap: 6px; padding: 0 14px 0 10px; margin-left: 4px; background: var(--white); color: var(--ink); font-size: 14px; font-weight: 600; white-space: nowrap; }
+.ink-zoom .ink-zreset:active { background: var(--pale); }
+@media (max-width: 1023px) {
+  /* Smartphone/Tablet: links unten, rechts sitzt der Steuerknopf */
+  .ink-zoom { left: var(--gutter-l); translate: none; bottom: calc(var(--safe-bottom) + 22px); }
+}
+@media (max-width: 420px) { .ink-zreset span { display: none; } .ink-zoom .ink-zreset { padding: 0 10px; } }
 /* Bereiche (A4): gestrichelter Rahmen, Reiter zum Verschieben und für das Menü */
 .ink-frame { position: absolute; box-sizing: border-box; border: 2px dashed rgba(62, 124, 168, .55); border-radius: 2px; }
 .ink-ftab { position: absolute; left: -2px; bottom: 100%; margin-bottom: 4px; pointer-events: auto; touch-action: none; cursor: grab; white-space: nowrap;
@@ -1042,8 +1056,8 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
   background: var(--ink) center / 12px no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 6l6 6-6 6'/%3E%3C/svg%3E"); }
 .ink-title:hover, .ink-title:focus-visible, .ink-title:active { background: rgba(168, 190, 167, .18); box-shadow: inset 0 0 0 1.5px rgba(12, 55, 65, .16); }
 .ink-title:hover::after, .ink-title:focus-visible::after, .ink-title:active::after { opacity: 1; }
-.ink-scroll:not([data-tool="pen"]) .ink-title { pointer-events: none; }
-.ink-lasso { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; display: none; }
+.ink-view:not([data-tool="pen"]) .ink-title { pointer-events: none; }
+.ink-lasso { position: absolute; z-index: 2; inset: 0; width: 100%; height: 100%; pointer-events: none; display: none; }
 .ink-lasso.on { display: block; }
 .ink-lasso polyline { fill: rgba(62, 124, 168, .08); stroke: #3E7CA8; stroke-width: 1.5; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
 .ink-sel { position: absolute; border: 1.5px dashed #3E7CA8; border-radius: 8px; background: rgba(62, 124, 168, .05); cursor: move; touch-action: none; }
@@ -1057,7 +1071,23 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .ink-selbar button:active { background: rgba(255, 255, 255, .14); }
 .ink-hint { position: absolute; z-index: 1; left: 50%; top: 48px; translate: -50% 0; width: min(440px, 86%); margin: 0; text-align: center; color: var(--grey); font-size: 16px; pointer-events: none; }
 .ink-ttl { height: 38px; width: auto; max-width: min(60vw, 520px); flex: none; }
-/* Werkzeuge (Smartphone/Tablet unten, Desktop in der Kopfleiste) */
+/* Werkzeugleiste unter der Kopfleiste; eingefahren bleibt nur der kleine Reiter */
+.ink-bar { position: relative; z-index: 4; flex: none; width: 100%; max-width: none; margin: 0; display: grid; grid-template-rows: 1fr; transition: grid-template-rows .25s ease;
+  background: rgba(255, 255, 255, .94); box-shadow: 0 1px 0 var(--soft), 0 6px 16px rgba(12, 55, 65, .06); }
+.ink-bar.closed { grid-template-rows: 0fr; box-shadow: 0 1px 0 var(--soft); }
+.ink-tools { min-height: 0; overflow: hidden; }
+.ink-tools-in { display: flex; align-items: center; gap: 4px; padding: 6px var(--gutter-r) 6px var(--gutter-l); overflow-x: auto; scrollbar-width: none; }
+.ink-tools-in::-webkit-scrollbar { display: none; }
+.ink-bar .dk.ink-b { height: 40px; width: 40px; }
+.ink-bar .dk.ink-b svg { width: 20px; height: 20px; }
+.ink-sep { flex: none; width: 1.5px; height: 24px; margin: 0 4px; border-radius: 1px; background: var(--soft); }
+.ink-fold { position: absolute; top: 100%; left: 50%; translate: -50% 0; display: flex; align-items: center; gap: 4px; height: 22px; padding: 0 10px 2px;
+  border-radius: 0 0 12px 12px; background: rgba(255, 255, 255, .94); box-shadow: 0 1px 0 var(--soft), 0 4px 10px rgba(12, 55, 65, .08); color: var(--ink); font-size: 12px; font-weight: 600; }
+.ink-fold svg { width: 16px; height: 16px; rotate: 180deg; transition: rotate .25s; }
+.ink-fold span { display: none; }
+.ink-bar.closed .ink-fold svg { rotate: 0deg; }
+.ink-bar.closed .ink-fold span { display: inline; }
+.ink-bar.closed .ink-fold { padding: 0 12px 2px 8px; }
 .ink-seg button { padding: 6px 10px; }
 .ink-seg svg { width: 20px; height: 20px; }
 .ink-pens { display: flex; align-items: center; gap: 8px; padding: 0 6px; flex: none; }
@@ -1069,11 +1099,17 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .dk.ink-b { flex: none; width: 44px; }
 .dk.ink-b.on { background: var(--pale); }
 .dk:disabled { opacity: .3; }
-.dock:has(.ink-seg) { overflow-x: auto; scrollbar-width: none; }
 .ph-in .ink-ttl + .ph-tools { margin-left: auto; }
 /* Notiz-Ordner: Notizen / Handschrift umschalten */
 .ph-in .note-mode { margin-left: auto; flex: none; }
 .ph-in .note-mode + .ph-tools { margin-left: 12px; }
+/* Handschrift: Ordnername als Auswahlknopf für die Kategorien */
+.ph-drop { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 4px 10px 4px 4px; margin-left: -4px; border-radius: 12px; color: var(--ink); }
+.ph-drop > svg { width: 18px; height: 18px; flex: none; }
+.ph-drop:active { background: var(--pale); }
+@media (hover: hover) { .ph-drop:hover { background: var(--pale); } }
+.cm-i .cm-fic { flex: none; width: 20px; height: 20px; display: grid; place-items: center; color: var(--fc); }
+.cmenu.drop { max-height: min(70vh, 520px); overflow-y: auto; }
 /* Export */
 .exp-lead { margin: 0 0 10px; }
 .exp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
@@ -1220,13 +1256,11 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
   .sheet.full { height: min(820px, calc(100% - 64px)); }
 }
 
-/* Handschrift am Desktop: Ordner links, Zeichenfläche füllt den Rest */
+/* Handschrift am Desktop: Zeichenfläche über die ganze Breite, Werkzeuge mittig */
 @media (min-width: 1024px) {
-  .main.is-ink { padding: 16px 0 0 24px; }
-  .split.ink-split { flex: 1; min-height: 0; width: 100%; max-width: none; margin: 0; gap: 16px; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
-  .ink-split .fcol { align-self: start; }
-  .ink-split > .split-main { display: flex; min-height: 0; min-width: 0; }
-  .ink-split .ink-page { border-top-left-radius: 14px; }
+  .main.is-ink { padding: 0; }
+  .ink-tools-in { justify-content: center; padding-inline: 24px; }
+  .ink-bar .dk.ink-b:hover:not(:disabled) { background: var(--pale); }
 }
 
 /* ==========================================================================

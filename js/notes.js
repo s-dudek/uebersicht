@@ -28,7 +28,7 @@ export function renderNotes() {
 }
 
 function renderNoteList(fid) {
-  if (state.noteMode === 'ink') return listLayout(noteFolders(), fid, renderInk(fid), '', 'ink-split');
+  if (state.noteMode === 'ink') return renderInk(fid);   // ganze Breite, Ordner über die Kopfleiste
   const has = notesIn(fid).length > 0;
   const row = (n) => `
     <div class="trow ${n.meta?.color ? 'tinted' : ''}" data-drag="${n.id}" data-gid="${esc(n.meta?.group || '')}"${itemTint(n)}>
