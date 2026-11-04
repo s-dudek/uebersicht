@@ -43,3 +43,9 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
    Mit Playwright Bildschirmfotos bei 390 px, 820 px (iPad) und 1280 px prüfen, Konsole auf Fehler.
 3. In `sw.js` die Nummer bei `CACHE` erhöhen und neue Dateien in `FILES` eintragen.
 4. Committen und auf `main` pushen.
+
+## Stand und offene Punkte (November 2026)
+- Datenbank ist auf dem Stand von `supabase-setup.sql` (inkl. Handschrift in Ordnern).
+- Push-Erinnerungen: App-Teil fertig; Edge Function deployen, Secrets setzen und Zeitplan (`supabase/push-zeitplan.sql`) einrichten ist noch offen.
+- Ideen, die Simon angeboten wurden: Wochenansicht im Kalender mit 7 Spalten am Desktop, Pinnwand der Startseite auch am Smartphone.
+- Handschrift am iPad mit Apple Pencil noch von Simon zu testen (Handballen, langes Drücken, Export über das Teilen-Menü).
