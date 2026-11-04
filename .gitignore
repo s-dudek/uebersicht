@@ -1,2 +1,5 @@
 node_modules/
 demo/uebersicht-vorschau.html
+# Schlüssel nie hochladen
+*GEHEIM*
+.env*
