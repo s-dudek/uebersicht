@@ -1,125 +1,35 @@
 // Handschrift: Zeichenfläche mit kariertem Papier
-// Stift (mit Druck), Radierer (ganze Striche), Auswahl (Lasso) zum Verschieben, Vergrößern, Löschen und "Als Titel".
+// Stift (mit Druck), Radierer (ganze Striche, bei Bildern Teilbereiche), Auswahl (Lasso oder Antippen),
+// Formen, Bemaßung, Titel (ziehen zum Verschieben, tippen zum Öffnen), Bilder zuschneiden.
 // Die Fläche ist unendlich in alle Richtungen und lässt sich verschieben und zoomen. Bei 100 % passen 1000 Einheiten in die Breite.
 // Gezeichnet wird in Kacheln fester Bildschirmgröße, damit auch große Flächen und starker Zoom wenig Speicher brauchen.
-// Bereiche (A4 hoch/quer) markieren, was exportiert wird; sie liegen immer genau auf den Kästchen.
 import { ICON } from './icons.js';
+import { startCrop } from './ink-crop.js';
+import {
+  bbox, dimLabelAt, drawDim, drawGrid, drawImageItem, drawStroke, forgetBox, forgetErased, fullRect,
+  GRID, nearItem, shapeStrokes, share, transform, union,
+} from './ink-draw.js';
 import { FRAMES, getImage, newId } from './ink-store.js';
 
 const VIEW = 1000;       // so viele Einheiten passen bei 100 % in die Breite
 const TILE_PX = 512;     // Kachelgröße in Bildschirmpunkten
-const GRID = 25;         // Kästchengröße in Einheiten
 const ZOOM = [.25, 4];   // kleinster und größter Zoom
-const ERASE_R = 9;       // Radierer-Radius in Einheiten
+const ERASE_R = 9;       // Radierer-Radius in Einheiten (bei 100 %)
 const HISTORY = 60;      // Schritte zum Rückgängigmachen
 const SEL_PX = 4096;     // größte Kantenlänge der Auswahl-Vorschau in Pixel
-
-// ---------- Geometrie ----------
-const boxes = new WeakMap();
-function bbox(it) {
-  let b = boxes.get(it);
-  if (b) return b;
-  if (it.t === 'i') b = [it.x, it.y, it.x + it.w, it.y + it.h];
-  else if (it.t === 'f') { const [w, h] = FRAMES[it.fmt]; b = [it.x, it.y, it.x + w, it.y + h]; }
-  else {
-    b = [Infinity, Infinity, -Infinity, -Infinity];
-    for (const s of it.t === 't' ? it.s : [it]) {
-      const r = s.w * 1.3;
-      for (let i = 0; i < s.pts.length; i += 3) {
-        b[0] = Math.min(b[0], s.pts[i] - r); b[1] = Math.min(b[1], s.pts[i + 1] - r);
-        b[2] = Math.max(b[2], s.pts[i] + r); b[3] = Math.max(b[3], s.pts[i + 1] + r);
-      }
-    }
-  }
-  boxes.set(it, b);
-  return b;
-}
-const union = (list) => list.reduce((u, it) => { const b = bbox(it); return [Math.min(u[0], b[0]), Math.min(u[1], b[1]), Math.max(u[2], b[2]), Math.max(u[3], b[3])]; }, [Infinity, Infinity, -Infinity, -Infinity]);
-
-function inPolygon(x, y, poly) {
-  let inside = false;
-  for (let i = 0, j = poly.length - 2; i < poly.length; j = i, i += 2) {
-    const xi = poly[i], yi = poly[i + 1], xj = poly[j], yj = poly[j + 1];
-    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
-  }
-  return inside;
-}
-
-function share(it, poly) {
-  if (it.t === 'f') return 0;   // Bereiche werden über ihren Reiter verschoben, nicht ausgewählt
-  if (it.t === 'i') return inPolygon(it.x + it.w / 2, it.y + it.h / 2, poly) ? 1 : 0;
-  let n = 0, hit = 0;
-  for (const s of it.t === 't' ? it.s : [it]) {
-    for (let i = 0; i < s.pts.length; i += 3) { n++; if (inPolygon(s.pts[i], s.pts[i + 1], poly)) hit++; }
-  }
-  return n ? hit / n : 0;
-}
-
-function nearStroke(s, x, y, r) {
-  const p = s.pts, rr = (r + s.w / 2) ** 2;
-  for (let i = 0; i < p.length; i += 3) {
-    const ax = p[i], ay = p[i + 1];
-    const bx = p[i + 3] ?? ax, by = p[i + 4] ?? ay;
-    const dx = bx - ax, dy = by - ay, len = dx * dx + dy * dy;
-    const t = len ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / len)) : 0;
-    if ((ax + t * dx - x) ** 2 + (ay + t * dy - y) ** 2 <= rr) return true;
-  }
-  return false;
-}
-
-// Verschieben/Skalieren: neue Objekte, die alten bleiben für "Rückgängig" unverändert
-function transform(it, ox, oy, k, dx, dy) {
-  const tx = (x) => ox + (x - ox) * k + dx, ty = (y) => oy + (y - oy) * k + dy;
-  const st = (s) => ({ ...s, w: s.w * k, pts: s.pts.map((v, i) => (i % 3 === 0 ? tx(v) : i % 3 === 1 ? ty(v) : v)) });
-  if (it.t === 's') return st(it);
-  if (it.t === 't') return { ...it, s: it.s.map(st) };
-  if (it.t === 'f') return { ...it, x: it.x + dx, y: it.y + dy };   // Bereiche werden nur verschoben
-  return { ...it, x: tx(it.x), y: ty(it.y), w: it.w * k, h: it.h * k };
-}
-
-// ---------- Striche zeichnen ----------
-const widthAt = (s, p) => s.w * (0.35 + 0.95 * p);
-
-function drawStroke(ctx, s) {
-  const p = s.pts, n = p.length / 3;
-  if (!n) return;
-  ctx.strokeStyle = ctx.fillStyle = s.c;
-  if (n === 1) {
-    ctx.beginPath(); ctx.arc(p[0], p[1], widthAt(s, p[2]) / 2, 0, Math.PI * 2); ctx.fill();
-    return;
-  }
-  // geglättet über die Mittelpunkte; Abschnitte mit gleicher Breite in einem Pfad
-  let curW = -1;
-  ctx.beginPath();
-  ctx.moveTo(p[0], p[1]);
-  let lx = p[0], ly = p[1];
-  for (let j = 1; j < n; j++) {
-    const x = p[j * 3], y = p[j * 3 + 1];
-    const last = j === n - 1;
-    const mx = last ? x : (x + p[j * 3 + 3]) / 2, my = last ? y : (y + p[j * 3 + 4]) / 2;
-    const w = Math.round(widthAt(s, p[j * 3 + 2]) * 4) / 4;
-    if (w !== curW) {
-      if (curW > 0) { ctx.lineWidth = curW; ctx.stroke(); ctx.beginPath(); ctx.moveTo(lx, ly); }
-      curW = w;
-    }
-    ctx.quadraticCurveTo(x, y, mx, my);
-    lx = mx; ly = my;
-  }
-  ctx.lineWidth = curW;
-  ctx.stroke();
-}
-
+const LONG = 480;        // lange drücken (ms)
+const TOOLS = ['pen', 'eraser', 'lasso'];   // Reihenfolge für die Taste am Stift
 
 // ====================================================================
-// Zeichenfläche
 // opts: { items, colors, onCommit(items, h, w), onOpenTitle(titleItem), onDeleteTitles(titles) -> Promise<bool>,
-//         onExport(frameIndex), hold(bool) }
+//         onExport(frameIndex), onTool(tool), hold(bool) }
 // ====================================================================
 export function createBoard(opts) {
   let items = opts.items;
-  let tool = 'pen', pen = { c: '#0C3741', w: 2.2 }, finger = false;
+  let tool = 'pen', shape = 'line', pen = { c: '#0C3741', w: 2.2 }, finger = false;
   const past = [], future = [];
   let sel = null;            // { set: Set<item>, box: [x0,y0,x1,y1] }
+  let crop = null;           // laufendes Zuschneiden: { item, ui }
   // Ansicht: linke obere Ecke in Einheiten und Zoom (1 = 100 %)
   const view = { x: 0, y: 0, z: 1 };
   let base = 0;              // Punkte je Einheit bei 100 %
@@ -133,11 +43,13 @@ export function createBoard(opts) {
   // ---------- Aufbau ----------
   const sc = document.createElement('div');
   sc.className = 'ink-view';
-  sc.innerHTML = `<div class="ink-page">
+  sc.innerHTML = `<canvas class="ink-grid" aria-hidden="true"></canvas>
+    <div class="ink-page">
       <div class="ink-tiles"></div>
       <div class="ink-frames"></div>
       <div class="ink-titles"></div>
     </div>
+    <canvas class="ink-live" aria-hidden="true"></canvas>
     <svg class="ink-lasso" aria-hidden="true"><polyline/></svg>
     <div class="ink-zoom" hidden>
       <button type="button" data-zoom="out" aria-label="Verkleinern" title="Verkleinern">${ICON.minus}</button>
@@ -145,7 +57,8 @@ export function createBoard(opts) {
       <button type="button" data-zoom="in" aria-label="Vergrößern" title="Vergrößern">${ICON.plus}</button>
       <button type="button" data-zoom="reset" class="ink-zreset">${ICON.target}<span>Ursprungsansicht</span></button>
     </div>`;
-  const pg = sc.firstElementChild;
+  const gridCv = sc.querySelector('.ink-grid'), liveCv = sc.querySelector('.ink-live');
+  const pg = sc.querySelector('.ink-page');
   const tileLayer = pg.querySelector('.ink-tiles');
   const titleLayer = pg.querySelector('.ink-titles');
   const frameLayer = pg.querySelector('.ink-frames');
@@ -154,16 +67,19 @@ export function createBoard(opts) {
   const zoomBar = sc.querySelector('.ink-zoom');
   const zoomPct = zoomBar.querySelector('.ink-zpct');
 
-  const setTool = (t) => { tool = t; clearSel(); sc.dataset.tool = t; };
-  setTool('pen');
+  function setTool(t) {
+    tool = t;
+    clearSel();
+    finishCrop();
+    sc.dataset.tool = t;
+  }
 
   // ---------- Ansicht ----------
-  // Ebene verschieben und (bis zum nächsten Neuaufbau) per CSS skalieren; Kästchen als Hintergrund
+  // Ebene verschieben und (bis zum nächsten Neuaufbau) per CSS skalieren; Kästchen frisch zeichnen
   function place() {
-    const s = cur(), ox = -view.x * s, oy = -view.y * s;
-    pg.style.transform = `translate(${ox}px, ${oy}px) scale(${s / scale})`;
-    sc.style.backgroundSize = `${GRID * s}px ${GRID * s}px`;
-    sc.style.backgroundPosition = `${ox}px ${oy}px`;
+    const s = cur();
+    pg.style.transform = `translate(${-view.x * s}px, ${-view.y * s}px) scale(${s / scale})`;
+    drawGrid(gridCv, sc.clientWidth, sc.clientHeight, dpr, view.x, view.y, s);
     zoomBar.hidden = Math.abs(view.z - 1) < .005 && Math.abs(view.x) < 1 && view.y > -1;
     zoomPct.textContent = Math.round(view.z * 100) + ' %';
   }
@@ -173,6 +89,8 @@ export function createBoard(opts) {
     if (!w) return;
     base = w / VIEW;
     dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    liveCv.width = Math.round(w * dpr);
+    liveCv.height = Math.round(sc.clientHeight * dpr);
     rebuild();
   }
 
@@ -187,6 +105,8 @@ export function createBoard(opts) {
     ensureTiles();
     renderOverlays();
     renderSel();
+    crop?.ui.rescale(scale);
+    dimInput?.blur();
   }
   const settle = () => { if (scale && scale !== cur()) rebuild(); };
 
@@ -261,8 +181,12 @@ export function createBoard(opts) {
     anim = requestAnimationFrame(frame);
   }
 
-  let lastW = 0;
-  const ro = new ResizeObserver(() => { if (sc.clientWidth !== lastW) { lastW = sc.clientWidth; layout(); } else ensureTiles(); });
+  let lastW = 0, lastH = 0;
+  const ro = new ResizeObserver(() => {
+    if (sc.clientWidth !== lastW) { lastW = sc.clientWidth; lastH = sc.clientHeight; layout(); return; }
+    if (sc.clientHeight !== lastH) { lastH = sc.clientHeight; liveCv.height = Math.round(lastH * dpr); place(); }
+    ensureTiles();
+  });
   ro.observe(sc);
 
   // ---------- Kacheln ----------
@@ -312,8 +236,9 @@ export function createBoard(opts) {
     if (it.t === 'f') return;   // Bereiche sind nur Markierungen (HTML darüber)
     if (it.t === 's') return drawStroke(ctx, it);
     if (it.t === 't') return it.s.forEach((s) => drawStroke(ctx, s));
+    if (it.t === 'd') return drawDim(ctx, it);
     const img = loaded.get(it.src);
-    if (img) return ctx.drawImage(img, it.x, it.y, it.w, it.h);
+    if (img) return drawImageItem(ctx, it, img);
     ctx.fillStyle = 'rgba(12,55,65,.06)';
     ctx.fillRect(it.x, it.y, it.w, it.h);
     getImage(it.src).then((bmp) => { if (bmp && !loaded.has(it.src)) { loaded.set(it.src, bmp); redrawBox(bbox(it)); renderSel(); } });
@@ -324,13 +249,13 @@ export function createBoard(opts) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, cv.width, cv.height);
     tileCtx(cv);
-    for (const it of items) if (!sel?.set.has(it) && hits(cv, bbox(it))) drawItem(ctx, it);
+    for (const it of items) if (!sel?.set.has(it) && it !== crop?.item && hits(cv, bbox(it))) drawItem(ctx, it);
   }
 
   const redrawBox = (b) => tiles.forEach((cv) => { if (hits(cv, b)) drawTile(cv); });
   const redrawAll = () => tiles.forEach(drawTile);
 
-  // ---------- Titel: anklickbare Flächen über den Strichen ----------
+  // ---------- Titel: Flächen über den Strichen (tippen öffnet, ziehen verschiebt) ----------
   function renderOverlays() { renderTitles(); renderFrames(); }
 
   function renderTitles() {
@@ -350,9 +275,10 @@ export function createBoard(opts) {
       titleLayer.appendChild(el);
     });
   }
+  // nur für die Tastatur; Maus, Stift und Finger laufen über die Zeigerereignisse (Tippen öffnet, Ziehen verschiebt)
   titleLayer.addEventListener('click', (e) => {
     const el = e.target.closest('.ink-title');
-    if (el) opts.onOpenTitle(items[+el.dataset.idx]);
+    if (el && e.detail === 0) opts.onOpenTitle(items[+el.dataset.idx]);
   });
 
   // ---------- Bereiche (A4): gestrichelter Rahmen mit Reiter zum Verschieben ----------
@@ -371,11 +297,12 @@ export function createBoard(opts) {
     });
   }
 
-  // freier Platz rechts neben dem sichtbaren Bereich bzw. unter vorhandenen Bereichen, auf den Kästchen
+  // freier Platz im sichtbaren Bereich bzw. unter vorhandenen Bereichen, auf den Kästchen
   function addFrame(fmt) {
     const [w, fh] = FRAMES[fmt];
     const snap = (v) => Math.round(v / GRID) * GRID;
-    let x = snap(view.x + GRID * 2), y = snap(view.y + GRID * 3);
+    const x = snap(view.x + GRID * 2);
+    let y = snap(view.y + GRID * 3);
     const overlaps = (ax, ay) => frameList().some((f) => { const b = bbox(f); return ax < b[2] && ax + w > b[0] && ay < b[3] && ay + fh > b[1]; });
     while (overlaps(x, y)) y += GRID * 4;
     commit([...items, { t: 'f', fmt, x, y }]);
@@ -417,12 +344,16 @@ export function createBoard(opts) {
   function step(from, to) {
     if (!from.length) return;
     clearSel();
+    finishCrop();
     to.push(items);
     items = from.pop();
     redrawAll();
     renderOverlays();
     opts.onCommit(items, ...extent());
   }
+
+  // ein Element ersetzen (gleiche Stelle in der Reihenfolge)
+  const replace = (old, next) => commit(items.map((it) => (it === old ? next : it)));
 
   // ---------- Auswahl ----------
   const selBox = document.createElement('div');
@@ -431,10 +362,13 @@ export function createBoard(opts) {
   selBox.innerHTML = `<canvas></canvas><i class="ink-sel-h" aria-hidden="true"></i>
     <div class="ink-selbar">
       <button type="button" data-sel="title">Als Titel</button>
+      <button type="button" data-sel="crop">Zuschneiden</button>
+      <button type="button" data-sel="dim">Maß</button>
       <button type="button" data-sel="delete" class="danger">Löschen</button>
     </div>`;
   pg.appendChild(selBox);
   const selCv = selBox.querySelector('canvas');
+  const single = (t) => (sel?.set.size === 1 && [...sel.set][0].t === t ? [...sel.set][0] : null);
 
   function setSel(list) {
     const had = sel;
@@ -451,8 +385,10 @@ export function createBoard(opts) {
     selBox.hidden = false;
     Object.assign(selBox.style, { left: (x0 - pad + dx) * scale + 'px', top: (y0 - pad + dy) * scale + 'px', width: w * scale + 'px', height: hh * scale + 'px' });
     selBox.classList.toggle('below', (y0 - view.y) * cur() < 56);
-    const strokes = [...sel.set].filter((it) => it.t === 's');
-    selBox.querySelector('[data-sel="title"]').hidden = !strokes.length || [...sel.set].some((it) => it.t === 't');
+    const list = [...sel.set];
+    selBox.querySelector('[data-sel="title"]').hidden = !list.some((it) => it.t === 's') || list.some((it) => it.t === 't');
+    selBox.querySelector('[data-sel="crop"]').hidden = !single('i');
+    selBox.querySelector('[data-sel="dim"]').hidden = !single('d');
     if (dx || dy || k !== 1) return;   // beim Ziehen nur verschieben, nicht neu zeichnen
     const q = Math.min(dpr, SEL_PX / (Math.max(w, hh) * scale));   // bei starkem Zoom nicht riesig
     selCv.width = Math.max(1, Math.round(w * scale * q));
@@ -522,19 +458,75 @@ export function createBoard(opts) {
     renderOverlays();
     renderSel();
   }
-  const recolor = (c) => editSel((it) => (it.t === 's' ? { ...it, c } : it.t === 't' ? { ...it, s: it.s.map((s) => ({ ...s, c })) } : it));
+  const recolor = (c) => editSel((it) => (it.t === 's' || it.t === 'd' ? { ...it, c } : it.t === 't' ? { ...it, s: it.s.map((s) => ({ ...s, c })) } : it));
   const group = () => { const g = newId(); editSel((it) => ({ ...it, g })); };
   const ungroup = () => editSel(({ g, ...rest }) => rest);
+  const unerase = () => editSel(({ er, ...rest }) => rest);
 
-  // obenauf liegendes Element an einem Punkt
+  // obenauf liegendes Element an einem Punkt (Bereiche ausgenommen)
   function hitAt(x, y) {
+    const r = 8 / view.z;
     for (let i = items.length - 1; i >= 0; i--) {
-      const it = items[i], b = bbox(it), r = it.t === 's' ? 8 : 4;
-      if (it.t === 'f') continue;
-      if (x < b[0] - r || x > b[2] + r || y < b[1] - r || y > b[3] + r) continue;
-      if (it.t !== 's' || nearStroke(it, x, y, r)) return it;
+      if (items[i].t !== 'f' && nearItem(items[i], x, y, items[i].t === 'i' ? 0 : r)) return items[i];
     }
     return null;
+  }
+
+  // ---------- Bilder zuschneiden ----------
+  async function cropImage(it) {
+    clearSel();
+    finishCrop();
+    const bmp = loaded.get(it.src) || (await getImage(it.src));
+    if (!bmp || !items.includes(it)) return;
+    loaded.set(it.src, bmp);
+    crop = { item: it };
+    redrawBox(bbox(it));
+    crop.ui = startCrop({
+      layer: pg, item: it, bmp, scale, curScale: cur,
+      onDone: (r) => {
+        crop = null;
+        if (!r) return redrawBox(bbox(it));
+        const [fx, fy, fw, fh] = fullRect(it);
+        const { cr, ...rest } = it;
+        const next = { ...rest, x: fx + r[0] * fw, y: fy + r[1] * fh, w: (r[2] - r[0]) * fw, h: (r[3] - r[1]) * fh };
+        if (r.some((v, i) => Math.abs(v - [0, 0, 1, 1][i]) > 1e-4)) next.cr = r;
+        replace(it, next);
+        redrawBox(union([it, next]));
+      },
+    });
+  }
+  const finishCrop = () => crop?.ui?.apply();
+
+  // ---------- Bemaßung: Maß eintragen ----------
+  let dimInput = null;
+  function editDim(it) {
+    dimInput?.blur();
+    const [lx, ly] = dimLabelAt(it);
+    const inp = document.createElement('input');
+    inp.className = 'ink-dim-input';
+    inp.maxLength = 40;
+    inp.placeholder = 'Maß';
+    inp.value = it.txt || '';
+    inp.setAttribute('aria-label', 'Maß eintragen');
+    Object.assign(inp.style, { left: lx * scale + 'px', top: ly * scale + 'px' });
+    pg.appendChild(inp);
+    dimInput = inp;
+    let cancelled = false;
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') inp.blur();
+      if (e.key === 'Escape') { cancelled = true; inp.blur(); }
+      e.stopPropagation();
+    });
+    inp.addEventListener('blur', () => {
+      inp.remove();
+      if (dimInput === inp) dimInput = null;
+      const txt = inp.value.trim().slice(0, 40);
+      if (cancelled || txt === (it.txt || '') || !items.includes(it)) return;
+      const next = { ...it, txt };
+      replace(it, next);
+      redrawBox(union([it, next]));
+    });
+    requestAnimationFrame(() => inp.focus());
   }
 
   // ---------- Menü: Rechtsklick oder lange drücken ----------
@@ -568,13 +560,21 @@ export function createBoard(opts) {
     const oneGroup = g && list.every((it) => it.g === g);
     const canTitle = list.some((it) => it.t === 's') && !list.some((it) => it.t === 't');
     const hasInk = list.some((it) => it.t !== 'i');
+    const img = single('i'), dim = single('d');
+    const item = (m, icon, label, cls = '') => `<button class="cm-i ${cls}" data-m="${m}">${ICON[icon]}<span>${label}</span></button>`;
     showMenu(cx, cy, `
       ${hasInk ? `<div class="cm-colors" role="group" aria-label="Umfärben">${(opts.colors || []).map((c, i) => `<button class="cm-color" data-m="color" data-i="${i}" style="background:${c}" aria-label="Farbe ${i + 1}"></button>`).join('')}</div><hr>` : ''}
-      ${list.length > 1 && !oneGroup ? `<button class="cm-i" data-m="group">${ICON.stack}<span>Gruppieren</span></button>` : ''}
-      ${oneGroup ? `<button class="cm-i" data-m="ungroup">${ICON.stack}<span>Gruppierung aufheben</span></button>` : ''}
-      ${canTitle ? `<button class="cm-i" data-m="title">${ICON.chevR}<span>Als Titel</span></button>` : ''}
-      <button class="cm-i danger" data-m="delete">${ICON.trash}<span>Löschen</span></button>`, (m, i) => {
+      ${img ? item('crop', 'crop', 'Zuschneiden') : ''}
+      ${img?.er?.length ? item('unerase', 'undo', 'Radiertes zurückholen') : ''}
+      ${dim ? item('dim', 'ruler', 'Maß eintragen') : ''}
+      ${list.length > 1 && !oneGroup ? item('group', 'stack', 'Gruppieren') : ''}
+      ${oneGroup ? item('ungroup', 'stack', 'Gruppierung aufheben') : ''}
+      ${canTitle ? item('title', 'chevR', 'Als Titel') : ''}
+      ${item('delete', 'trash', 'Löschen', 'danger')}`, (m, i) => {
       if (m === 'color') recolor(opts.colors[+i]);
+      else if (m === 'crop') cropImage(img);
+      else if (m === 'unerase') unerase();
+      else if (m === 'dim') editDim(dim);
       else if (m === 'group') group();
       else if (m === 'ungroup') ungroup();
       else if (m === 'title') makeTitle();
@@ -596,8 +596,10 @@ export function createBoard(opts) {
       else if (m === 'remove') commit(items.filter((it) => it !== f));   // Inhalt bleibt stehen
     });
   }
-  document.addEventListener('pointerdown', (e) => { if (menu && !menu.contains(e.target)) closeMenu(); }, true);
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+  const onDocDown = (e) => { if (menu && !menu.contains(e.target)) closeMenu(); };
+  const onDocKey = (e) => { if (e.key === 'Escape') { closeMenu(); crop?.ui.cancel(); } };
+  document.addEventListener('pointerdown', onDocDown, true);
+  document.addEventListener('keydown', onDocKey);
 
   // Punkt in der Auswahl: Menü dafür; sonst das Element darunter auswählen
   function contextAt(cx, cy, x, y) {
@@ -612,7 +614,7 @@ export function createBoard(opts) {
 
   sc.addEventListener('contextmenu', (e) => {
     e.preventDefault();
-    if (Date.now() - menuAt < 700) return;   // schon durch langes Drücken geöffnet
+    if (Date.now() - menuAt < 700) return;   // schon durch langes Drücken oder die Stifttaste ausgelöst
     const [x, y] = pos(e);
     contextAt(e.clientX, e.clientY, x, y);
   });
@@ -627,13 +629,15 @@ export function createBoard(opts) {
       lp = null;
       cancelAct();
       contextAt(cx, cy, x, y);
-    }, 520) };
+    }, LONG) };
   }
 
   selBox.querySelector('.ink-selbar').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-sel]');
-    if (b?.dataset.sel === 'title') makeTitle();
-    if (b?.dataset.sel === 'delete') deleteSel();
+    const b = e.target.closest('[data-sel]')?.dataset.sel;
+    if (b === 'title') makeTitle();
+    else if (b === 'crop') cropImage(single('i'));
+    else if (b === 'dim') editDim(single('d'));
+    else if (b === 'delete') deleteSel();
   });
 
   // ---------- Eingabe: Stift und Maus schreiben, Finger verschieben und zoomen (wahlweise schreibt ein Finger) ----------
@@ -649,13 +653,27 @@ export function createBoard(opts) {
   // Zeiger festhalten, damit die Geste auch außerhalb der Fläche weiterläuft (schlägt bei schon beendeten Zeigern fehl)
   const capture = (el, id) => { try { el.setPointerCapture(id); } catch { /* Zeiger schon weg */ } };
 
-  // keine Browser-Gesten (Scrollen, Lupe, Doppeltipp-Zoom) auf der Fläche; Knöpfe bleiben antippbar
-  sc.addEventListener('touchstart', (e) => { if (!e.target.closest('button')) e.preventDefault(); }, { passive: false });
-  sc.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+  // keine Browser-Gesten (Scrollen, Lupe, Doppeltipp-Zoom) auf der Fläche; Knöpfe und Eingabefelder bleiben antippbar
+  sc.addEventListener('touchstart', (e) => { if (!e.target.closest('button, input')) e.preventDefault(); }, { passive: false });
+  sc.addEventListener('touchmove', (e) => { if (!e.target.closest('input')) e.preventDefault(); }, { passive: false });
 
   function drawLasso() {
     const s = cur();
     lassoLine.setAttribute('points', act.poly.map((v, i) => ((v - (i % 2 ? view.y : view.x)) * s).toFixed(1)).join(' '));
+  }
+
+  // vorhergesagte Punkte des Stifts (weniger Verzögerung beim Schreiben), werden bei jedem Ereignis ersetzt
+  function drawPredicted(e) {
+    const ctx = liveCv.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, liveCv.width, liveCv.height);
+    const pr = act?.kind === 'pen' && e?.getPredictedEvents?.();
+    if (!pr?.length) return;
+    const p = act.s.pts, n = p.length;
+    const k = cur() * dpr;
+    ctx.setTransform(k, 0, 0, k, -view.x * k, -view.y * k);
+    ctx.lineCap = ctx.lineJoin = 'round';
+    drawStroke(ctx, { c: act.s.c, w: act.s.w, pts: [p[n - 3], p[n - 2], p[n - 1], ...pr.flatMap((ev) => { const q = pos(ev); q[2] = p[n - 1]; return q; })] });
   }
 
   // laufende Geste verwerfen, ohne etwas zu übernehmen
@@ -663,11 +681,12 @@ export function createBoard(opts) {
     if (!act) return;
     const a = act;
     act = null;
-    if (a.kind === 'pen') { items = a.before; redrawBox(bbox(a.s)); }
-    else if (a.kind === 'erase' && a.hit) { items = a.before; redrawAll(); }
+    if (a.kind === 'pen') { items = a.before; redrawBox(bbox(a.s)); drawPredicted(); }
+    else if ((a.kind === 'erase' && a.hit) || a.kind === 'shape' || a.kind === 'dim') { items = a.before; redrawAll(); }
     else if (a.kind === 'lasso') { lassoSvg.classList.remove('on'); lassoLine.setAttribute('points', ''); }
     else if (a.kind === 'fmove') { a.tab.closest('.ink-frame').style.translate = ''; selBox.classList.remove('bare'); clearSel(); }
     else if (a.kind === 'move' || a.kind === 'scale') { selCv.style.transform = ''; renderSel(); }
+    else if (a.kind === 'tpress') clearTimeout(a.timer);
     sc.classList.remove('panning');
     opts.hold(false);
   }
@@ -706,8 +725,28 @@ export function createBoard(opts) {
     panBy(dx, dy);
   }
 
+  // Titel anheben: ab jetzt wird er verschoben statt geöffnet
+  function liftTitle() {
+    const a = act;
+    if (a?.kind !== 'tpress') return;
+    clearTimeout(a.timer);
+    setSel(withGroups([a.it]));
+    navigator.vibrate?.(12);
+    act = { kind: 'move', id: a.id, touch: a.touch, x: a.x, y: a.y, dx: 0, dy: 0, title: true };
+  }
+
+  // Taste am Stift (wo der Browser sie meldet): wechselt Stift → Radierer → Auswahl
+  function penButton(e) {
+    const next = TOOLS[(TOOLS.indexOf(tool) + 1) % TOOLS.length];
+    menuAt = Date.now();   // das gleichzeitige Rechtsklick-Menü unterdrücken
+    setTool(next);
+    opts.onTool?.(next);
+    e.preventDefault();
+  }
+
   sc.addEventListener('pointerdown', (e) => {
     stopAnim();
+    if (dimInput && e.target !== dimInput) dimInput.blur();
     const tab = e.target.closest('.ink-ftab');
     if (tab && !act) {   // Bereich samt Inhalt verschieben (Tippen ohne Bewegung: Menü)
       e.preventDefault();
@@ -720,47 +759,68 @@ export function createBoard(opts) {
       act = { kind: 'fmove', id: e.pointerId, n, x, y, dx: 0, dy: 0, tab };
       return;
     }
-    if (e.target.closest('button')) return;
+    const tEl = e.target.closest('.ink-title');
+    if (tEl && !act && !(e.pointerType === 'touch' && fingers.size)) {   // Titel: tippen öffnet, ziehen (Finger: lange drücken) verschiebt
+      e.preventDefault();
+      capture(sc, e.pointerId);
+      const touch = e.pointerType === 'touch';
+      if (touch) fingers.set(e.pointerId, [e.clientX, e.clientY]);
+      const [x, y] = pos(e);
+      act = { kind: 'tpress', id: e.pointerId, touch, it: items[+tEl.dataset.idx], x, y, cx: e.clientX, cy: e.clientY };
+      if (touch) act.timer = setTimeout(liftTitle, LONG);
+      opts.hold(true);
+      return;
+    }
+    if (e.target.closest('button, input')) return;
     if (e.pointerType === 'mouse' && e.button === 1 && !act) {   // mittlere Maustaste: verschieben
       e.preventDefault();
       capture(sc, e.pointerId);
       startPan(e);
       return;
     }
+    if (e.pointerType === 'pen' && (e.buttons & 2) && !(e.buttons & 32)) return penButton(e);
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const onSel = sel && e.target.closest('.ink-sel');
     if (e.pointerType === 'touch') {
       if (penDown) return;                          // Handballen beim Schreiben
       fingers.set(e.pointerId, [e.clientX, e.clientY]);
       capture(sc, e.pointerId);
       if (fingers.size === 2) { cancelLp(); cancelAct(); startPinch(); return; }
       if (fingers.size > 2 || act) return;
-      if (!finger) { startPan(e); startLp(e); return; }   // Finger verschiebt; lange drücken öffnet das Menü
+      // Finger verschiebt die Fläche (lange drücken öffnet das Menü); Auswahl lässt sich mit dem Finger ziehen
+      if ((!finger || crop) && !onSel) { startPan(e); startLp(e); return; }
     } else if (e.pointerType === 'pen' && act?.touch) {
       cancelLp(); cancelAct();                      // der Stift hat Vorrang vor der Hand
       fingers.clear();
     }
     if (act) return;                                 // nur eine Geste gleichzeitig
+    if (crop) { finishCrop(); return; }              // daneben tippen übernimmt den Zuschnitt
     e.preventDefault();
     capture(sc, e.pointerId);
     if (e.pointerType === 'pen') penDown = true;
     opts.hold(true);
     const [x, y, p] = pos(e);
     const touch = e.pointerType === 'touch';
-    startLp(e);
+    const eraserEnd = e.pointerType === 'pen' && ((e.buttons & 32) || e.button === 5);   // Radier-Ende des Stifts
+    const t = eraserEnd ? 'eraser' : tool;
+    if (t !== 'shape' && t !== 'dim') startLp(e);
 
-    const onHandle = e.target.closest('.ink-sel-h'), onSel = e.target.closest('.ink-sel');
+    const onHandle = e.target.closest('.ink-sel-h');
     if (sel && onHandle) act = { kind: 'scale', id: e.pointerId, touch, x, y, k: 1 };
-    else if (sel && onSel) act = { kind: 'move', id: e.pointerId, touch, x, y, dx: 0, dy: 0 };
-    else if (tool === 'pen') {
+    else if (onSel) act = { kind: 'move', id: e.pointerId, touch, x, y, dx: 0, dy: 0 };
+    else if (t === 'pen') {
       clearSel();
       const s = { t: 's', c: pen.c, w: pen.w, pts: [x, y, p] };
-      act = { kind: 'pen', id: e.pointerId, touch, s, before: items };
+      act = { kind: 'pen', id: e.pointerId, touch, s, before: items, p };
       items = [...items, s];
       tilesFor([x - 5, y - 5, x + 5, y + 5]).forEach((cv) => drawStroke(tileCtx(cv), s));
-    } else if (tool === 'eraser') {
+    } else if (t === 'eraser') {
       clearSel();
-      act = { kind: 'erase', id: e.pointerId, touch, before: items, hit: false };
+      act = { kind: 'erase', id: e.pointerId, touch, before: items, hit: false, paths: new Map() };
       erase(x, y);
+    } else if (t === 'shape' || t === 'dim') {
+      clearSel();
+      act = { kind: t, id: e.pointerId, touch, before: items, x0: x, y0: y, x, y, made: [], shift: e.shiftKey };
     } else {
       clearSel();
       act = { kind: 'lasso', id: e.pointerId, touch, poly: [x, y] };
@@ -774,22 +834,32 @@ export function createBoard(opts) {
     if (act?.kind === 'pinch') { if (fingers.has(e.pointerId)) pinchMove(); return; }
     if (!act || e.pointerId !== act.id) return;
     if (act.kind === 'pan') return panMove(e);
+    if (act.kind === 'tpress') {
+      const d = Math.hypot(e.clientX - act.cx, e.clientY - act.cy);
+      if (act.touch && d > 8) { clearTimeout(act.timer); startPan(e); return; }   // Finger ohne langes Drücken: verschieben
+      if (act.touch || d <= 5) return;
+      liftTitle();
+    }
+    act.shift = e.shiftKey;
     const evs = e.getCoalescedEvents?.() || [e];
-    for (const ev of evs.length ? evs : [e]) move(pos(ev));
+    for (const ev of evs.length ? evs : [e]) move(pos(ev), e.pointerType === 'pen');
+    if (act?.kind === 'pen') drawPredicted(e);
   });
 
-  function move([x, y, p]) {
+  function move([x, y, p], stylus) {
     if (act.kind === 'pen') {
       const pts = act.s.pts, n = pts.length;
       const lx = pts[n - 3], ly = pts[n - 2];
-      if ((x - lx) ** 2 + (y - ly) ** 2 < .36 / view.z ** 2) return;   // zu nah am letzten Punkt
+      if ((x - lx) ** 2 + (y - ly) ** 2 < .25 / view.z ** 2) return;   // zu nah am letzten Punkt
+      if (stylus) p = act.p = act.p * .55 + p * .45;                    // Druck glätten (kein Flackern der Strichbreite)
       pts.push(x, y, p);
-      boxes.delete(act.s);
+      forgetBox(act.s);
       // nur das neue Stück zeichnen; am Ende wird die Kachel sauber neu gezeichnet
       const seg = { c: act.s.c, w: act.s.w, pts: pts.slice(Math.max(0, n - 6)) };
       const r = act.s.w * 2;
       tilesFor([Math.min(lx, x) - r, Math.min(ly, y) - r, Math.max(lx, x) + r, Math.max(ly, y) + r]).forEach((cv) => drawStroke(tileCtx(cv), seg));
     } else if (act.kind === 'erase') erase(x, y);
+    else if (act.kind === 'shape' || act.kind === 'dim') { act.x = x; act.y = y; drawShape(); }
     else if (act.kind === 'lasso') {
       act.poly.push(x, y);
       drawLasso();
@@ -812,17 +882,55 @@ export function createBoard(opts) {
     }
   }
 
+  // Form oder Maßlinie während des Ziehens (mit Umschalttaste bzw. fast gerade: waagrecht/senkrecht, Quadrat, Kreis)
+  function drawShape() {
+    const a = act;
+    let { x, y } = a;
+    const dx = x - a.x0, dy = y - a.y0;
+    if (a.kind === 'dim' || shape === 'line' || shape === 'arrow') {
+      if (a.shift || Math.abs(Math.sin(2 * Math.atan2(dy, dx))) < .07) {   // nahe 0°/90°
+        if (Math.abs(dx) > Math.abs(dy)) y = a.y0; else x = a.x0;
+      }
+    } else if (a.shift) {
+      const m = Math.max(Math.abs(dx), Math.abs(dy));
+      x = a.x0 + Math.sign(dx || 1) * m; y = a.y0 + Math.sign(dy || 1) * m;
+    }
+    const old = a.made;
+    if (a.kind === 'dim') a.made = [{ t: 'd', a: [a.x0, a.y0], b: [x, y], c: pen.c, w: pen.w, txt: '' }];
+    else {
+      const g = a.g ??= newId();
+      const list = shapeStrokes(shape, a.x0, a.y0, x, y, pen.w);
+      a.made = list.map((pts) => ({ t: 's', c: pen.c, w: pen.w, pts, ...(list.length > 1 ? { g } : {}) }));
+    }
+    items = [...a.before, ...a.made];
+    redrawBox(union([...old, ...a.made]));
+  }
+
+  // Radierer: Striche und Maße ganz, bei Bildern nur die überfahrene Stelle
   function erase(x, y) {
     const r = ERASE_R / view.z;
-    const gone = items.filter((it) => {
-      if (it.t !== 's') return false;
-      const b = bbox(it);
-      return x > b[0] - r && x < b[2] + r && y > b[1] - r && y < b[3] + r && nearStroke(it, x, y, r);
-    });
-    if (!gone.length) return;
-    act.hit = true;
-    items = items.filter((it) => !gone.includes(it));
-    redrawBox(union(gone));
+    const gone = items.filter((it) => (it.t === 's' || it.t === 'd') && nearItem(it, x, y, r));
+    if (gone.length) {
+      act.hit = true;
+      items = items.filter((it) => !gone.includes(it));
+      redrawBox(union(gone));
+    }
+    for (let i = items.length - 1; i >= 0; i--) {
+      const it = items[i];
+      if (it.t !== 'i' || x < it.x - r || x > it.x + it.w + r || y < it.y - r || y > it.y + it.h + r) continue;
+      const [fx, fy, fw, fh] = fullRect(it);
+      let copy = it, path = act.paths.get(it);
+      if (!path) {   // erstes Mal in diesem Zug: Kopie mit neuer Radierspur
+        path = { r: r / fw, pts: [] };
+        copy = { ...it, er: [...(it.er || []), path] };
+        act.paths.set(copy, path);
+        items = items.map((o) => (o === it ? copy : o));
+      }
+      path.pts.push((x - fx) / fw, (y - fy) / fh);
+      forgetErased(copy);
+      act.hit = true;
+      redrawBox([x - r, y - r, x + r, y + r]);
+    }
   }
 
   function end(e) {
@@ -845,8 +953,14 @@ export function createBoard(opts) {
     if (a.kind === 'pan') {
       sc.classList.remove('panning');
       if (a.touch && performance.now() - a.t < 80) glide(a.vx, a.vy);
+    } else if (a.kind === 'tpress') {
+      clearTimeout(a.timer);
+      opts.hold(false);
+      opts.onOpenTitle(a.it);
+      return;
     } else if (a.kind === 'pen') {
-      boxes.delete(a.s);
+      drawPredicted();
+      forgetBox(a.s);
       items = a.before;
       commit([...a.before, a.s]);
       redrawBox(bbox(a.s));
@@ -854,11 +968,27 @@ export function createBoard(opts) {
       const now = items;
       items = a.before;
       commit(now);
+    } else if (a.kind === 'shape' || a.kind === 'dim') {
+      items = a.before;
+      if (Math.hypot(a.x - a.x0, a.y - a.y0) < 4 / view.z) {   // nur angetippt
+        if (a.made.length) redrawBox(union(a.made));
+        const hit = a.kind === 'dim' && hitAt(a.x0, a.y0);    // Maßlinie antippen: Maß bearbeiten
+        if (hit?.t === 'd') editDim(hit);
+      } else {
+        commit([...a.before, ...a.made]);
+        if (a.kind === 'dim') editDim(a.made[0]);
+      }
     } else if (a.kind === 'lasso') {
       lassoSvg.classList.remove('on');
       lassoLine.setAttribute('points', '');
-      if (a.poly.length >= 6) setSel(withGroups(items.filter((it) => share(it, a.poly) >= .5)));
-    } else if (a.kind === 'move') applySel(a.dx, a.dy, 1);
+      const xs = a.poly.filter((_, i) => i % 2 === 0), ys = a.poly.filter((_, i) => i % 2);
+      const tap = Math.max(...xs) - Math.min(...xs) < 6 / view.z && Math.max(...ys) - Math.min(...ys) < 6 / view.z;
+      if (tap) { const hit = hitAt(a.poly[0], a.poly[1]); setSel(hit ? withGroups([hit]) : []); }   // Antippen wählt ein Element
+      else setSel(withGroups(items.filter((it) => share(it, a.poly) >= .5)));
+    } else if (a.kind === 'move') {
+      applySel(a.dx, a.dy, 1);
+      if (a.title) clearSel();   // verschobener Titel bleibt antippbar
+    }
     else if (a.kind === 'fmove') {
       selBox.classList.remove('bare');
       if (a.dx || a.dy) { applySel(a.dx, a.dy, 1); clearSel(); }
@@ -887,12 +1017,15 @@ export function createBoard(opts) {
   sc.addEventListener('gesturechange', (e) => { e.preventDefault(); if (!fingers.size) zoomAt(e.clientX, e.clientY, gz * e.scale); });
   sc.addEventListener('gestureend', (e) => { e.preventDefault(); settle(); });
 
+  setTool('pen');
+
   // ---------- nach außen ----------
   return {
     el: sc,
     // nach dem Einhängen ins Dokument (auch nach jedem Neuzeichnen der Ansicht)
-    attach() { if (!scale || sc.clientWidth !== lastW) { lastW = sc.clientWidth; layout(); } else { place(); ensureTiles(); } },
+    attach() { if (!scale || sc.clientWidth !== lastW) { lastW = sc.clientWidth; lastH = sc.clientHeight; layout(); } else { place(); ensureTiles(); } },
     setTool,
+    setShape(k) { shape = k; },
     get tool() { return tool; },
     setPen(p) { pen = { ...pen, ...p }; },
     setFinger(on) { finger = on; },
@@ -942,6 +1075,11 @@ export function createBoard(opts) {
       return cv;
     },
     imagePaths: () => items.filter((it) => it.t === 'i').map((it) => it.src),
-    destroy() { ro.disconnect(); stopAnim(); closeMenu(); sc.remove(); },
+    destroy() {
+      ro.disconnect(); stopAnim(); closeMenu();
+      document.removeEventListener('pointerdown', onDocDown, true);
+      document.removeEventListener('keydown', onDocKey);
+      sc.remove();
+    },
   };
 }

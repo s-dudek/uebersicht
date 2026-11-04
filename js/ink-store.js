@@ -37,6 +37,22 @@ function decodePts(str) {
 
 const num = (v, min, max, def) => (Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : def);
 
+// Bild-Radierspuren: Punkte relativ zum Bild (0–1), auf 1/2000 genau
+const ER_Q = 2000;
+function encodeRel(pts) {
+  const prev = [0, 0];
+  return pts.map((v, i) => { const q = Math.round(v * ER_Q), d = q - prev[i % 2]; prev[i % 2] = q; return d; }).join(',');
+}
+function decodeRel(str) {
+  if (typeof str !== 'string' || !str) return [];
+  const raw = str.split(',').slice(0, 20000);
+  const acc = [0, 0];
+  return raw.slice(0, raw.length - (raw.length % 2)).map((d, i) => {
+    acc[i % 2] += parseInt(d, 10) || 0;
+    return Math.min(2, Math.max(-1, acc[i % 2] / ER_Q));
+  });
+}
+
 const strokeOut = (s) => ({ c: s.c, w: s.w, p: encodePts(s.pts) });
 const strokeIn = (s) => ({ t: 's', c: safeColor(s?.c, '#0C3741'), w: num(s?.w, .5, 30, 2.2), pts: decodePts(s?.p) });
 
@@ -50,7 +66,13 @@ export function serialize(items, h, w) {
       const g = it.g ? { g: it.g } : {};
       if (it.t === 'f') return { t: 'f', fmt: it.fmt, x: it.x, y: it.y };
       if (it.t === 's') return { t: 's', ...strokeOut(it), ...g };
-      if (it.t === 'i') return { t: 'i', src: it.src, x: it.x, y: it.y, w: it.w, h: it.h, ...g };
+      if (it.t === 'i') {
+        const img = { t: 'i', src: it.src, x: it.x, y: it.y, w: it.w, h: it.h, ...g };
+        if (it.cr) img.cr = it.cr.map((v) => Math.round(v * 1e4) / 1e4);
+        if (it.er?.length) img.er = it.er.map((e) => ({ r: Math.round(e.r * 1e5) / 1e5, p: encodeRel(e.pts) }));
+        return img;
+      }
+      if (it.t === 'd') return { t: 'd', a: it.a, b: it.b, c: it.c, w: it.w, txt: it.txt, ...g };
       return { t: 't', page: it.page, s: it.s.map(strokeOut), ...g };
     }),
   };
@@ -64,7 +86,16 @@ export function deserialize(data) {
     let out = null;
     if (it?.t === 's') out = strokeIn(it);
     else if (it?.t === 'i' && IMG_PATH.test(it.src || '')) {
-      out = { t: 'i', src: it.src, x: num(it.x, -1e6, 1e6, 0), y: num(it.y, -1e6, 1e6, 0), w: num(it.w, 10, 5000, 300), h: num(it.h, 10, 5000, 200) };
+      out = { t: 'i', src: it.src, x: num(it.x, -1e6, 1e6, 0), y: num(it.y, -1e6, 1e6, 0), w: num(it.w, 1, 20000, 300), h: num(it.h, 1, 20000, 200) };
+      const cr = Array.isArray(it.cr) && it.cr.length === 4 ? it.cr.map((v) => num(v, 0, 1, 0)) : null;
+      if (cr && cr[2] - cr[0] > .01 && cr[3] - cr[1] > .01) out.cr = cr;   // Zuschnitt
+      if (Array.isArray(it.er)) {                                            // radierte Stellen
+        const er = it.er.slice(0, 500).map((e) => ({ r: num(e?.r, 1e-4, .5, .01), pts: decodeRel(e?.p) })).filter((e) => e.pts.length);
+        if (er.length) out.er = er;
+      }
+    } else if (it?.t === 'd' && Array.isArray(it.a) && Array.isArray(it.b)) {   // Bemaßung
+      const pt = (p) => [num(p[0], -1e6, 1e6, 0), num(p[1], -1e6, 1e6, 0)];
+      out = { t: 'd', a: pt(it.a), b: pt(it.b), c: safeColor(it.c, '#0C3741'), w: num(it.w, .5, 30, 2.2), txt: typeof it.txt === 'string' ? it.txt.slice(0, 40) : '' };
     } else if (it?.t === 't' && UUID.test(it.page || '') && Array.isArray(it.s)) {
       out = { t: 't', page: it.page, s: it.s.map(strokeIn) };
     } else if (it?.t === 'f' && FRAMES[it.fmt]) {
@@ -113,6 +144,14 @@ export async function loadChild(id, parentId, catId, titleStrokes) {
   const ins = await sb.from('ink_pages').insert(row);
   if (ins.error) throw ins.error;
   return row;
+}
+
+// alle Seiten eines Ordners (für die Seitenübersicht)
+export async function loadTree(catId) {
+  const q = sb.from('ink_pages').select('id, parent_id, title, data');
+  const { data, error } = await (catId ? q.eq('category_id', catId) : q.is('category_id', null));
+  if (error) throw error;
+  return data || [];
 }
 
 export async function savePage(id, items, h, w) {

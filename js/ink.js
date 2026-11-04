@@ -1,17 +1,30 @@
 // Handschrift in den Notiz-Ordnern: jede Kategorie hat eine eigene Startseite mit Titeln,
 // jeder Titel öffnet eine eigene Seite (beliebig tief). Bereiche (A4) lassen sich exportieren.
-import { $app, askConfirm, catById, COLORS, esc, state, store, toast } from './core.js';
+import { $app, askConfirm, catById, esc, safeColor, state, store, toast } from './core.js';
 import { folderIc, noteFolders } from './folders.js';
 import { ICON } from './icons.js';
 import { createBoard } from './ink-board.js';
+import { SHAPES } from './ink-draw.js';
 import { deliver, exportWidth, fileName, toImage, toPdf } from './ink-export.js';
+import { clampWidth, openPenPanel, PALETTE } from './ink-pen.js';
 import { deletePageTree, deserialize, loadChild, loadRoot, removeImages, savePage, titleIn, uploadImage } from './ink-store.js';
+import { openTree, titleSvg } from './ink-tree.js';
 import { render } from './render.js';
 import { closeSheet, openSheet } from './sheet.js';
 
-const PENS = ['#0C3741', '#3E7CA8', '#C2575A'];
-const SIZES = { fine: 2.2, bold: 4.2 };
-const ui = { tool: 'pen', color: PENS[0], size: 'fine', finger: store('inkFinger') === '1', bar: store('inkBar') !== '0' };
+// Einstellungen der Werkzeuge (Farbe, Stärke und zuletzt benutzte Farben bleiben gespeichert)
+const saved = (() => { try { return JSON.parse(store('inkPen')) || {}; } catch { return {}; } })();
+const ui = {
+  tool: 'pen',
+  shape: SHAPES.some(([k]) => k === store('inkShape')) ? store('inkShape') : 'line',
+  color: safeColor(saved.c, PALETTE[0]),
+  width: clampWidth(saved.w),
+  recent: (Array.isArray(saved.r) ? saved.r.map((c) => safeColor(c)).filter(Boolean) : []).concat(['#0C3741', '#3E7CA8', '#C2575A']).filter((c, i, a) => a.indexOf(c) === i).slice(0, 3),
+  finger: store('inkFinger') === '1',
+  bar: store('inkBar') !== '0',
+};
+const savePen = () => store('inkPen', JSON.stringify({ c: ui.color, w: ui.width, r: ui.recent }));
+const SHAPE_ICON = { line: 'shLine', arrow: 'shArrow', rect: 'shRect', ellipse: 'shEllipse', tri: 'shTri' };
 
 const stack = [];      // geöffnete Seiten: [Startseite, Unterseite, …]
 let cat = null;        // Ordner, zu dem die Seiten gehören ('' = Ohne Kategorie)
@@ -25,8 +38,9 @@ function openPage(row) {
   const page = { id: row.id, title: titleIn(row.title), atOpen: new Set(), uploaded: new Set(), timer: null, pending: null };
   page.board = createBoard({
     items,
-    colors: COLORS,
+    colors: PALETTE,
     hold,
+    onTool: (t) => { ui.tool = t; render(); },
     onCommit: (list, hh, ww) => { page.pending = { list, hh, ww }; scheduleSave(page); updateTools(); },
     onOpenTitle: (it) => openTitle(page, it),
     onDeleteTitles: deleteTitles,
@@ -53,14 +67,23 @@ async function start(fid) {
   if (active) render();
 }
 
-async function openTitle(parent, it) {
+async function openTitle(parent, it, quiet = false) {
   try {
     const row = await loadChild(it.page, parent.id, cat, it.s);
     openPage(row);
-    render();
+    if (!quiet) render();
+    return true;
   } catch (e) {
     toast('Seite konnte nicht geöffnet werden: ' + (e.message || e));
+    return false;
   }
+}
+
+// aus der Seitenübersicht: zurück zur Startseite, dann Titel für Titel hinein
+async function openPath(path) {
+  while (stack.length > 1) closePage(stack.pop());
+  for (const it of path) if (!(await openTitle(top(), it, true))) break;
+  render();
 }
 
 function closePage(page) {
@@ -119,7 +142,8 @@ function applyUi() {
   const b = top()?.board;
   if (!b) return;
   if (b.tool !== ui.tool) b.setTool(ui.tool);
-  b.setPen({ c: ui.color, w: SIZES[ui.size] });
+  b.setShape(ui.shape);
+  b.setPen({ c: ui.color, w: ui.width });
   b.setFinger(ui.finger);
 }
 
@@ -178,6 +202,35 @@ function openFrameChoice(btn) {
     <button class="cm-i" data-f="a4l">${ICON.frame}<span>A4 quer</span></button>`, (b) => top()?.board.addFrame(b.dataset.f));
 }
 
+// Formen: Linie, Pfeil, Rechteck, Ellipse, Dreieck
+function openShapes(btn) {
+  dropMenu(btn, SHAPES.map(([k, l]) => `<button class="cm-i ${ui.tool === 'shape' && ui.shape === k ? 'on' : ''}" data-k="${k}">${ICON[SHAPE_ICON[k]]}<span>${l}</span></button>`).join(''), (b) => {
+    ui.tool = 'shape';
+    ui.shape = b.dataset.k;
+    store('inkShape', ui.shape);
+    applyUi();
+    render();
+  });
+}
+
+// Farbe und Stärke: Fenster mit allen Farben, eigener Farbe und Regler
+function openPen(btn) {
+  if (ui.tool === 'eraser' || ui.tool === 'lasso') ui.tool = 'pen';
+  applyUi();
+  render();
+  const anchor = $app.querySelector('[data-act="ink-pen"]') || btn;
+  openPenPanel(anchor, { c: ui.color, w: ui.width }, ({ c, w }) => {
+    ui.color = c;
+    ui.width = w;
+    applyUi();
+    const chip = $app.querySelector('.ink-penchip');
+    chip?.style.setProperty('--c', c);
+    chip?.style.setProperty('--w', penDot(w));
+  }, () => { remember(ui.color); savePen(); render(); });
+}
+const penDot = (w) => Math.round(6 + w * 1.1) + 'px';
+const remember = (c) => { ui.recent = [c, ...ui.recent.filter((x) => x !== c)].slice(0, 3); };
+
 // Kategorien (Notiz-Ordner) aus der Kopfleiste wählen; nochmal tippen schließt
 let closeCats = null;
 function openCats(btn) {
@@ -205,9 +258,10 @@ function toggleBar() {
 export async function inkAction(act, id, btn) {
   const b = top()?.board;
   switch (act) {
-    case 'ink-tool': ui.tool = id; break;
-    case 'ink-color': ui.color = PENS[+id] || PENS[0]; ui.tool = 'pen'; break;
-    case 'ink-size': ui.size = ui.size === 'fine' ? 'bold' : 'fine'; ui.tool = 'pen'; break;
+    case 'ink-tool': if (id === 'shape') { openShapes(btn); return; } ui.tool = id; break;
+    case 'ink-color': ui.color = ui.recent[+id] || ui.color; if (ui.tool === 'eraser' || ui.tool === 'lasso') ui.tool = 'pen'; savePen(); break;
+    case 'ink-pen': openPen(btn); return;
+    case 'ink-tree': flushAll(); openTree({ cat, open: stack.map((p) => p.id), onOpen: openPath }); return;
     case 'ink-finger': ui.finger = !ui.finger; store('inkFinger', ui.finger ? '1' : '0'); toast(ui.finger ? 'Mit dem Finger schreiben, mit zwei Fingern verschieben und zoomen' : 'Stift und Maus schreiben, der Finger verschiebt'); break;
     case 'ink-undo': b?.undo(); return;
     case 'ink-redo': b?.redo(); return;
@@ -340,7 +394,7 @@ export function renderInk(fid) {
   if (status === 'error') return '<div class="ink-slot"><p class="empty ink-msg">Die Handschrift ist gerade nicht erreichbar. Bitte später nochmal versuchen.</p></div>';
   if (!top()) return '<div class="ink-slot"><p class="center muted ink-msg">Lädt …</p></div>';
   return `${inkBar()}<div class="ink-slot">
-    <p class="ink-hint" ${stack.length === 1 && top().board.isEmpty ? '' : 'hidden'}>Mit dem Stift schreiben, mit dem Finger verschieben, mit zwei Fingern zoomen. Einen Bereich mit der Auswahl umkreisen und „Als Titel“ wählen: der Titel öffnet eine eigene Seite. Mit „Bereich“ ein A4-Blatt markieren und später exportieren.</p>
+    <p class="ink-hint" ${stack.length === 1 && top().board.isEmpty ? '' : 'hidden'}>Mit dem Stift schreiben, mit dem Finger verschieben, mit zwei Fingern zoomen. Etwas mit der Auswahl umkreisen und „Als Titel“ wählen: der Titel öffnet eine eigene Seite und lässt sich ziehen (mit dem Finger: lange drücken). Mit „Bereich“ ein A4-Blatt markieren und später exportieren.</p>
   </div>`;
 }
 
@@ -372,23 +426,6 @@ export function resetInk() {
   status = 'idle';
 }
 
-// Titel der Unterseite als Bild aus den eigenen Strichen (nur Zahlen und geprüfte Farben)
-function titleSvg(strokes) {
-  if (!strokes.length) return '';
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const s of strokes) for (let i = 0; i < s.pts.length; i += 3) {
-    x0 = Math.min(x0, s.pts[i]); y0 = Math.min(y0, s.pts[i + 1]); x1 = Math.max(x1, s.pts[i]); y1 = Math.max(y1, s.pts[i + 1]);
-  }
-  const pad = 6;
-  const paths = strokes.map((s) => {
-    const d = [];
-    for (let i = 0; i < s.pts.length; i += 3) d.push(`${i ? 'L' : 'M'}${s.pts[i].toFixed(1)} ${s.pts[i + 1].toFixed(1)}`);
-    if (d.length === 1) d.push(`L${(s.pts[0] + .1).toFixed(1)} ${s.pts[1].toFixed(1)}`);
-    return `<path d="${d.join('')}" stroke="${esc(s.c)}" stroke-width="${(s.w * 1.2).toFixed(2)}"/>`;
-  }).join('');
-  return `<svg class="ink-ttl" viewBox="${(x0 - pad).toFixed(1)} ${(y0 - pad).toFixed(1)} ${(x1 - x0 + pad * 2).toFixed(1)} ${(y1 - y0 + pad * 2).toFixed(1)}" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Handschriftlicher Titel">${paths}</svg>`;
-}
-
 // Kopfzeile einer Unterseite: zurück + handschriftlicher Titel (sonst null: normale Ordner-Kopfzeile)
 export function inkHead() {
   if (stack.length < 2) return null;
@@ -404,10 +441,10 @@ function inkBar() {
   const seg = (id, icon, label) => `<button class="${ui.tool === id ? 'on' : ''}" data-act="ink-tool" data-id="${id}" aria-label="${label}" title="${label}">${ICON[icon]}</button>`;
   return `<div class="ink-bar ${ui.bar ? '' : 'closed'}">
     <div class="ink-tools"><div class="ink-tools-in">
-      <div class="seg-view ink-seg">${seg('pen', 'pen', 'Stift')}${seg('eraser', 'eraser', 'Radierer')}${seg('lasso', 'lasso', 'Auswählen')}</div>
+      <div class="seg-view ink-seg">${seg('pen', 'pen', 'Stift')}${seg('eraser', 'eraser', 'Radierer')}${seg('lasso', 'lasso', 'Auswählen')}${seg('shape', SHAPE_ICON[ui.shape], 'Formen')}${seg('dim', 'ruler', 'Bemaßung')}</div>
       <div class="ink-pens">
-        ${PENS.map((c, i) => `<button class="ink-dot ${ui.color === c ? 'on' : ''}" data-act="ink-color" data-id="${i}" style="--c:${c}" aria-label="Farbe ${i + 1}"></button>`).join('')}
-        <button class="ink-size ${ui.size}" data-act="ink-size" aria-label="Strichstärke" title="Strichstärke"><i></i></button>
+        ${ui.recent.map((c, i) => `<button class="ink-dot ${ui.color === c ? 'on' : ''}" data-act="ink-color" data-id="${i}" style="--c:${c}" aria-label="Farbe ${i + 1}"></button>`).join('')}
+        <button class="ink-penchip" data-act="ink-pen" style="--c:${ui.color};--w:${penDot(ui.width)}" aria-label="Farbe und Strichstärke" title="Farbe und Strichstärke"><i></i></button>
       </div>
       <i class="ink-sep"></i>
       ${tb('ink-img', 'image', 'Bild hinzufügen')}
@@ -420,6 +457,7 @@ function inkBar() {
       ${tb('ink-zoom', 'minus', 'Verkleinern', { id: 'out' })}
       ${tb('ink-zoom', 'plus', 'Vergrößern', { id: 'in' })}
       ${tb('ink-finger', 'hand', 'Mit Finger schreiben', { on: ui.finger })}
+      ${tb('ink-tree', 'tree', 'Seitenübersicht')}
     </div></div>
     <button class="ink-fold" data-act="ink-fold" aria-expanded="${ui.bar}" aria-label="Werkzeuge ein- oder ausfahren" title="Werkzeuge">${ICON.chevD}<span>Werkzeuge</span></button>
   </div>`;
