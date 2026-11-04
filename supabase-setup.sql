@@ -316,7 +316,7 @@ drop policy if exists ink_delete on public.ink_pages;
 create policy ink_select on public.ink_pages for select using (owner_id = auth.uid());
 create policy ink_insert on public.ink_pages for insert with check (
   owner_id = auth.uid()
-  and (parent_id is null or exists (select 1 from public.ink_pages p where p.id = parent_id and p.owner_id = auth.uid()))
+  and (parent_id is null or exists (select 1 from public.ink_pages p where p.id = ink_pages.parent_id and p.owner_id = auth.uid()))
 );
 create policy ink_update on public.ink_pages for update using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 create policy ink_delete on public.ink_pages for delete using (owner_id = auth.uid());
