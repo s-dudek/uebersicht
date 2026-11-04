@@ -96,7 +96,7 @@ export const state = {
   shares: [],          // {item_id, user_id}
   tab: 'home',
   weekStart: (() => { const x = new Date(); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); const p = (n) => String(n).padStart(2, '0'); return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`; })(),   // Montag der angezeigten Woche
-  noteMode: 'text',   // Notiz-Ordner: getippte Notizen oder Handschrift (über den Knopf in den Notizen)
+  noteMode: 'text',   // Notiz-Ordner: Notizen-Liste oder Canvas (über den Knopf in den Notizen)
   doneOpen: new Set(),   // Todo-Listen, deren erledigte Einträge aufgeklappt sind
   folded: new Set(),    // zugeklappte Ordner in der Listenansicht
   calView: store('calView') || 'week',   // 'day' | 'week' | 'month'

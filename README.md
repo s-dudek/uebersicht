@@ -32,14 +32,14 @@ js/
   todos.js          Todos
   notes.js          Notizen
   folders.js        Ordner (Kategorien) in Todos/Notizen
-  ink.js            Handschrift je Notiz-Ordner: Seiten, Werkzeuge, Export, Speichern
-  ink-board.js      Handschrift: unendliche Zeichenfläche mit Zoom (Stift, Radierer, Auswahl, Formen, Bemaßung, Titel)
-  ink-draw.js       Handschrift: Geometrie und Zeichnen (Striche, Formen, Maße, Bilder, Kästchen)
-  ink-crop.js       Handschrift: Bild zuschneiden
-  ink-pen.js        Handschrift: Fenster für Farbe und Stärke (Stift, Textmarker, Text)
-  ink-tree.js       Handschrift: Gliederung (Bereiche, Titel und Unterseiten)
-  ink-store.js      Handschrift: Datenbank und Bilder (Supabase Storage)
-  ink-export.js     Handschrift: Bereiche als PDF, PNG oder JPEG
+  ink.js            Canvas je Notiz-Ordner: Seiten, Werkzeuge, Export, Speichern
+  ink-board.js      Canvas: unendliche Zeichenfläche mit Zoom (Stift, Radierer, Auswahl, Formen, Bemaßung, Titel)
+  ink-draw.js       Canvas: Geometrie und Zeichnen (Striche, Formen, Maße, Bilder, Kästchen)
+  ink-crop.js       Canvas: Bild zuschneiden
+  ink-pen.js        Canvas: Fenster für Farbe und Stärke (Stift, Textmarker, Text)
+  ink-tree.js       Canvas: Gliederung (Bereiche, Titel und Unterseiten)
+  ink-store.js      Canvas: Datenbank und Bilder (Supabase Storage)
+  ink-export.js     Canvas: Bereiche als PDF, PNG oder JPEG
   groups.js         Reihenfolge und Gruppen in Listen
   categories.js     Kategorien-Seite und -Fenster
   items.js          Todo-/Notiz-Fenster, Teilen

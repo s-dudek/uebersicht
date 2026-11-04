@@ -36,10 +36,10 @@ function renderNoteList(fid) {
       ${n.remind_at && !n.reminded ? `<span class="tbell" title="Erinnerung">${ICON.bell}</span>` : ''}
       ${n.owner_id !== state.me ? `<span class="tby">${esc(nameOf(n.owner_id))}</span>` : ''}
     </div>`;
-  const body = `<button class="ink-open" data-act="note-mode" data-id="ink">${ICON.ink}<span><b>Handschrift</b><small>Seiten mit Stift, Text, Formen und Bereichen</small></span>${ICON.chevR}</button>
+  const body = `<button class="ink-open" data-act="note-mode" data-id="ink">${ICON.ink}<span><b>Canvas</b><small>Diese Notizen, dazu Stift, Text, Formen und Bereiche</small></span>${ICON.chevR}</button>
   <section class="tbig" data-drop="${fid}">
     <button class="addrow tadd tnew" data-act="new-note-in" data-id="${fid}"><span class="xic">${ICON.plus}</span><span>Neue Notiz …</span></button>
     ${has ? blocksHtml(fid, 'note', row) : '<p class="kempty">Noch keine Notizen.</p>'}
   </section>`;
-  return listLayout(noteFolders(), fid, body, has ? 'Lange drücken und ziehen: nach oben oder unten verschieben, auf eine andere Notiz halten für eine Gruppe, unten in einen anderen Ordner.' : '');
+  return listLayout(noteFolders(), fid, body, has ? 'Lange drücken und ziehen: nach oben oder unten verschieben, auf eine andere Notiz halten für eine Gruppe, unten in einen anderen Ordner.' : '', '', false);
 }

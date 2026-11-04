@@ -1,4 +1,4 @@
-// Handschrift: Speichern und Laden der Seiten (Tabelle ink_pages) und Bilder (Speicher "ink")
+// Canvas: Speichern und Laden der Seiten (Tabelle ink_pages) und Bilder (Speicher "ink")
 import { safeColor, sb, state } from './core.js';
 import { FONTS } from './ink-draw.js';
 
@@ -75,6 +75,7 @@ export function serialize(items, h, w) {
     v: 1, h: Math.round(h), w: Math.round(w),
     items: items.map((it) => {
       const g = it.g ? { g: it.g } : {};
+      if (it.t === 'n') return { t: 'n', x: it.x, y: it.y };
       if (it.t === 'f') return { t: 'f', fmt: it.fmt, x: it.x, y: it.y, ...(it.n ? { n: it.n } : {}), ...(it.bg ? { bg: it.bg } : {}), ...(it.fc ? { fc: it.fc } : {}) };
       if (it.t === 'x') return { ...textOut(it), ...g };
       if (it.t === 's') return { t: 's', ...strokeOut(it), ...g };
@@ -110,6 +111,8 @@ export function deserialize(data) {
       out = { t: 'd', a: pt(it.a), b: pt(it.b), c: safeColor(it.c, '#0C3741'), w: num(it.w, .5, 30, 2.2), txt: typeof it.txt === 'string' ? it.txt.slice(0, 40) : '' };
     } else if (it?.t === 't' && UUID.test(it.page || '') && Array.isArray(it.s)) {
       out = { t: 't', page: it.page, ...titleIn(it) };
+    } else if (it?.t === 'n') {   // Notizen-Bereich (nur einmal je Seite)
+      if (!items.some((o) => o.t === 'n')) out = { t: 'n', x: num(it.x, -1e6, 1e6, 0), y: num(it.y, -1e6, 1e6, 0) };
     } else if (it?.t === 'f' && FRAMES[it.fmt]) {
       const snap = (v) => Math.round(num(v, -1e6, 1e6, 0) / 25) * 25;
       out = { t: 'f', fmt: it.fmt, x: snap(it.x), y: snap(it.y) };

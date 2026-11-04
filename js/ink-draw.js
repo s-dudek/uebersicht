@@ -1,8 +1,10 @@
-// Handschrift: Geometrie und Zeichnen (ohne Zustand der Zeichenfläche)
-// Elemente: s = Strich (m: Textmarker), t = Titel (Striche s, Texte tx), i = Bild, f = Bereich (A4), d = Bemaßung, x = Text
+// Canvas: Geometrie und Zeichnen (ohne Zustand der Zeichenfläche)
+// Elemente: s = Strich (m: Textmarker), t = Titel (Striche s, Texte tx), i = Bild, f = Bereich (A4), d = Bemaßung, x = Text,
+// n = Notizen-Bereich (nur Lage; die Liste der Notizen ist HTML darüber)
 import { FRAMES } from './ink-store.js';
 
 export const GRID = 25;   // Kästchengröße in Einheiten
+export const NOTES_W = 600;   // Breite des Notizen-Bereichs in Einheiten (die Höhe wächst mit den Notizen)
 
 // ---------- Umriss (Rechteck) eines Elements, zwischengespeichert ----------
 const boxes = new WeakMap();
@@ -12,6 +14,7 @@ export function bbox(it) {
   if (it.t === 'i') b = [it.x, it.y, it.x + it.w, it.y + it.h];
   else if (it.t === 'f') { const [w, h] = FRAMES[it.fmt]; b = [it.x, it.y, it.x + w, it.y + h]; }
   else if (it.t === 'x') { const [w, h] = textSize(it.txt, it); b = [it.x, it.y, it.x + w, it.y + h]; }
+  else if (it.t === 'n') b = [it.x, it.y, it.x + NOTES_W, it.y + 300];
   else if (it.t === 'd') {
     const m = dimSize(it).fs * 1.6 + 10;
     b = [Math.min(it.a[0], it.b[0]) - m, Math.min(it.a[1], it.b[1]) - m, Math.max(it.a[0], it.b[0]) + m, Math.max(it.a[1], it.b[1]) + m];
@@ -46,7 +49,7 @@ export function inPolygon(x, y, poly) {
 
 // Anteil eines Elements innerhalb der Lasso-Linie (0–1)
 export function share(it, poly) {
-  if (it.t === 'f') return 0;   // Bereiche werden über ihren Reiter verschoben, nicht ausgewählt
+  if (it.t === 'f' || it.t === 'n') return 0;   // Bereiche werden über ihren Reiter verschoben, nicht ausgewählt
   if (it.t === 'i' || it.t === 'x') { const b = bbox(it); return inPolygon((b[0] + b[2]) / 2, (b[1] + b[3]) / 2, poly) ? 1 : 0; }
   if (it.t === 'd') return (inPolygon(it.a[0], it.a[1], poly) + inPolygon(it.b[0], it.b[1], poly)) / 2;
   let n = 0, hit = 0;

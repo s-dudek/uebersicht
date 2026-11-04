@@ -62,7 +62,7 @@ export function render() {
   splashReady();
 }
 
-// Notiz-Ordner geöffnet und auf "Handschrift" umgeschaltet
+// Notiz-Ordner geöffnet und im Canvas
 const isInkView = () => state.tab === 'notes' && state.list !== null && state.noteMode === 'ink';
 
 // ---------- Desktop: Seitenleiste mit allen Bereichen ----------
@@ -101,7 +101,7 @@ function actionsFor(tab) {
   }
   if (tab === 'notes') {
     if (state.list === null) return actBtn('new-note', 'plus', 'Neue Notiz', { primary: true });
-    if (isInkView()) return '';   // Werkzeuge stehen in der eigenen Leiste der Handschrift
+    if (isInkView()) return '';   // Werkzeuge stehen in der eigenen Leiste des Canvas
     return `${actBtn('close-list', 'chevL', 'Ordner')}${actBtn('new-note-in', 'plus', 'Notiz', { id: state.list, primary: true })}${state.list ? actBtn('list-edit', 'dots', 'Ordner bearbeiten', { id: state.list, text: false }) : ''}`;
   }
   if (tab === 'meals') {
@@ -136,12 +136,14 @@ function pageHead(tab, desk) {
     const c = catById(state.list);
     const n = tab === 'todos' ? todosIn(state.list).filter((i) => !i.done).length : notesIn(state.list).length;
     const title = `${c ? folderIc(c, 'ph-ic') : ''}<b class="ph-t">${esc(c ? c.name : tab === 'todos' ? 'Allgemein' : 'Ohne Kategorie')}</b>`;
-    // Handschrift: zurück zu den getippten Notizen; Titel als Knopf, der die Kategorien zum Wechseln zeigt
+    // Canvas: zurück zu den Notizen; Titel als Knopf, der die Kategorien zum Wechseln zeigt
     if (isInkView()) {
       left = inkHead() || `<button class="ph-back" data-act="ink-notes" aria-label="Zurück zu den Notizen" title="Zurück zu den Notizen">${ICON.chevL}</button>
         <button class="ph-drop" data-act="ink-cats" aria-haspopup="menu" aria-label="Kategorie wechseln" title="Kategorie wechseln">${title}${ICON.chevD}</button>`;
     } else {
-      left = `${desk ? '' : `<button class="ph-back" data-act="close-list" aria-label="Zurück zu den Listen">${ICON.chevL}</button>`}${title}${cnt(n)}`;
+      // Notizen: Ordnername ebenfalls als Auswahl der Kategorien (wie im Canvas)
+      const head = tab === 'notes' ? `<button class="ph-drop" data-act="ink-cats" aria-haspopup="menu" aria-label="Kategorie wechseln" title="Kategorie wechseln">${title}${ICON.chevD}</button>` : title;
+      left = `${desk ? '' : `<button class="ph-back" data-act="close-list" aria-label="Zurück zu den Listen">${ICON.chevL}</button>`}${head}${cnt(n)}`;
     }
   } else {
     left = `<b>${TITLES[tab]}</b>${cnt(pageCount(tab))}`;

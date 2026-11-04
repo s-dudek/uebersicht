@@ -1,4 +1,4 @@
-// Handschrift: Fenster für Farbe und Stärke – für Stift (auch Formen und Bemaßung) und Textmarker;
+// Canvas: Fenster für Farbe und Stärke – für Stift (auch Formen und Bemaßung) und Textmarker;
 // bei Text statt der Größe Schriftart, Schriftschnitt und kursiv
 import { safeColor } from './core.js';
 import { fontCss, FONTS, MARKER_ALPHA, WEIGHTS } from './ink-draw.js';

@@ -47,8 +47,9 @@ export const todoLists = () => [
 
 // Beim Ziehen erscheinen die anderen Ordner als Ablageziele
 // Geöffnete Liste: am Desktop links die Ordner als Spalte (auch Ablageziel), am Smartphone die Ablage beim Ziehen
-export function listLayout(folders, current, body, hint, cls = '') {
-  if (!isDesktop()) return `${body}${dropTray(folders, current)}${hint ? `<p class="hint xhint">${hint}</p>` : ''}`;
+// column: false = auch am Desktop ohne Ordner-Spalte (Ordner wählt man oben im Titel, Ablage beim Ziehen unten)
+export function listLayout(folders, current, body, hint, cls = '', column = true) {
+  if (!isDesktop() || !column) return `${body}${dropTray(folders, current)}${hint ? `<p class="hint xhint">${hint}</p>` : ''}`;
   const btn = (f) => `<button class="fcol-i ${f.id === current ? 'on' : ''}" data-act="open-list" data-id="${f.id}" data-drop="${f.id}">
       ${folderIc(f, 'fcol-ic')}<span>${esc(f.name)}</span></button>`;
   return `<div class="split ${cls}">

@@ -1,4 +1,4 @@
-// Handschrift: Bereiche als PDF, PNG oder JPEG ausgeben
+// Canvas: Bereiche als PDF, PNG oder JPEG ausgeben
 // Das PDF wird selbst geschrieben (eine A4-Seite je Bereich, darauf das Bild als JPEG): keine fremde Bibliothek nötig.
 
 const A4 = [595.28, 841.89];   // A4 in Punkt (1/72 Zoll)

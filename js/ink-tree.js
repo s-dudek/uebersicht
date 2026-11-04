@@ -1,5 +1,6 @@
-// Handschrift: Gliederung – je Seite zuerst ihre Bereiche (A4), dann ihre Titel mit den Unterseiten darunter (beliebig tief).
-// Bereiche lassen sich hier umbenennen; Tippen öffnet die Seite bzw. zeigt den Bereich.
+// Canvas: Gliederung – je Seite zuerst ihre Bereiche (A4), auf der Startseite dann die Notizen, danach die Titel
+// mit den Unterseiten darunter (beliebig tief). Bereiche lassen sich hier umbenennen, Titel und Notizen löschen;
+// Tippen öffnet die Seite bzw. zeigt den Bereich.
 import { esc, toast } from './core.js';
 import { ICON } from './icons.js';
 import { fontCss, LINE_H, textSize } from './ink-draw.js';
@@ -36,8 +37,9 @@ const frameName = (f, n) => f.n || `${fmtName(f)} · ${n + 1}`;
 
 // cat: Ordner; open: IDs der geöffneten Seiten (Startseite zuerst);
 // onOpen(pfad aus Titeln, bereich?); onRename(seite, bereich, name) -> Promise<Fehler | null>;
-// onShow(): Bereiche und Titel der geöffneten Seite auf der Fläche hervorheben
-export async function openTree({ cat, open, onOpen, onRename, onShow }) {
+// onShow(): Bereiche und Titel der geöffneten Seite auf der Fläche hervorheben;
+// notes: [{ id, title }] Notizen des Ordners; onDeleteTitle(seite, titel), onDeleteNote(id)
+export async function openTree({ cat, open, notes, onOpen, onRename, onShow, onDeleteTitle, onDeleteNote }) {
   const sheet = openSheet(`<div class="sheet-head"><h2>Gliederung</h2>
       <span class="sh-btns"><button class="tree-show" aria-label="Auf der Fläche zeigen" title="Auf der Fläche zeigen">${ICON.eye}</button><button class="link-btn" data-close>Fertig</button></span></div>
     <div class="tree-body"><p class="muted">Lädt …</p></div>`);
@@ -50,8 +52,22 @@ export async function openTree({ cat, open, onOpen, onRename, onShow }) {
   const itemsOf = (row) => (row ? deserialize(row.data).items : []);
 
   // Baum aufbauen; besuchte Seiten merken, damit nichts doppelt oder im Kreis läuft
-  const paths = [[]], pages = [root];
-  const seen = new Set([root?.id]);
+  const paths = [[]], pages = [root], dels = [];   // dels: [seite, titel] zum Löschen
+  const seen = new Set([root?.id, ...notes.map((n) => n.id)]);
+  const trash = (i, label) => `<button class="tree-ren tree-del" data-del="${i}" aria-label="${label}" title="${label}">${ICON.trash}</button>`;
+  // Notizen (nur Startseite): wie Titel, mit eigener Unterseite
+  function noteBranch(path, depth) {
+    return notes.map((n) => {
+      const p = [...path, { note: n.id }];
+      paths.push(p);
+      const child = byId.get(n.id);
+      if (child) pages.push(child);
+      const pi = paths.length - 1;
+      const sub = child ? branch(child, pi, p, depth + 1) : '';
+      return `<li><div class="tree-row"><button class="tree-i tree-note ${open.includes(n.id) ? 'on' : ''}" data-n="${pi}">${ICON.notes}<span class="tree-fn">${esc(n.title) || 'Ohne Titel'}</span>${ICON.chevR}</button>
+        <button class="tree-ren tree-del" data-ndel="${esc(n.id)}" aria-label="Notiz löschen" title="Notiz löschen">${ICON.trash}</button></div>${sub ? `<ul>${sub}</ul>` : ''}</li>`;
+    }).join('');
+  }
   function branch(row, pi, path, depth) {
     const list = itemsOf(row);
     const frames = list.filter((it) => it.t === 'f').map((f, n) => `<li class="tree-fr" ${f.fc ? `style="--fc:${f.fc}"` : ''}>
@@ -66,10 +82,12 @@ export async function openTree({ cat, open, onOpen, onRename, onShow }) {
       paths.push(p);
       if (child) pages.push(child);
       const sub = child && depth < 12 ? branch(child, paths.length - 1, p, depth + 1) : '';
-      return `<li><button class="tree-i ${open.includes(it.page) ? 'on' : ''}" data-n="${paths.length - 1}">
-          ${titleSvg(it, 'tree-ttl')}${ICON.chevR}</button>${sub ? `<ul>${sub}</ul>` : ''}</li>`;
+      dels.push([row, it]);
+      return `<li><div class="tree-row"><button class="tree-i ${open.includes(it.page) ? 'on' : ''}" data-n="${paths.length - 1}">
+          ${titleSvg(it, 'tree-ttl')}${ICON.chevR}</button>${trash(dels.length - 1, 'Titel löschen')}</div>${sub ? `<ul>${sub}</ul>` : ''}</li>`;
     }).join('');
-    return frames + titles;
+    const notesHtml = row === root && notes.length ? `<li class="tree-group"><span class="tree-gh">${ICON.notes}Notizen</span><ul>${noteBranch(path, depth)}</ul></li>` : '';
+    return frames + notesHtml + titles;
   }
   const list = branch(root, 0, [], 0);
   const body = sheet.querySelector('.tree-body');
@@ -80,6 +98,9 @@ export async function openTree({ cat, open, onOpen, onRename, onShow }) {
     ${list ? '' : '<p class="muted tree-empty">Noch keine Bereiche und Titel. Oben rechts einen Bereich anlegen, oder etwas schreiben, mit der Auswahl umkreisen und „Als Titel“ wählen.</p>'}`;
 
   body.querySelector('.tree').addEventListener('click', (e) => {
+    const del = e.target.closest('.tree-del');
+    if (del?.dataset.ndel) return onDeleteNote(del.dataset.ndel);
+    if (del) { const [row, it] = dels[+del.dataset.del]; return onDeleteTitle(row, it); }
     const ren = e.target.closest('.tree-ren');
     if (ren) return rename(ren);
     const b = e.target.closest('[data-n]');

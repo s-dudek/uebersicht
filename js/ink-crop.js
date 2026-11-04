@@ -1,4 +1,4 @@
-// Handschrift: Bild zuschneiden – ganzes Bild blass, Ausschnitt hell, Griffe an den Ecken
+// Canvas: Bild zuschneiden – ganzes Bild blass, Ausschnitt hell, Griffe an den Ecken
 import { cropOf, fullRect, imageSource } from './ink-draw.js';
 
 const MIN = .04;   // kleinster Ausschnitt (Anteil des Bildes)

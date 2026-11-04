@@ -1053,6 +1053,27 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .ink-sel.bare { border-color: transparent; background: none; }
 .ink-sel.bare .ink-sel-h, .ink-sel.bare .ink-selbar { display: none; }
 .ink-msg { margin: 24px; }
+/* Notizen-Bereich im Canvas: Liste der Notizen des Ordners, wächst nach unten; Größen in em (folgen dem Zoom) */
+.ink-notes-layer { position: absolute; left: 0; top: 0; }
+.ink-notes { position: absolute; padding: .9em 1em 1em; border-radius: .9em; background: rgba(255, 255, 255, .96); box-shadow: 0 0 0 1px rgba(12, 55, 65, .08), 0 .4em 1.4em rgba(12, 55, 65, .06); cursor: default; }
+.ink-ntab { position: absolute; left: 0; bottom: 100%; margin-bottom: .25em; padding: .15em .6em; border-radius: .4em; font-size: .75em; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--grey); background: var(--pale); cursor: grab; touch-action: none; }
+.ink-ntab:active { cursor: grabbing; }
+.inb-list { list-style: none; margin: 0; padding: 0; }
+.inb-list li { display: flex; align-items: center; border-bottom: 1px solid var(--soft); }
+.inb-t { flex: 1; min-width: 0; padding: .7em .2em; text-align: left; font-family: var(--font-head); font-weight: 700; font-size: 1.15em; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inb-t i { font-family: var(--font); font-weight: 400; color: var(--grey); }
+.inb-del { width: 2.2em; height: 2.2em; flex: none; display: grid; place-items: center; border-radius: .5em; color: var(--grey); opacity: .55; }
+.inb-del svg { width: 1.1em; height: 1.1em; }
+.inb-empty { margin: .6em .2em; color: var(--grey); }
+.inb-add { display: flex; align-items: center; gap: .5em; margin-top: .6em; padding: .55em .9em .55em .7em; border-radius: 999px; background: var(--ink); color: var(--white); font-weight: 600; }
+.inb-add svg { width: 1.1em; height: 1.1em; }
+@media (hover: hover) { .inb-t:hover { color: #3E7CA8; } .inb-del:hover { opacity: 1; background: var(--pale); color: var(--danger); } }
+/* Notiz-Unterseite: Beschreibung oben links, Antippen bearbeitet */
+.ink-desc { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; gap: .4em; padding: 1em 1.2em; border-radius: .9em; text-align: left; background: rgba(255, 255, 255, .96);
+  box-shadow: 0 0 0 1px rgba(12, 55, 65, .08); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; cursor: text; }
+.ink-desc small { font-size: .75em; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--grey); }
+.ink-desc.empty span { color: var(--grey); }
 /* Titel: unauffällig, erst beim Darüberfahren (Maus oder schwebender Stift) sichtbar */
 .ink-title { position: absolute; pointer-events: auto; border-radius: 10px; background: transparent; box-shadow: inset 0 0 0 1.5px transparent; transition: background .15s, box-shadow .15s; }
 .ink-title::after { content: ''; position: absolute; right: -13px; top: 50%; width: 22px; height: 22px; margin-top: -11px; border-radius: 50%; opacity: 0; transition: opacity .15s;
@@ -1154,6 +1175,14 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .tree-empty { margin: 12px 4px; }
 .tree-fr { position: relative; display: flex; align-items: center; }
 .tree-fr { --fc: #3E7CA8; }
+.tree-row { display: flex; align-items: center; }
+.tree-row .tree-i { flex: 1; min-width: 0; }
+.tree-del { opacity: .55; }
+@media (hover: hover) { .tree-del:hover { opacity: 1; color: var(--danger); } }
+.tree-gh { display: flex; align-items: center; gap: 8px; padding: 10px 10px 4px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--grey); }
+.tree-gh svg { width: 16px; height: 16px; }
+.tree-note > svg:first-child { width: 18px; height: 18px; flex: none; color: var(--grey); }
+.tree-note { font-weight: 600; }
 .tree-fr .tree-i { min-height: 44px; font-weight: 500; color: var(--fc); }
 .tree-show { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--soft); }
 .tree-show svg { width: 17px; height: 17px; }

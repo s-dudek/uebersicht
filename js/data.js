@@ -1,6 +1,7 @@
 // Daten laden, Live-Updates und Speichern
 import { askConfirm, debounce, itemById, sb, state, toast } from './core.js';
 import { openItem } from './items.js';
+import { deletePageTree } from './ink-store.js';
 import { checkReminders } from './reminders.js';
 import { render } from './render.js';
 
@@ -100,6 +101,7 @@ export async function deleteItem(id) {
   const { error } = await sb.from('items').delete().eq('id', id);
   if (error) { toast('Fehler: ' + error.message); return false; }
   state.items = state.items.filter((x) => x.id !== id);
+  if (i.type === 'note') deletePageTree(id).catch(() => {});   // Unterseite der Notiz im Canvas mit löschen
   render();
   return true;
 }

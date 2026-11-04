@@ -1,13 +1,14 @@
-// Handschrift: Zeichenfläche mit kariertem Papier
+// Canvas: Zeichenfläche mit kariertem Papier
 // Stift (mit Druck), Textmarker, Text, Radierer (ganze Striche, bei Bildern Teilbereiche), Auswahl (Lasso oder Antippen),
 // Formen, Bemaßung, Titel (ziehen zum Verschieben, tippen zum Öffnen), Bilder zuschneiden, Bereiche mit Namen und Hintergrund.
 // Die Fläche ist unendlich in alle Richtungen und lässt sich verschieben und zoomen. Bei 100 % passen 1000 Einheiten in die Breite.
 // Gezeichnet wird in Kacheln fester Bildschirmgröße, damit auch große Flächen und starker Zoom wenig Speicher brauchen.
+import { esc } from './core.js';
 import { ICON } from './icons.js';
 import { startCrop } from './ink-crop.js';
 import {
   bbox, dimLabelAt, distTo, drawDim, drawFrameBg, drawGrid, drawImageItem, drawStroke, drawText, fontCss, FONTS, fontListeners,
-  FRAME_BG, FRAME_COLORS, forgetBox, forgetErased, fullRect, GRID, LINE_H, nearItem, shapeStrokes, share, TEXT_FS, textSize, transform, union,
+  FRAME_BG, FRAME_COLORS, forgetBox, forgetErased, fullRect, GRID, LINE_H, nearItem, NOTES_W, shapeStrokes, share, TEXT_FS, textSize, transform, union,
 } from './ink-draw.js';
 import { FRAMES, getImage, newId } from './ink-store.js';
 
@@ -26,7 +27,9 @@ const NEAR = [280, 6000];   // Berührung so nah (Punkte) an der letzten Stiftst
 
 // ====================================================================
 // opts: { items, colors, onCommit(items, h, w), onOpenTitle(titleItem), onDeleteTitles(titles) -> Promise<bool>,
-//         onExport(frameIndex), onTool(tool), onFrames(), hold(bool) }
+//         onExport(frameIndex), onTool(tool), onFrames(), hold(bool),
+//         Notizen (nur Startseite): notes() -> [{ id, title }], onNote(id), onNoteAdd(), onNoteDelete(id),
+//         Notiz-Unterseite: desc() -> Beschreibungstext, onDesc() }
 // ====================================================================
 export function createBoard(opts) {
   let items = opts.items;
@@ -52,6 +55,7 @@ export function createBoard(opts) {
     <div class="ink-page">
       <div class="ink-tiles"></div>
       <div class="ink-frames"></div>
+      <div class="ink-notes-layer"></div>
       <div class="ink-titles"></div>
     </div>
     <canvas class="ink-live" aria-hidden="true"></canvas>
@@ -67,6 +71,7 @@ export function createBoard(opts) {
   const tileLayer = pg.querySelector('.ink-tiles');
   const titleLayer = pg.querySelector('.ink-titles');
   const frameLayer = pg.querySelector('.ink-frames');
+  const notesLayer = pg.querySelector('.ink-notes-layer');
   const lassoSvg = sc.querySelector('.ink-lasso');
   const lassoLine = lassoSvg.firstElementChild;
   const zoomBar = sc.querySelector('.ink-zoom');
@@ -90,11 +95,11 @@ export function createBoard(opts) {
     zoomPct.textContent = Math.round(view.z * 100) + ' %';
   }
 
-  // Ursprungsansicht: der erste Bereich ganz sichtbar und mittig (ohne Bereich: Anfang der Seite bei 100 %)
+  // Ursprungsansicht: der erste Bereich ganz sichtbar und mittig (ohne Bereich der Notizen-Bereich, sonst Anfang der Seite bei 100 % mit Rand)
   function originView() {
-    const f = frameList()[0], W = sc.clientWidth, H = sc.clientHeight;
-    if (!f || !base) return { x: 0, y: 0, z: 1 };
-    const [x0, y0, x1, y1] = bbox(f), m = 20, top = 34;   // Rand, oben Platz für den Reiter
+    const f = frameList()[0] || notesItem(), W = sc.clientWidth, H = sc.clientHeight;
+    if (!f || !base) return { x: -GRID, y: -GRID * 2, z: 1 };   // etwas Rand oben links
+    const [x0, y0, x1, y1] = f.t === 'n' ? notesBox() : bbox(f), m = 20, top = 34;   // Rand, oben Platz für den Reiter
     const z = clampZ(Math.min(1, (W - 2 * m) / ((x1 - x0) * base), (H - m - top) / ((y1 - y0) * base)));
     const s = base * z;
     return { x: x0 - (W / s - (x1 - x0)) / 2, y: y0 - top / s, z };
@@ -182,7 +187,7 @@ export function createBoard(opts) {
   // Gliederung auf der Fläche: alle Bereiche und Titel hervorgehoben, so dass alles zu sehen ist; Antippen beendet
   let outline = false;
   function showOutline() {
-    const marks = items.filter((it) => it.t === 'f' || it.t === 't');
+    const marks = items.filter((it) => it.t === 'f' || it.t === 't' || it.t === 'n');
     outline = !!marks.length;
     sc.classList.toggle('outline', outline);
     if (!outline) return false;
@@ -268,6 +273,7 @@ export function createBoard(opts) {
 
   function drawItem(ctx, it) {
     if (it.t === 'f') return it.bg && drawFrameBg(ctx, bbox(it), it.bg, scale);   // Rahmen und Reiter sind HTML darüber
+    if (it.t === 'n') return;                                                        // Notizen-Bereich ist HTML
     if (it.t === 'x') return drawText(ctx, it);
     if (it.t === 's') return drawStroke(ctx, it);
     if (it.t === 't') { it.s.forEach((s) => drawStroke(ctx, s)); (it.tx || []).forEach((t) => drawText(ctx, t)); return; }
@@ -300,7 +306,52 @@ export function createBoard(opts) {
   const redrawAll = () => tiles.forEach(drawTile);
 
   // ---------- Titel: Flächen über den Strichen (tippen öffnet, ziehen verschiebt) ----------
-  function renderOverlays() { renderTitles(); renderFrames(); }
+  function renderOverlays() { renderTitles(); renderFrames(); renderNotes(true); }
+
+  // ---------- Notizen-Bereich (Startseite) und Beschreibung (Notiz-Unterseite): HTML auf der Fläche ----------
+  // Die Notizen kommen aus der Notizen-Liste des Ordners; ihre Titel öffnen Unterseiten, die Liste wächst nach unten.
+  const notesItem = () => items.find((it) => it.t === 'n');
+  const notesBox = () => {
+    const n = notesItem(), el = notesLayer.firstElementChild;
+    const h = el && scale ? el.offsetHeight / scale : 300;
+    return [n.x, n.y, n.x + NOTES_W, n.y + h];
+  };
+  let notesSig = '';
+  function renderNotes(force = false) {
+    const n = notesItem(), list = n && opts.notes?.(), desc = opts.desc?.();
+    const sig = JSON.stringify([n?.x, n?.y, list, desc, scale]);
+    if (!force && sig === notesSig) return;
+    notesSig = sig;
+    notesLayer.innerHTML = '';
+    if (n && list) {
+      const el = document.createElement('div');
+      el.className = 'ink-notes';
+      Object.assign(el.style, { left: n.x * scale + 'px', top: n.y * scale + 'px', width: NOTES_W * scale + 'px', fontSize: 16 * scale + 'px' });
+      el.innerHTML = `<button type="button" class="ink-ntab" aria-label="Notizen-Bereich verschieben">Notizen</button>
+        <ul class="inb-list">${list.map((it) => `<li><button type="button" class="inb-t" data-note="${esc(it.id)}">${esc(it.title) || '<i>Ohne Titel</i>'}</button>
+          <button type="button" class="inb-del" data-ndel="${esc(it.id)}" aria-label="Notiz löschen" title="Notiz löschen">${ICON.trash}</button></li>`).join('')}</ul>
+        ${list.length ? '' : '<p class="inb-empty">Noch keine Notizen.</p>'}
+        <button type="button" class="inb-add" data-nadd>${ICON.plus}<span>Neue Notiz</span></button>`;
+      notesLayer.appendChild(el);
+    }
+    if (desc !== undefined && desc !== null) {
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'ink-desc';
+      Object.assign(el.style, { width: 800 * scale + 'px', fontSize: 16 * scale + 'px' });
+      el.innerHTML = `<small>Beschreibung</small><span></span>`;
+      el.lastElementChild.textContent = desc || 'Noch keine Beschreibung. Antippen zum Schreiben.';
+      el.classList.toggle('empty', !desc);
+      notesLayer.appendChild(el);
+    }
+  }
+  notesLayer.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (b?.dataset.note) opts.onNote(b.dataset.note);
+    else if (b?.dataset.ndel) opts.onNoteDelete(b.dataset.ndel);
+    else if (b && 'nadd' in b.dataset) opts.onNoteAdd();
+    else if (b?.classList.contains('ink-desc')) opts.onDesc();
+  });
 
   function renderTitles() {
     titleLayer.innerHTML = '';
@@ -360,7 +411,7 @@ export function createBoard(opts) {
   function frameContent(f) {
     const [x0, y0, x1, y1] = bbox(f);
     return items.filter((it) => {
-      if (it === f || it.t === 'f') return false;
+      if (it === f || it.t === 'f' || it.t === 'n') return false;
       const b = bbox(it), cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
       return cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1;
     });
@@ -518,6 +569,36 @@ export function createBoard(opts) {
     renderOverlays();
     renderSel();
   }
+  // Art der Auswahl für das Fenster „Farbe und Stärke“: Text, Textmarker oder Stift (null: nichts Gestaltbares)
+  function selectionKind() {
+    if (!sel) return null;
+    const list = [...sel.set];
+    const strokes = list.flatMap((it) => (it.t === 's' ? [it] : it.t === 't' ? it.s : []));
+    const texts = list.flatMap((it) => (it.t === 'x' ? [it] : it.t === 't' ? it.tx || [] : []));
+    const dims = list.filter((it) => it.t === 'd');
+    if (texts.length && !strokes.length && !dims.length) return { kind: 'text', val: { c: texts[0].c, ff: texts[0].ff, fw: texts[0].fw, i: !!texts[0].i } };
+    if (strokes.length && strokes.every((s) => s.m) && !texts.length && !dims.length) return { kind: 'marker', val: { c: strokes[0].c, w: strokes[0].w } };
+    const first = strokes.find((s) => !s.m) || dims[0];
+    return first ? { kind: 'pen', val: { c: first.c, w: first.w } } : null;
+  }
+
+  // Ausgewähltes nachträglich umgestalten: Farbe; Stärke (Stift bzw. Textmarker); Schriftart, Schnitt, kursiv (Text)
+  function styleSelection(kind, p) {
+    const stroke = (s) => ({ ...s, ...(p.c ? { c: p.c } : {}), ...(p.w && kind === (s.m ? 'marker' : 'pen') ? { w: p.w } : {}) });
+    const text = (t) => {
+      const n = { ...t, ...(p.c ? { c: p.c } : {}) };
+      if (kind === 'text') { if (p.ff) n.ff = p.ff; if (p.fw) n.fw = p.fw; if ('i' in p) { if (p.i) n.i = 1; else delete n.i; } }
+      return n;
+    };
+    editSel((it) => {
+      if (it.t === 's') return stroke(it);
+      if (it.t === 'x') return text(it);
+      if (it.t === 't') return { ...it, s: it.s.map(stroke), ...(it.tx ? { tx: it.tx.map(text) } : {}) };
+      if (it.t === 'd') return { ...it, ...(p.c ? { c: p.c } : {}), ...(p.w && kind === 'pen' ? { w: p.w } : {}) };
+      return it;
+    });
+  }
+
   const editSingle = () => { const d = single('d'), x = single('x'); if (d) editDim(d); else if (x) editText(x); };
   const recolor = (c) => editSel((it) => (it.t === 's' || it.t === 'd' || it.t === 'x' ? { ...it, c } : it.t === 't' ? { ...it, s: it.s.map((s) => ({ ...s, c })), ...(it.tx ? { tx: it.tx.map((t) => ({ ...t, c })) } : {}) } : it));
   const group = () => { const g = newId(); editSel((it) => ({ ...it, g })); };
@@ -531,7 +612,7 @@ export function createBoard(opts) {
     let best = null, bestD = r;
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
-      if (it.t === 'f') continue;
+      if (it.t === 'f' || it.t === 'n') continue;
       let d = distTo(it, x, y);
       if (it.t === 'i') d = d ? Infinity : r * .75;
       if (d < bestD || (!best && d <= bestD)) { best = it; bestD = d; }
@@ -828,6 +909,7 @@ export function createBoard(opts) {
     else if ((a.kind === 'erase' && a.hit) || a.kind === 'shape' || a.kind === 'dim') { items = a.before; redrawAll(); }
     else if (a.kind === 'lasso') { lassoSvg.classList.remove('on'); lassoLine.setAttribute('points', ''); }
     else if (a.kind === 'fmove') { a.tab.closest('.ink-frame').style.translate = ''; selBox.classList.remove('bare'); clearSel(); }
+    else if (a.kind === 'nmove') a.el.style.translate = '';
     else if (a.kind === 'move' || a.kind === 'scale') { selCv.style.transform = ''; renderSel(); }
     else if (a.kind === 'tpress') clearTimeout(a.timer);
     sc.classList.remove('panning');
@@ -920,6 +1002,15 @@ export function createBoard(opts) {
     }
     if (field && e.target !== field) field.blur();
     if (textEd && e.target !== textEd.el) textEd.el.blur();
+    const ntab = e.target.closest('.ink-ntab');
+    if (ntab && !act) {   // Notizen-Bereich verschieben (immer auf den Kästchen)
+      e.preventDefault();
+      capture(ntab, e.pointerId);
+      opts.hold(true);
+      const [x, y] = pos(e);
+      act = { kind: 'nmove', id: e.pointerId, x, y, dx: 0, dy: 0, el: ntab.parentElement };
+      return;
+    }
     const tab = e.target.closest('.ink-ftab');
     if (tab && !act) {   // Bereich samt Inhalt verschieben (Tippen ohne Bewegung: Menü)
       e.preventDefault();
@@ -945,6 +1036,7 @@ export function createBoard(opts) {
       return;
     }
     if (e.target.closest('button, input, textarea')) return;
+    if (e.target.closest('.ink-notes') && e.pointerType !== 'touch') return;   // im Notizen-Bereich wird nicht gezeichnet
     if (e.pointerType === 'mouse' && e.button === 1 && !act) {   // mittlere Maustaste: verschieben
       e.preventDefault();
       capture(sc, e.pointerId);
@@ -1053,6 +1145,10 @@ export function createBoard(opts) {
     } else if (act.kind === 'move') {
       act.dx = x - act.x; act.dy = y - act.y;
       renderSel(act.dx, act.dy, 1);
+    } else if (act.kind === 'nmove') {
+      act.dx = Math.round((x - act.x) / GRID) * GRID;
+      act.dy = Math.round((y - act.y) / GRID) * GRID;
+      act.el.style.translate = `${act.dx * scale}px ${act.dy * scale}px`;
     } else if (act.kind === 'fmove') {
       // immer ganze Kästchen weit, damit der Bereich auf dem Raster bleibt
       act.dx = Math.round((x - act.x) / GRID) * GRID;
@@ -1191,6 +1287,11 @@ export function createBoard(opts) {
       applySel(a.dx, a.dy, 1);
       if (a.title) clearSel();   // verschobener Titel bleibt antippbar
     }
+    else if (a.kind === 'nmove') {
+      a.el.style.translate = '';
+      const n = notesItem();
+      if (n && (a.dx || a.dy)) replace(n, { ...n, x: n.x + a.dx, y: n.y + a.dy });
+    }
     else if (a.kind === 'fmove') {
       selBox.classList.remove('bare');
       if (a.dx || a.dy) { applySel(a.dx, a.dy, 1); clearSel(); }
@@ -1267,6 +1368,18 @@ export function createBoard(opts) {
     frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, bg: f.bg || 'grid', box: bbox(f) })),
     renameFrame(n, name) { const f = frameList()[n]; if (f) setFrame(f, { n: name.trim().slice(0, 40) }); },
     showOutline,
+    selectionKind,
+    styleSelection,
+    refreshNotes: () => renderNotes(),
+    // Titel entfernen (Unterseite wurde schon gelöscht), z. B. aus der Gliederung
+    removeTitle(pageId) {
+      const gone = items.filter((it) => it.t === 't' && it.page === pageId);
+      if (!gone.length) return;
+      clearSel();
+      commit(items.filter((it) => !gone.includes(it)));
+      past.length = 0;
+      redrawBox(union(gone));
+    },
     // offenes Eingabefeld sichtbar halten (z. B. wenn am iPad die Tastatur die Fläche verkleinert)
     reveal() {
       const el = textEd?.el || field;

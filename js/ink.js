@@ -1,14 +1,19 @@
-// Handschrift in den Notiz-Ordnern: jede Kategorie hat eine eigene Startseite mit Titeln,
-// jeder Titel öffnet eine eigene Seite (beliebig tief). Bereiche (A4) lassen sich exportieren.
-import { $app, askConfirm, catById, esc, safeColor, state, store, toast } from './core.js';
+// Canvas der Notiz-Ordner: jede Kategorie hat eine eigene Startseite mit Titeln, jeder Titel öffnet eine eigene Seite
+// (beliebig tief). Auf der Startseite steht der Notizen-Bereich mit den Notizen des Ordners; jede Notiz hat eine
+// Unterseite mit ihrer Beschreibung. Bereiche (A4) lassen sich speichern (PDF, PNG, JPEG).
+import { openCategory } from './categories.js';
+import { $app, askConfirm, catById, esc, itemById, safeColor, state, store, toast } from './core.js';
+import { createNote, deleteItem } from './data.js';
 import { folderIc, noteFolders } from './folders.js';
 import { ICON } from './icons.js';
 import { createBoard } from './ink-board.js';
-import { SHAPES } from './ink-draw.js';
+import { GRID, NOTES_W, SHAPES, union } from './ink-draw.js';
 import { deliver, exportWidth, fileName, toImage, toPdf } from './ink-export.js';
 import { clampSize, cleanText, openPenPanel, PALETTE } from './ink-pen.js';
 import { deletePageTree, deserialize, loadChild, loadRoot, removeImages, savePage, serialize, titleIn, uploadImage } from './ink-store.js';
 import { openTree, titleSvg } from './ink-tree.js';
+import { openItem } from './items.js';
+import { notesIn } from './notes.js';
 import { render } from './render.js';
 import { closeSheet, openSheet } from './sheet.js';
 
@@ -34,14 +39,38 @@ const SHAPE_ICON = { line: 'shLine', arrow: 'shArrow', rect: 'shRect', ellipse: 
 const stack = [];      // geöffnete Seiten: [Startseite, Unterseite, …]
 let cat = null;        // Ordner, zu dem die Seiten gehören ('' = Ohne Kategorie)
 let status = 'idle';   // 'idle' | 'loading' | 'ready' | 'error'
-let active = false;    // Handschrift gerade sichtbar
+let active = false;    // Canvas gerade sichtbar
 const top = () => stack[stack.length - 1];
 
+// ---------- Notizen des Ordners im Canvas ----------
+const noteList = () => notesIn(cat).map((n) => ({ id: n.id, title: n.title || '' }));
+
+// Notizen-Bereich der Startseite: fehlt er, kommt er neben den vorhandenen Inhalt (leere Seite: an den Anfang)
+function withNotesArea(items) {
+  if (items.some((it) => it.t === 'n')) return false;
+  const b = items.length ? union(items) : null;
+  const snap = (v) => Math.round(v / GRID) * GRID;
+  items.push({ t: 'n', x: b ? snap(b[0] - NOTES_W - GRID * 4) : 0, y: b ? snap(b[1]) : 0 });
+  return true;
+}
+
+async function removeNote(id) {
+  if (!(await deleteItem(id))) return;   // fragt nach; die Unterseite der Notiz löscht deleteItem mit
+  stack.forEach((p) => p.board.refreshNotes());
+}
+
 // ---------- Seiten öffnen und schließen ----------
-function openPage(row) {
+// note: Notiz, zu der die Seite gehört (ihre Unterseite)
+function openPage(row, note = null) {
   const { items } = deserialize(row.data);
-  const page = { id: row.id, title: titleIn(row.title), atOpen: new Set(), uploaded: new Set(), timer: null, pending: null };
+  const isRoot = !stack.length;
+  const added = isRoot && withNotesArea(items);
+  const page = { id: row.id, note, title: titleIn(row.title), atOpen: new Set(), uploaded: new Set(), timer: null, pending: null };
+  const root = isRoot ? { notes: noteList, onNote: (id) => openNote(page, id), onNoteAdd: () => createNote(cat || null), onNoteDelete: removeNote } : {};
+  const sub = note ? { desc: () => itemById(note)?.body?.trim() || '', onDesc: () => openItem(note) } : {};
   page.board = createBoard({
+    ...root,
+    ...sub,
     items,
     colors: PALETTE,
     hold,
@@ -53,7 +82,23 @@ function openPage(row) {
   });
   page.board.imagePaths().forEach((p) => page.atOpen.add(p));
   stack.push(page);
+  if (added) { page.pending = { list: items, hh: 0, ww: 0 }; scheduleSave(page); }   // neuer Notizen-Bereich gleich speichern
   applyUi();
+}
+
+// Unterseite einer Notiz (gleiche ID wie die Notiz; wird beim ersten Öffnen angelegt)
+async function openNote(parent, id, quiet = false) {
+  const n = itemById(id);
+  if (!n) return false;
+  try {
+    const row = await loadChild(id, parent.id, cat, { s: [], tx: [{ t: 'x', x: 0, y: 0, txt: n.title || 'Notiz', c: '#0C3741', fs: 22, ff: 'sans', fw: 500 }] });
+    openPage(row, id);
+    if (!quiet) render();
+    return true;
+  } catch (e) {
+    toast('Seite konnte nicht geöffnet werden: ' + (e.message || e));
+    return false;
+  }
 }
 
 async function start(fid) {
@@ -67,7 +112,7 @@ async function start(fid) {
   } catch (e) {
     if (cat !== fid) return;
     status = 'error';
-    console.warn('Handschrift', e);
+    console.warn('Canvas', e);
   }
   if (active) render();
 }
@@ -87,9 +132,23 @@ async function openTitle(parent, it, quiet = false) {
 // aus der Gliederung: zurück zur Startseite, dann Titel für Titel hinein; frame: Bereich, der gezeigt werden soll
 async function openPath(path, frame) {
   while (stack.length > 1) closePage(stack.pop());
-  for (const it of path) if (!(await openTitle(top(), it, true))) return render();
+  for (const it of path) if (!(await (it.note ? openNote(top(), it.note, true) : openTitle(top(), it, true)))) return render();
   render();
   if (frame !== undefined) top().board.showFrame(frame);
+}
+
+// Titel aus der Gliederung löschen: Unterseite samt Inhalt weg, Titel von seiner Seite entfernen
+async function removeTitle(row, it) {
+  if (!(await deleteTitles([it]))) return false;
+  while (stack.length > 1 && stack.some((p) => p.id === it.page)) closePage(stack.pop());   // gelöschte Seite war offen
+  const open = stack.find((p) => p.id === row.id);
+  if (open) { open.board.removeTitle(it.page); render(); return true; }
+  const { items } = deserialize(row.data);
+  const rest = items.filter((o) => !(o.t === 't' && o.page === it.page));
+  row.data = serialize(rest, row.data?.h || 0, row.data?.w || 0);
+  const err = await savePage(row.id, rest, row.data.h, row.data.w);
+  if (err) { toast('Speichern fehlgeschlagen: ' + err.message); return false; }
+  return true;
 }
 
 // Bereich umbenennen (aus der Gliederung): offene Seite direkt, sonst in der gespeicherten Seite
@@ -102,6 +161,17 @@ async function renameFrame(row, n, name) {
   if (name) f.n = name; else delete f.n;
   row.data = serialize(items, row.data?.h || 0, row.data?.w || 0);
   return savePage(row.id, items, row.data.h, row.data.w);
+}
+
+// Gliederung: Bereiche, Notizen und Titel aller Seiten; Titel und Notizen lassen sich dort auch löschen
+function openOutlineTree() {
+  flushAll();
+  openTree({
+    cat, open: stack.map((p) => p.id), notes: noteList(),
+    onOpen: openPath, onRename: renameFrame, onShow: showOutline,
+    onDeleteTitle: async (row, it) => { const ok = await removeTitle(row, it); if (ok) openOutlineTree(); },
+    onDeleteNote: async (id) => { await removeNote(id); openOutlineTree(); },
+  });
 }
 
 // Gliederung auf der Fläche: alle Bereiche und Titel der geöffneten Seite hervorheben
@@ -250,6 +320,11 @@ function openShapes(btn) {
 
 // Farbe und Stärke: Fenster mit allen Farben, eigener Farbe und Regler
 function openPen(btn) {
+  const b = top()?.board, sk = b?.selectionKind();
+  if (sk) {   // etwas ist ausgewählt: Farbe, Stärke bzw. Schrift der Auswahl ändern
+    openPenPanel($app.querySelector('[data-act="ink-pen"]') || btn, sk.kind, sk.val, (v) => b.styleSelection(sk.kind, v), () => remember(sk.val.c));
+    return;
+  }
   if (!DRAW.includes(ui.tool)) { ui.tool = 'pen'; applyUi(); render(); }
   const kind = kindOf();
   const anchor = $app.querySelector('[data-act="ink-pen"]') || btn;
@@ -264,7 +339,7 @@ function openPen(btn) {
 const penDot = (kind, w) => Math.round(Math.min(24, kind === 'text' ? 12 : kind === 'marker' ? 6 + w * .5 : 6 + w * 1.1)) + 'px';
 const remember = (c) => { ui.recent = [c, ...ui.recent.filter((x) => x !== c)].slice(0, 3); };
 
-// Kategorien (Notiz-Ordner) aus der Kopfleiste wählen; nochmal tippen schließt
+// Kategorien (Notiz-Ordner) aus der Kopfleiste wählen (Canvas und Notizen); nochmal tippen schließt
 let closeCats = null;
 function openCats(btn) {
   if (closeCats && document.querySelector('.cmenu.drop')) { closeCats(); closeCats = null; return; }
@@ -272,8 +347,11 @@ function openCats(btn) {
     const on = f.id === state.list;
     return `<button class="cm-i ${on ? 'on' : ''}" data-id="${esc(f.id)}">${folderIc(f, 'cm-fic')}<span>${esc(f.name)}</span>${on ? ICON.check : ''}</button>`;
   };
+  const c = state.list && catById(state.list);
   closeCats = dropMenu(btn, `${noteFolders().map(item).join('')}<hr>
+    ${c && c.owner_id === state.me ? `<button class="cm-i" data-edit>${ICON.pen}<span>Name, Farbe, Symbol …</span></button>` : ''}
     <button class="cm-i" data-all>${ICON.chevL}<span>Alle Ordner</span></button>`, (b) => {
+    if ('edit' in b.dataset) return openCategory(c.id);
     state.list = 'all' in b.dataset ? null : b.dataset.id;
     render();
   });
@@ -293,6 +371,7 @@ export async function inkAction(act, id, btn) {
   switch (act) {
     case 'ink-tool': if (id === 'shape') { openShapes(btn); return; } ui.tool = id; break;
     case 'ink-color': {
+      if (b?.selectionKind()) { b.styleSelection('pen', { c: ui.recent[+id] }); return; }   // Auswahl umfärben
       if (!DRAW.includes(ui.tool)) ui.tool = 'pen';
       const kind = kindOf();
       ui[kind] = { ...ui[kind], c: ui.recent[+id] || ui[kind].c };
@@ -300,7 +379,7 @@ export async function inkAction(act, id, btn) {
       break;
     }
     case 'ink-pen': openPen(btn); return;
-    case 'ink-tree': flushAll(); openTree({ cat, open: stack.map((p) => p.id), onOpen: openPath, onRename: renameFrame, onShow: showOutline }); return;
+    case 'ink-tree': openOutlineTree(); return;
     case 'ink-more': openMore(btn); return;
     case 'ink-notes': state.noteMode = 'text'; render(); return;
     case 'ink-finger': ui.finger = !ui.finger; store('inkFinger', ui.finger ? '1' : '0'); toast(ui.finger ? 'Mit dem Finger schreiben, mit zwei Fingern verschieben und zoomen' : 'Stift und Maus schreiben, der Finger verschiebt'); break;
@@ -397,7 +476,7 @@ function openExport(preselect) {
 }
 
 async function runExport(b, list) {
-  const base = `Handschrift ${cat ? catById(cat)?.name || '' : ''} ${new Date().toISOString().slice(0, 10)}`;
+  const base = `Canvas ${cat ? catById(cat)?.name || '' : ''} ${new Date().toISOString().slice(0, 10)}`;
   // PDF und JPEG brauchen Weiß, PNG darf durchsichtig sein
   const render1 = async (f) => {
     const bg = exp.bg === 'grid' ? f.bg : 'none';
@@ -429,10 +508,10 @@ async function runExport(b, list) {
 }
 
 // ---------- Ansicht ----------
-// Handschrift eines Notiz-Ordners (fid '' = Ohne Kategorie)
+// Canvas eines Notiz-Ordners (fid '' = Ohne Kategorie)
 export function renderInk(fid) {
   if (cat !== fid) { leaveInk(); start(fid); }
-  if (status === 'error') return '<div class="ink-slot"><p class="empty ink-msg">Die Handschrift ist gerade nicht erreichbar. Bitte später nochmal versuchen.</p></div>';
+  if (status === 'error') return '<div class="ink-slot"><p class="empty ink-msg">Der Canvas ist gerade nicht erreichbar. Bitte später nochmal versuchen.</p></div>';
   if (!top()) return '<div class="ink-slot"><p class="center muted ink-msg">Lädt …</p></div>';
   return `${inkBar()}<div class="ink-slot">
     <p class="ink-hint" ${stack.length === 1 && top().board.isEmpty ? '' : 'hidden'}>Mit dem Stift schreiben, mit dem Finger verschieben, mit zwei Fingern zoomen. Etwas mit der Auswahl umkreisen und „Als Titel“ wählen: der Titel öffnet eine eigene Seite und lässt sich ziehen (mit dem Finger: lange drücken). Oben rechts mit „Bereich“ ein A4-Blatt markieren und später speichern.</p>
@@ -447,10 +526,11 @@ export function mountInk() {
   if (!slot || !page) return;
   slot.prepend(page.board.el);
   page.board.attach();
+  page.board.refreshNotes();   // Notizen können sich inzwischen geändert haben (auch durch die andere Person)
   updateTools();
 }
 
-// Handschrift verlassen (anderer Ordner, Notizen-Ansicht, anderer Bereich, Abmelden):
+// Canvas verlassen (anderer Ordner, Notizen-Ansicht, anderer Bereich, Abmelden):
 // speichern, nicht mehr benutzte Bilder entfernen; beim nächsten Öffnen frisch laden (Änderungen der anderen Person)
 export function leaveInk() {
   active = false;
@@ -485,7 +565,8 @@ export function resetInk() {
 // Kopfzeile einer Unterseite: zurück + handschriftlicher Titel (sonst null: normale Ordner-Kopfzeile)
 export function inkHead() {
   if (stack.length < 2) return null;
-  return `<button class="ph-back" data-act="ink-back" aria-label="Zurück">${ICON.chevL}</button>${titleSvg(top().title)}`;
+  const note = top().note && itemById(top().note);
+  return `<button class="ph-back" data-act="ink-back" aria-label="Zurück">${ICON.chevL}</button>${note ? `<b class="ph-t">${esc(note.title) || 'Ohne Titel'}</b>` : titleSvg(top().title)}`;
 }
 
 const tb = (act, icon, label, { on = false, dis = false, id = '', cls = '' } = {}) =>
