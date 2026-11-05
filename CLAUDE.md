@@ -80,7 +80,8 @@ In der App zeigt Training → „Übungen“ die ganze Datenbank.
 4. Committen und auf `main` pushen.
 
 ## Stand und offene Punkte (November 2026)
-- Datenbank ist auf dem Stand von `supabase-setup.sql` (inkl. Handschrift in Ordnern) – außer dem letzten Abschnitt „Training“ (Eintragstyp), den Simon noch ausführen muss.
+- Datenbank ist auf dem Stand von `supabase-setup.sql` (geprüft 5.11.2026: Tabellen, Spalten, Funktionen, Regeln, Bucket `ink`, Realtime).
+  Supabase ist als Connector verbunden: Claude kann SQL selbst ausführen (`apply_migration`), Änderungen trotzdem in `supabase-setup.sql` nachtragen.
 - Push-Erinnerungen: App-Teil fertig; Edge Function deployen, Secrets setzen und Zeitplan (`supabase/push-zeitplan.sql`) einrichten ist noch offen.
 - Ideen, die Simon angeboten wurden: Wochenansicht im Kalender mit 7 Spalten am Desktop, Pinnwand der Startseite auch am Smartphone.
 - Handschrift am iPad mit Apple Pencil noch von Simon zu testen (Handballen, langes Drücken, Export über das Teilen-Menü).
