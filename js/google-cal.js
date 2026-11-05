@@ -1,0 +1,102 @@
+// Google-Kalender bearbeiten: Verbinden (einmal „Zugriff erlauben“), Termine laden, ändern, anlegen, löschen.
+// Alles läuft über die Edge Function "google-calendar"; die Google-Schlüssel bleiben auf dem Server.
+import { askConfirm, esc, sb, toast } from './core.js';
+import { addDays, ymd } from './dates.js';
+import { closeSheet, openSheet } from './sheet.js';
+
+const TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return 'Europe/Vienna'; } })();
+const pad = (n) => String(n).padStart(2, '0');
+const hhmm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+// Aufruf der Funktion; Fehlertext der Funktion weiterreichen
+async function call(action, extra = {}) {
+  const { data, error } = await sb.functions.invoke('google-calendar', { body: { action, tz: TZ, ...extra } });
+  if (error) {
+    const msg = await error.context?.json?.().then((j) => j.error).catch(() => '');
+    throw new Error(msg || error.message);
+  }
+  return data || {};
+}
+
+export async function googleStatus() {
+  try { const d = await call('status'); return { connected: !!d.connected, email: String(d.email || '').slice(0, 200) }; }
+  catch { return { connected: false, email: '' }; }
+}
+
+// zu Google „Zugriff erlauben“ und danach zurück in die App (?google=ok)
+export async function connectGoogle() {
+  try {
+    const { url } = await call('start');
+    if (!/^https:\/\/accounts\.google\.com\//.test(url || '')) throw new Error('Unerwartete Antwort');
+    location.href = url;
+  } catch (e) { toast('Google: ' + e.message, 5000); }
+}
+
+export const disconnectGoogle = () => call('disconnect');
+
+// Rückkehr von Google: Meldung zeigen, Adresse aufräumen
+export function handleGoogleReturn() {
+  const r = new URLSearchParams(location.search).get('google');
+  if (!r) return;
+  history.replaceState(null, '', location.pathname);
+  setTimeout(() => toast(r === 'ok' ? 'Google-Kalender verbunden.' : 'Google-Verbindung hat nicht geklappt.', 4000), 800);
+}
+
+// Google-Termin → Vorkommen wie bei den ICS-Abos (Date-Objekte, gid = Google-ID)
+const toDate = (v, allDay) => { if (!allDay) return new Date(v); const [y, m, d] = String(v).split('-').map(Number); return new Date(y, m - 1, d); };
+export async function listGoogle(from, to) {
+  const { events } = await call('list', { from: from.toISOString(), to: to.toISOString() });
+  return (Array.isArray(events) ? events : []).filter((e) => e && /^[a-z0-9_]+$/i.test(e.id) && e.start && e.end).map((e) => ({
+    gid: e.id, title: String(e.title || '(ohne Titel)').slice(0, 300), location: String(e.location || '').slice(0, 300),
+    desc: String(e.desc || '').slice(0, 4000), allDay: !!e.allDay, recurring: !!e.recurring,
+    start: toDate(e.start, e.allDay), end: toDate(e.end, e.allDay),
+  })).filter((o) => !isNaN(o.start) && !isNaN(o.end));
+}
+
+// Bearbeiten-Fenster (o = vorhandenes Vorkommen oder null für neu); onDone lädt den Kalender neu
+export function openGoogleEvent(o, { day = ymd(new Date()), time = '', onDone } = {}) {
+  const isNew = !o;
+  const st = o ? o.start : new Date(`${day}T${time || '09:00'}`);
+  const en = o ? (o.allDay ? new Date(o.end - 864e5) : o.end) : new Date(st.getTime() + 36e5);
+  const allDay = o ? o.allDay : false;
+  const sheet = openSheet(`<div class="sheet-head"><span class="status"><i class="src-dot" style="background:#4285F4"></i>Google</span><button class="link-btn" data-close>Abbrechen</button></div>
+    <form id="ge-form">
+      <input class="title-input" id="ge-title" placeholder="Was steht an?" value="${esc(o?.title || '')}" autocomplete="off" maxlength="300">
+      <button class="menu-item" id="ge-all" type="button" style="margin-top:12px">Ganztägig<span class="sw ${allDay ? 'on' : ''}"></span></button>
+      <div class="field"><label>Beginn</label><div class="row-inline"><input class="input" type="date" id="ge-d1" value="${ymd(st)}" required><input class="input ge-t" type="time" id="ge-t1" value="${hhmm(st)}"></div></div>
+      <div class="field"><label>Ende</label><div class="row-inline"><input class="input" type="date" id="ge-d2" value="${ymd(en)}" required><input class="input ge-t" type="time" id="ge-t2" value="${hhmm(en)}"></div></div>
+      <div class="field"><label for="ge-loc">Ort</label><input class="input" id="ge-loc" maxlength="300" value="${esc(o?.location || '')}"></div>
+      <div class="field"><label for="ge-desc">Beschreibung</label><textarea class="textarea" id="ge-desc" style="min-height:80px" maxlength="4000">${esc(o?.desc || '')}</textarea></div>
+      ${o?.recurring ? '<p class="hint">Wiederkehrender Termin: geändert wird nur dieser eine Termin.</p>' : ''}
+      <button class="btn block" id="ge-save">${isNew ? 'In Google anlegen' : 'Speichern'}</button>
+      ${isNew ? '' : `<button class="btn danger block" type="button" id="ge-del" style="margin-top:10px">Termin löschen</button>`}
+    </form>`);
+  let all = allDay;
+  const $ = (s) => sheet.querySelector(s);
+  const showTimes = () => sheet.querySelectorAll('.ge-t').forEach((t) => { t.hidden = all; });
+  showTimes();
+  $('[data-close]').addEventListener('click', closeSheet);
+  $('#ge-all').addEventListener('click', () => { all = !all; $('#ge-all .sw').classList.toggle('on', all); showTimes(); });
+  // Beginn verschoben: Ende mitziehen, wenn es sonst davor läge
+  $('#ge-d1').addEventListener('change', () => { if ($('#ge-d2').value < $('#ge-d1').value) $('#ge-d2').value = $('#ge-d1').value; });
+
+  const busy = async (btn, fn) => {
+    btn.disabled = true;
+    try { await fn(); closeSheet(); await onDone?.(); } catch (e) { toast('Google: ' + e.message, 5000); btn.disabled = false; }
+  };
+  $('#ge-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const d1 = $('#ge-d1').value, d2 = $('#ge-d2').value || d1, t1 = $('#ge-t1').value || '09:00', t2 = $('#ge-t2').value || t1;
+    const event = all
+      ? { allDay: true, start: d1, end: addDays(d2 < d1 ? d1 : d2, 1) }
+      : { allDay: false, start: `${d1}T${t1}:00`, end: `${d2}T${t2}:00` };
+    if (!all && event.end <= event.start) return toast('Das Ende liegt vor dem Beginn.', 3000);
+    Object.assign(event, { title: $('#ge-title').value.trim(), location: $('#ge-loc').value.trim(), desc: $('#ge-desc').value });
+    busy($('#ge-save'), () => call('save', { id: o?.gid, event }));
+  });
+  $('#ge-del')?.addEventListener('click', async () => {
+    if (!(await askConfirm(`„${o.title}“ löschen?`, 'Löschen', 'Der Termin wird auch in Google gelöscht.'))) return;
+    busy($('#ge-del'), () => call('delete', { id: o.gid }));
+  });
+  if (isNew) setTimeout(() => $('#ge-title')?.focus(), 60);
+}

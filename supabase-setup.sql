@@ -431,3 +431,19 @@ create policy calendars_own on public.calendars for all to authenticated
 
 -- Anzeige im Kalender und auf der Startseite: ausgeblendete Abschnitte { hide: [...], home: [...] }
 alter table public.profiles add column if not exists cal_prefs jsonb;
+
+-- ==========================================================================
+-- Google-Kalender bearbeiten (Edge Function google-calendar)
+-- Je Person ein verbundenes Google-Konto. Die Schlüssel liest und schreibt nur die Edge Function
+-- (Dienstzugang); für Browser gibt es bewusst keine Regeln und keine Rechte.
+-- ==========================================================================
+create table if not exists public.google_links (
+  user_id uuid primary key references auth.users on delete cascade,
+  email text,
+  refresh_token text not null,
+  access_token text,
+  expires_at timestamptz,
+  created_at timestamptz not null default now()
+);
+alter table public.google_links enable row level security;
+revoke all on public.google_links from anon, authenticated;

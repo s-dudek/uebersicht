@@ -28,6 +28,7 @@ export function render() {
   document.querySelectorAll('.addrow[data-list] input').forEach((i) => { if (i.value) typedMap[i.closest('form').dataset.list] = i.value; });
   const focusedList = document.activeElement?.closest?.('.addrow[data-list]')?.dataset.list;
   const prevScroll = document.querySelector('.main')?.scrollTop || 0;
+  const prevCal = document.querySelector('.cal-scroll')?.scrollTop;   // Stundenraster der Woche
   const sameTab = render.lastTab === state.tab;
   render.lastTab = state.tab;
   if (!sameTab && !state.keepList) state.list = null;
@@ -57,7 +58,11 @@ export function render() {
   ctl.show(!desk, home ? 'center' : null);
   if (inkOn) mountInk();
 
-  if (sameTab) $app.querySelector('.main').scrollTop = prevScroll;
+  if (sameTab) {
+    $app.querySelector('.main').scrollTop = prevScroll;
+    const cs = $app.querySelector('.cal-scroll');
+    if (cs && prevCal !== undefined) cs.scrollTop = prevCal;
+  }
   for (const [k, v] of Object.entries(typedMap)) { const i = document.querySelector(`.addrow[data-list="${k}"] input`); if (i) i.value = v; }
   if (focusedList !== undefined) document.querySelector(`.addrow[data-list="${focusedList}"] input`)?.focus();
   splashReady();

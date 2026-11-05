@@ -48,6 +48,7 @@ js/
   calendar.js       Kalender (Tag, Woche wie bei Google, Monat), Kalenderliste
   cal-sources.js    Abschnitte ein/aus (cal_prefs), verknüpfte Kalender laden
   ics.js            ICS-Abos lesen (Wiederholungen, Zeitzonen)
+  google-cal.js     Google-Kalender verbinden und Termine bearbeiten
   meals.js          Gerichte, Wochenplan, Einkaufsliste
   training.js       Training: Woche, Einheiten mit Übungen zum Abhaken
   plan-import.js    Code einfügen: Gerichte, Einkauf und Training (Tag oder Woche)

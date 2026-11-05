@@ -233,6 +233,7 @@
   // Edge Function "calendar-feed": Beispiel-Kalender um heute (wöchentliche Besprechung, Termin, Urlaub)
   async function invokeFn(name, { body } = {}) {
     await new Promise((r) => setTimeout(r, 120));
+    if (name === 'google-calendar' && me()) return googleFn(body || {});
     if (name !== 'calendar-feed' || !me()) return { data: null, error: { message: 'nicht erlaubt' } };
     if (!db.calendars.some((c) => c.id === body?.id && c.owner_id === me())) return { data: null, error: { message: 'Kalender nicht gefunden' } };
     const d = (k) => { const x = new Date(); x.setDate(x.getDate() + k); return `${x.getFullYear()}${String(x.getMonth() + 1).padStart(2, '0')}${String(x.getDate()).padStart(2, '0')}`; };
@@ -243,6 +244,35 @@
       + `BEGIN:VEVENT\r\nUID:u1\r\nSUMMARY:Urlaub\r\nDTSTART;VALUE=DATE:${d(3)}\r\nDTEND;VALUE=DATE:${d(6)}\r\nEND:VEVENT\r\n`
       + 'END:VCALENDAR\r\n';
     return { data: ics, error: null };
+  }
+
+  // Edge Function "google-calendar": verbundenes Google-Konto mit Beispielterminen (nur in dieser Vorschau)
+  function googleFn(b) {
+    const g = (db.google ||= {});
+    const mine = (g[me()] ||= { connected: me() === 'u-simon', email: 'simon@gmail.com', events: null });
+    if (!mine.events) {
+      const at = (k, h) => { const x = new Date(); x.setDate(x.getDate() + k); x.setHours(h, 0, 0, 0); return x.toISOString(); };
+      mine.events = [
+        { id: 'g1', title: 'Fotoshooting Kunde', location: 'Studio', desc: '', allDay: false, start: at(0, 15), end: at(0, 17) },
+        { id: 'g2', title: 'Abendessen mit Freunden', location: '', desc: '', allDay: false, start: at(2, 19), end: at(2, 21) },
+      ];
+    }
+    const ok = (data) => ({ data, error: null });
+    switch (b.action) {
+      case 'status': return ok({ connected: mine.connected, email: mine.connected ? mine.email : '' });
+      case 'start': mine.connected = true; save(); return ok({ url: 'https://accounts.google.com/o/oauth2/v2/auth?vorschau' });
+      case 'disconnect': mine.connected = false; save(); return ok({ ok: true });
+      case 'list': return ok({ events: mine.connected ? mine.events : [] });
+      case 'save': {
+        const e = { ...b.event };
+        if (!e.allDay) { e.start = new Date(e.start).toISOString(); e.end = new Date(e.end).toISOString(); }
+        if (b.id) Object.assign(mine.events.find((x) => x.id === b.id) || {}, e);
+        else mine.events.push({ id: 'g' + Date.now(), ...e });
+        save(); return ok({ event: e });
+      }
+      case 'delete': mine.events = mine.events.filter((x) => x.id !== b.id); save(); return ok({ ok: true });
+    }
+    return { data: null, error: { message: 'unbekannte Aktion' } };
   }
 
   const client = {

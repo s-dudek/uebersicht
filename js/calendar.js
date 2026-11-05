@@ -1,8 +1,9 @@
 // Bereich Kalender: Tag, Woche (Zeitraster wie bei Google), Monat; Abschnitte ein- und ausblenden, verknüpfte Kalender
-import { addCalendar, calendars, calOf, ensureExternal, EXT_COLORS, extOn, extOcc, feedError, isShown, removeCalendar, SECTIONS, toggleSection } from './cal-sources.js';
+import { addCalendar, calendars, calOf, ensureExternal, EXT_COLORS, extOn, extOcc, feedError, google, GOOGLE_ID, isShown, reloadCalendar, removeCalendar, SECTIONS, toggleSection } from './cal-sources.js';
 import { $app, askConfirm, esc, isDesktop, state, toast } from './core.js';
 import { addDays, dayName, isoWeek, mondayOf, parseYmd, ymd } from './dates.js';
 import { createEvent, evAge, eventsOn, isBday } from './events.js';
+import { connectGoogle, openGoogleEvent } from './google-cal.js';
 import { ICON } from './icons.js';
 import { mealsOn } from './meals.js';
 import { render } from './render.js';
@@ -96,7 +97,8 @@ export function scrollCal() {
   requestAnimationFrame(() => {
     const g = document.querySelector('.tgridv'), m = document.querySelector('.cal-scroll') || document.querySelector('.main');
     if (!g || !m) return;
-    const n = new Date(), h = Math.min(n.getHours() - 1, 7) < 0 ? 0 : (calDay() === ymd(n) || state.calView === 'week' ? Math.max(H0, Math.min(n.getHours() - 1, 17)) : 7);
+    // heute bzw. Woche: eine Stunde vor jetzt (höchstens 17 Uhr), sonst ab 7 Uhr
+    const n = new Date(), h = calDay() === ymd(n) || state.calView === 'week' ? Math.max(H0, Math.min(n.getHours() - 1, 17)) : 7;
     m.scrollTop = (m.classList.contains('cal-scroll') ? 0 : g.offsetTop) + (h - H0) * HPX - 10;
   });
 }
@@ -122,7 +124,8 @@ export function sourcesHtml(where = 'hide') {
     ${calendars.map((c) => row('x:' + c.id, c.name, c.color,
       `${feedError(c.id) ? `<span class="src-err" title="${esc(feedError(c.id))}">!</span>` : ''}<button class="src-x" data-act="cal-unlink" data-id="${esc(c.id)}" aria-label="${esc(c.name)} entfernen" title="Entfernen">${ICON.trash}</button>`)).join('')
       || '<p class="src-empty">Noch keiner. Outlook, Google oder iCloud über die Abo-Adresse (ICS) verknüpfen.</p>'}
-    ${cal ? `<button class="src-add" data-act="cal-link">${ICON.plus}<span>Kalender verknüpfen</span></button>` : ''}`;
+    ${cal ? `<button class="src-add" data-act="cal-link">${ICON.plus}<span>Kalender verknüpfen</span></button>
+      ${google.connected ? '' : `<button class="src-add" data-act="g-connect">${ICON.calendar}<span>Google-Kalender verbinden</span></button>`}` : ''}`;
 }
 
 function calDayView() {
@@ -215,9 +218,11 @@ export async function calAction(act, id) {
   if (act === 'cal-link') return openLinkForm();
   if (act === 'cal-sources') return openSourcesSheet(id === 'home' ? 'home' : 'hide');
   if (act === 'ext-ev') return openExtEvent(id);
+  if (act === 'g-connect') return connectGoogle();
   if (act === 'cal-unlink') {
     const c = calOf(id);
-    if (!c || !(await askConfirm(`„${c.name}“ trennen?`, 'Trennen', 'Der Kalender selbst (z. B. in Outlook) bleibt unverändert.'))) return;
+    const note = c?.google ? 'Die App darf dann nicht mehr auf Google zugreifen. Der Kalender in Google bleibt unverändert.' : 'Der Kalender selbst (z. B. in Outlook) bleibt unverändert.';
+    if (!c || !(await askConfirm(`„${c.name}“ trennen?`, 'Trennen', note))) return;
     try { await removeCalendar(id); } catch (e) { toast('Fehler: ' + e.message, 4000); }
   }
 }
@@ -275,6 +280,7 @@ function openLinkForm() {
 function openExtEvent(id) {
   const o = extOcc(id);
   if (!o) return;
+  if (o.gid) return openGoogleEvent(o, { onDone: () => reloadCalendar(GOOGLE_ID) });   // Google: bearbeitbar
   const c = calOf(o.cal);
   const when = o.allDay
     ? `${o.start.toLocaleDateString('de-AT', { weekday: 'long', day: 'numeric', month: 'long' })}${ymd(new Date(o.end - 1)) !== ymd(o.start) ? ' – ' + new Date(o.end - 1).toLocaleDateString('de-AT', { weekday: 'short', day: 'numeric', month: 'long' }) : ''} · ganztägig`

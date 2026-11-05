@@ -1,8 +1,10 @@
 // Termine und Geburtstage (jährliche Wiederholung, Erinnerungen)
+import { google, GOOGLE_ID, reloadCalendar } from './cal-sources.js';
 import { calDay, hm, toMin } from './calendar.js';
 import { askConfirm, canDeleteItem, debounce, esc, itemById, sb, state, toast } from './core.js';
 import { saveItem, silentDelete } from './data.js';
 import { addDays, parseYmd, remindLabel } from './dates.js';
+import { openGoogleEvent } from './google-cal.js';
 import { ICON } from './icons.js';
 import { renderShareArea } from './items.js';
 import { render } from './render.js';
@@ -65,9 +67,14 @@ export function openNewEventMenu() {
     <div class="nev">
       <button class="nev-b" data-k="event">${ICON.calendar}<b>Termin</b><small>einmalig oder jährlich</small></button>
       <button class="nev-b" data-k="birthday">${ICON.cake}<b>Geburtstag</b><small>jedes Jahr mit Erinnerung</small></button>
+      ${google.connected ? `<button class="nev-b" data-k="google">${ICON.calendar}<b>Google-Termin</b><small>direkt im Google-Kalender</small></button>` : ''}
     </div>`);
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
-  sheet.querySelectorAll('[data-k]').forEach((b) => b.addEventListener('click', () => { closeSheet(); createEvent(null, b.dataset.k); }));
+  sheet.querySelectorAll('[data-k]').forEach((b) => b.addEventListener('click', () => {
+    closeSheet();
+    if (b.dataset.k === 'google') openGoogleEvent(null, { day: calDay(), onDone: () => reloadCalendar(GOOGLE_ID) });
+    else createEvent(null, b.dataset.k);
+  }));
 }
 
 export async function createEvent(day, kind = 'event', time = '') {
