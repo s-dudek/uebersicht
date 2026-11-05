@@ -100,7 +100,7 @@ export const state = {
   doneOpen: new Set(),   // Todo-Listen, deren erledigte Einträge aufgeklappt sind
   folded: new Set(),    // zugeklappte Ordner in der Listenansicht
   calView: store('calView') || 'week',   // 'day' | 'week' | 'month'
-  calSide: store('calSide') === '1',     // Desktop: Kalenderliste links aufgeklappt
+  homeDay: null,                         // Startseite: gezeigter Tag (null = heute)
   calAllOpen: false,                     // Ganztägiges: alle Zeilen zeigen
   calDate: null,        // gezeigter Tag im Kalender (YYYY-MM-DD)
   list: null,           // geöffnete Todo-Liste (null = Übersicht, '' = Allgemein)

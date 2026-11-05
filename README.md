@@ -44,6 +44,7 @@ js/
   groups.js         Reihenfolge und Gruppen in Listen
   categories.js     Kategorien-Seite und -Fenster
   items.js          Todo-/Notiz-Fenster, Teilen
+  event-view.js     Termin ansehen (vor dem Bearbeiten)
   events.js         Termine und Geburtstage
   calendar.js       Kalender (Tag, Woche wie bei Google, Monat), Kalenderliste
   cal-sources.js    Abschnitte ein/aus (cal_prefs), verknüpfte Kalender laden

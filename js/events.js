@@ -1,9 +1,10 @@
 // Termine und Geburtstage (jährliche Wiederholung, Erinnerungen)
 import { reloadGoogle, writableGoogle } from './cal-sources.js';
 import { calDay, hm, toMin } from './calendar.js';
-import { askConfirm, canDeleteItem, debounce, esc, itemById, sb, state, store, toast } from './core.js';
+import { askConfirm, canDeleteItem, catById, debounce, esc, itemById, safeColor, sb, state, store, toast } from './core.js';
 import { saveItem, silentDelete } from './data.js';
 import { addDays, parseYmd, remindLabel } from './dates.js';
+import { showEventCard } from './event-view.js';
 import { openGoogleEvent } from './google-cal.js';
 import { ICON } from './icons.js';
 import { renderShareArea } from './items.js';
@@ -93,6 +94,23 @@ export async function createEvent(day, kind = 'event', time = '', pre = {}) {
   state.items.unshift(data);
   render();
   openEvent(data.id, { isNew: true });
+}
+
+// eigenen Termin oder Geburtstag ansehen; „Bearbeiten“ öffnet das Formular
+export function showEvent(id) {
+  const e = itemById(id);
+  if (!e) return;
+  const b = isBday(e), m = e.meta || {}, cat = catById(e.category_id), yearly = isYearly(e);
+  const day = yearly ? `${new Date().getFullYear()}${e.due_date.slice(4)}` : e.due_date;
+  const date = parseYmd(day).toLocaleDateString('de-AT', yearly ? { day: 'numeric', month: 'long' } : { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const age = b ? evAge(e, day) : 0;
+  const when = b ? `Geburtstag am ${date}${age ? ` · wird ${age}` : ''}`
+    : `${date}${m.time ? ` · ${m.time}${m.end ? '–' + m.end : ''}` : ' · ganztägig'}${yearly ? ' · jedes Jahr' : ''}`;
+  const rem = EV_REMIND.find(([k]) => k && k === String(m.remind || ''));
+  showEventCard({
+    title: evTitle(e), when, desc: e.body, calName: cat ? cat.name : 'Übersicht', color: safeColor(cat?.color, '#0C3741'),
+    notes: rem ? [`Erinnerung: ${rem[1]}`] : [], onEdit: () => openEvent(id),
+  });
 }
 
 export function openEvent(id, { isNew = false } = {}) {

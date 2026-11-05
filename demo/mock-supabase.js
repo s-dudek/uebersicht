@@ -1,7 +1,7 @@
 // Nachbau von Supabase für die Vorschau: Daten liegen nur in diesem Browser.
 // Die Zugriffsregeln entsprechen denen aus supabase-setup.sql.
 (function () {
-  const DB_KEY = 'uebersicht-demo-db-v6';
+  const DB_KEY = 'uebersicht-demo-db-v7';
   const SESSION_KEY = 'uebersicht-demo-session-v1';
   const ls = {
     get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -44,7 +44,7 @@
         { id: 'n1', owner_id: S, type: 'note', icon: 'bulb', title: 'Ideen Dashboard', body: 'Startseite mit Tagesübersicht\nFitnessplan einbauen\nFußball-Ergebnisse', done: false, due_date: null, category_id: null, created_at: ago(70), updated_at: ago(4) },
         { id: 'n2', owner_id: A, type: 'note', icon: 'plane', title: 'Unterkünfte', body: 'Ferienwohnung am Gardasee, 4 Nächte. Alternativ Hotel in Riva.', done: false, due_date: null, category_id: 'c-urlaub', created_at: ago(60), updated_at: ago(6) },
         { id: 'e1', owner_id: S, type: 'event', icon: null, title: 'Mama', body: 'Blumen besorgen', done: false, due_date: (1965) + day(1).slice(4), category_id: null, meta: { kind: 'birthday', repeat: 'yearly', remind: '1' }, remind_at: (() => { const x = new Date(); x.setHours(18, 0, 0, 0); return x.toISOString(); })(), reminded: false, created_at: ago(30), updated_at: ago(30) },
-        { id: 'e2', owner_id: A, type: 'event', icon: null, title: 'Zahnarzt', body: '', done: false, due_date: day(3), category_id: 'c-haushalt', meta: { kind: 'event', time: '14:30', remind: 'h' }, created_at: ago(20), updated_at: ago(20) },
+        { id: 'ev2', owner_id: A, type: 'event', icon: null, title: 'Zahnarzt', body: '', done: false, due_date: day(3), category_id: 'c-haushalt', meta: { kind: 'event', time: '14:30', remind: 'h' }, created_at: ago(20), updated_at: ago(20) },
         { id: 'n3', owner_id: S, type: 'note', icon: 'gift', title: 'Geschenkideen', body: 'Fotobuch, Konzertkarten', done: false, due_date: null, category_id: null, created_at: ago(40), updated_at: ago(12) },
       ],
       item_shares: [{ item_id: 'n3', user_id: A }],

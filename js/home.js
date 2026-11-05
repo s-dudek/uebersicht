@@ -1,8 +1,8 @@
 // Startseite
 import { ensureExternal, extOn, isShown } from './cal-sources.js';
-import { allChip, dayContent, hm } from './calendar.js';
+import { allChip, dayContent, hm, openAttr } from './calendar.js';
 import { askConfirm, esc, isDesktop, isTodoList, safeColor, sb, state } from './core.js';
-import { addDays, ymd } from './dates.js';
+import { addDays, parseYmd, ymd } from './dates.js';
 import { eventsOn, isBday } from './events.js';
 import { catSym } from './folders.js';
 import { ICON, LOGO_PORTRAIT } from './icons.js';
@@ -62,28 +62,42 @@ export async function homeAction(k) {
 // ---------- Desktop: Startseite – Datum, heutiger Tag, Essen, eigene Pinnwand ----------
 const DAY_FROM = 6 * 60, DAY_TO = 24 * 60;   // sichtbarer Zeitraum der Tagesleiste
 
+// Name des gezeigten Tags: Heute, Morgen, Gestern oder Wochentag mit Datum
+function dayLabel(day) {
+  const t = ymd(new Date());
+  if (day === t) return 'Heute';
+  if (day === addDays(t, 1)) return 'Morgen';
+  if (day === addDays(t, -1)) return 'Gestern';
+  return parseYmd(day).toLocaleDateString('de-AT', { weekday: 'short', day: 'numeric', month: 'long' });
+}
+
 function dayStrip(today) {
-  const { timed, allday } = dayContent(today, 'home');
+  const day = state.homeDay || today, isToday = day === today;
+  const { timed, allday } = dayContent(day, 'home');
   const pct = (min) => ((Math.min(Math.max(min, DAY_FROM), DAY_TO) - DAY_FROM) / (DAY_TO - DAY_FROM)) * 100;
   const rows = Math.max(1, ...timed.map((t) => t.cols));
   const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
   const hours = [];
   for (let h = 6; h <= 24; h += 2) hours.push(`<span class="ds-h" style="left:${pct(h * 60)}%">${String(h % 24).padStart(2, '0')}</span>`);
-  const block = (t) => `<button class="ds-b k-${t.kind}" data-act="open" data-id="${t.item.id}" title="${esc(t.label)}"
-      style="left:${pct(t.start)}%;width:calc(${pct(t.end) - pct(t.start)}% - 3px);top:${(t.col / rows) * 100}%;height:calc(${100 / rows}% - 4px)">
+  const block = (t) => `<button class="ds-b k-${t.kind}" ${openAttr(t).replace(/style="[^"]*"/, '')} title="${esc(t.label)}"
+      style="left:${pct(t.start)}%;width:calc(${pct(t.end) - pct(t.start)}% - 3px);top:${(t.col / rows) * 100}%;height:calc(${100 / rows}% - 4px)${t.kind === 'x' ? `;--xc:${t.color}` : ''}">
       <small>${hm(t.start)}</small><b>${esc(t.label)}</b></button>`;
-  // ganze Kachel führt zum Kalender; Termin +, Auswahl und einzelne Termine haben eigene Aktionen
-  return `<section class="tile dash-day" data-act="nav" data-id="calendar">
-    <div class="th">${ICON.calendar}<b>Heute im Kalender</b><span class="th-sp"></span>
-      <button class="link-more" data-act="new-event" data-id="${today}">${ICON.plus} Termin</button>
+  // ganze Kachel führt zum Kalender (an diesen Tag); Blättern, Termin +, Auswahl und Termine haben eigene Aktionen
+  return `<section class="tile dash-day" data-act="home-cal" data-id="${day}">
+    <div class="th">${ICON.calendar}<b>${esc(dayLabel(day))}</b>
+      <button class="lgear ds-nav" data-act="home-day" data-id="-1" aria-label="Tag zurück">${ICON.chevL}</button>
+      <button class="lgear ds-nav" data-act="home-day" data-id="1" aria-label="Tag vor">${ICON.chevR}</button>
+      ${isToday ? '' : '<button class="chip ds-today" data-act="home-day" data-id="0">Heute</button>'}
+      <span class="th-sp"></span>
+      <button class="link-more" data-act="new-event" data-id="${day}">${ICON.plus} Termin</button>
       <button class="lgear" data-act="cal-sources" data-id="home" aria-label="Was die Startseite zeigt" title="Auswahl">${ICON.eye}</button></div>
     ${allday.length ? `<div class="allday">${allday.map(allChip).join('')}</div>` : ''}
     <div class="ds">
       <div class="ds-grid">${hours.join('')}</div>
       <div class="ds-track" style="--rows:${rows}">${timed.map(block).join('')}
-        ${nowMin >= DAY_FROM ? `<i class="ds-now" style="left:${pct(nowMin)}%"></i>` : ''}</div>
+        ${isToday && nowMin >= DAY_FROM ? `<i class="ds-now" style="left:${pct(nowMin)}%"></i>` : ''}</div>
     </div>
-    ${!timed.length && !allday.length ? '<p class="kempty">Heute ist nichts eingetragen.</p>' : ''}
+    ${!timed.length && !allday.length ? `<p class="kempty">${isToday ? 'Heute ist' : 'An diesem Tag ist'} nichts eingetragen.</p>` : ''}
   </section>`;
 }
 

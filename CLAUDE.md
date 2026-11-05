@@ -71,14 +71,15 @@ In der App zeigt Training → „Übungen“ die ganze Datenbank.
 - Jede Tabelle mit Row Level Security. Zugriff auf Ordner über `can_access_category(id)`, Handschrift über `can_access_ink(...)`.
 - Neue Zeilen mit selbst erzeugter UUID einfügen, ohne `.select()` danach (sonst greift die Lese-Regel vor dem Einfügen).
 - `ink_pages` bewusst nicht in den Live-Updates (Realtime), sonst lädt jedes Speichern alles neu.
-- Kalender: Woche wie bei Google (7 Spalten, Zeitraster), Kalenderliste (Desktop links, sonst Fenster) blendet Abschnitte ein/aus;
+- Kalender: Woche wie bei Google (7 Spalten, Zeitraster), Kalenderliste (Dropdown) blendet Abschnitte ein/aus;
   Einstellungen in `profiles.cal_prefs` = `{ hide: [], home: [] }` (Schlüssel `ev`, `bday`, `todo`, `meal`, `train`, `rem`, `x:<id>`), `home` gilt für die Startseite.
   Verknüpfte Kalender (Outlook, Google, iCloud) als ICS-Abo in Tabelle `calendars` (nur eigene, nur lesen); geladen über
   Edge Function `supabase/functions/calendar-feed` (CORS-Umweg, prüft Anmeldung und Adresse), gelesen in `js/ics.js`.
   Google-Kalender bearbeitbar (`js/google-cal.js`): Edge Function `supabase/functions/google-calendar` (OAuth; alle Kalender der Kalenderliste je als Eintrag `x:g:<google-id>`, nur beschreibbare bearbeitbar),
   Neue Termine gehen in den zuletzt gewählten Kalender (`calTarget` im Browser: 'app' oder Google-ID), Auswahl oben im Termin-Fenster;
-  Tag/Woche mit fester Gesamthöhe und voller Breite, Ansicht startet um 05:00; Ganztägiges als Leisten (mehrtägig über die Tage gezogen,
-  zugeklappt 2 Zeilen mit „+n“, aufklappbar); Kalenderliste am Desktop über den Knopf neben „Heute“ aufklappbar (`calSide`); Knopf „Aktualisieren“ lädt alles sofort, sonst verknüpfte Kalender höchstens alle 15 Minuten.
+  Tag/Woche mit fester Gesamthöhe und voller Breite, sichtbar 06:00–19:00 (Raster in %, Höhe über Container-Einheiten); Ganztägiges als Leisten (mehrtägig über die Tage gezogen,
+  zugeklappt 2 Zeilen mit „+n“, aufklappbar); Kalenderliste als Dropdown am Knopf neben „Heute“ (auch Startseiten-Auswahl); Termine zuerst ansehen (`event-view.js`), dann „Bearbeiten“; Wochenende leicht rot;
+  Startseiten-Kachel mit Tageswechsel (`state.homeDay`); Knopf „Aktualisieren“ lädt alles sofort, sonst verknüpfte Kalender höchstens alle 15 Minuten.
   Schlüssel in `google_links` (nur Dienstzugang, keine Regeln), Secrets `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` nur im Dashboard.
   Weiterleitungs-Adresse bei Google: `https://gerpilzxolufdnlsltxk.supabase.co/functions/v1/google-calendar`.
 - Push: Edge Function `supabase/functions/send-reminders`, Zeitplan in `supabase/push-zeitplan.sql` (Platzhalter, echte Werte nur bei Simon).

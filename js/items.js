@@ -17,7 +17,7 @@ import {
 } from './core.js';
 import { deleteItem, loadAll, saveItem, silentDelete } from './data.js';
 import { remindLabel, toLocalInput } from './dates.js';
-import { openEvent } from './events.js';
+import { openEvent, showEvent } from './events.js';
 import { ICON } from './icons.js';
 import { openMeal } from './meals.js';
 import { openTraining } from './training.js';
@@ -59,7 +59,7 @@ export function openItem(id, { isNew = false, edit = false } = {}) {
   if (!i) return;
   if (i.type === 'meal') return openMeal(id);
   if (i.type === 'training') return openTraining(id);
-  if (i.type === 'event') return openEvent(id);
+  if (i.type === 'event') return isNew || edit ? openEvent(id, { isNew }) : showEvent(id);
   if (i.type === 'note' && !isNew && !edit) return openNoteView(id);
   const isNote = i.type === 'note';
   const mine = i.owner_id === state.me;

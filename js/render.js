@@ -141,7 +141,7 @@ function pageHead(tab, desk) {
     const [t, sub] = calTitle(), isToday = calDay() === ymd(new Date());
     left = `<b class="ph-t cal-pt">${esc(t)}<small>${esc(sub)}</small></b>
       <button class="chip ph-today ${isToday ? 'on' : ''}" data-act="cal-today">Heute</button>
-      <button class="cbtn ph-src ${desk && state.calSide ? 'on' : ''}" data-act="cal-sources" aria-label="Kalender ein- und ausblenden" title="Kalender">${ICON.stack}</button>
+      <button class="cbtn ph-src" data-act="cal-sources" aria-label="Kalender ein- und ausblenden" title="Kalender">${ICON.stack}</button>
       <button class="cbtn ph-sync" data-act="cal-sync" aria-label="Aktualisieren" title="Aktualisieren">${ICON.sync}</button>
       <button class="cbtn ph-add" data-act="new-event-menu" aria-label="Neuer Termin" title="Neuer Termin">${ICON.plus}</button>`;
   } else if ((tab === 'todos' || tab === 'notes') && state.list !== null) {

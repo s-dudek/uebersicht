@@ -1,8 +1,9 @@
 // Bereich Kalender: Tag, Woche (Zeitraster wie bei Google), Monat; Abschnitte ein- und ausblenden, verknüpfte Kalender
 import { addCalendar, calendars, calOf, ensureExternal, EXT_COLORS, extOn, extOcc, feedError, google, isShown, reloadGoogle, removeCalendar, SECTIONS, toggleSection, unlinkGoogle } from './cal-sources.js';
-import { $app, askConfirm, esc, isDesktop, state, store, toast } from './core.js';
+import { $app, askConfirm, esc, state, toast } from './core.js';
 import { addDays, dayName, isoWeek, mondayOf, parseYmd, ymd } from './dates.js';
 import { loadAll } from './data.js';
+import { showEventCard, whenText } from './event-view.js';
 import { createEvent, evAge, eventsOn, isBday } from './events.js';
 import { connectGoogle, openGoogleEvent } from './google-cal.js';
 import { ICON } from './icons.js';
@@ -11,7 +12,11 @@ import { render } from './render.js';
 import { closeSheet, openSheet } from './sheet.js';
 
 // ---------- Kalender: Tag / Woche / Monat ----------
-const H0 = 0, H1 = 24, HPX = 48;   // sichtbare Stunden und Höhe pro Stunde
+// Zeitraster: der ganze Tag, sichtbar ist jeweils 06:00–19:00 (Höhe in style.css über die Rasterhöhe)
+const VIEW_FROM = 6;
+// Samstag/Sonntag (für die leicht rote Markierung)
+const isWeekend = (d) => [0, 6].includes(parseYmd(d).getDay());
+const pct = (min) => `${(Math.min(Math.max(min, 0), 1440) / 1440) * 100}%`;
 const MEAL_AT = { fruehstueck: '07:30', mittag: '12:00', abend: '18:30' };
 
 export const calDay = () => state.calDate || ymd(new Date());
@@ -55,26 +60,26 @@ export function dayContent(d, where = 'hide') {
 const chipIc = (k, item) => ({ bday: ICON.cake, ev: item?.icon && ICON[item.icon] ? ICON[item.icon] : ICON.calendar, todo: ICON.todos, meal: ICON.fork, rem: ICON.bell, train: ICON.dumbbell, x: ICON.calendar })[k];
 
 // Öffnen: eigene Einträge im Fenster der App, verknüpfte Termine im Lese-Fenster; Farbe des verknüpften Kalenders
-const openAttr = (a) => (a.kind === 'x' ? `data-act="ext-ev" data-id="${esc(a.item.id)}" style="--xc:${a.color}"` : `data-act="open" data-id="${a.item.id}"`);
+export const openAttr = (a) => (a.kind === 'x' ? `data-act="ext-ev" data-id="${esc(a.item.id)}" style="--xc:${a.color}"` : `data-act="open" data-id="${a.item.id}"`);
 
 export const allChip = (a) => `<button class="cchip k-${a.kind} ${a.item.done ? 'done' : ''}" ${openAttr(a)}>${chipIc(a.kind, a.item)}<span>${esc(a.label)}</span></button>`;
 
 export const hm = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 
 const timedBlock = (t, narrow = false) => {
-  const top = (Math.max(t.start, H0 * 60) - H0 * 60) / 60 * HPX, h = Math.max(22, (Math.min(t.end, H1 * 60) - Math.max(t.start, H0 * 60)) / 60 * HPX - 2);
-  const pos = `top:${top}px;height:${h}px;left:calc(${(t.col / t.cols) * 100}% + 1px);width:calc(${100 / t.cols}% - 3px)`;
+  const dur = Math.min(t.end, 1440) - t.start, short = dur < 45;
+  const pos = `top:${pct(t.start)};height:max(22px, calc(${(dur / 1440) * 100}% - 2px));left:calc(${(t.col / t.cols) * 100}% + 1px);width:calc(${100 / t.cols}% - 3px)`;
   const attr = openAttr(t).replace(/style="([^"]*)"/, '').trim();
   return `<button class="cblk k-${t.kind} ${narrow ? 'narrow' : ''}" ${attr} style="${pos}${t.kind === 'x' ? `;--xc:${t.color}` : ''}">
-    ${narrow && h < 34 ? '' : `<small>${hm(t.start)}${t.kind === 'ev' && t.item.meta?.end ? '–' + esc(t.item.meta.end) : ''}</small>`}<b>${esc(t.label)}</b></button>`;
+    ${narrow && short ? '' : `<small>${hm(t.start)}${t.kind === 'ev' && t.item.meta?.end ? '–' + esc(t.item.meta.end) : ''}</small>`}<b>${esc(t.label)}</b></button>`;
 };
 
-const hourLines = () => Array.from({ length: H1 - H0 }, (_, k) => `<div class="hl" style="top:${k * HPX}px"><span>${k ? String(H0 + k).padStart(2, '0') + ':00' : ''}</span></div>`).join('');
+const hourLines = () => Array.from({ length: 24 }, (_, k) => `<div class="hl" style="top:${pct(k * 60)}"><span>${k ? String(k).padStart(2, '0') + ':00' : ''}</span></div>`).join('');
 
 const nowLine = (d) => {
   if (d !== ymd(new Date())) return '';
   const n = new Date(), min = n.getHours() * 60 + n.getMinutes();
-  return min < H0 * 60 || min > H1 * 60 ? '' : `<i class="nowl" style="top:${(min - H0 * 60) / 60 * HPX}px"></i>`;
+  return `<i class="nowl" style="top:${pct(min)}"></i>`;
 };
 
 export function calTitle() {
@@ -93,13 +98,11 @@ export function calMove(n) {
   if (v !== 'month') scrollCal();
 }
 
-// Tagesraster auf ca. 7 Uhr bzw. jetzt scrollen
+// Zeitraster so scrollen, dass 06:00 oben steht (frühere Stunden darüber erreichbar)
 export function scrollCal() {
   requestAnimationFrame(() => {
-    const g = document.querySelector('.tgridv'), m = document.querySelector('.cal-scroll') || document.querySelector('.main');
-    if (!g || !m) return;
-    const h = 5;   // Ansicht beginnt immer um 05:00 (frühere Stunden darüber erreichbar)
-    m.scrollTop = (m.classList.contains('cal-scroll') ? 0 : g.offsetTop) + (h - H0) * HPX - 10;
+    const g = document.querySelector('.gw-body'), m = document.querySelector('.cal-scroll');
+    if (g && m) m.scrollTop = g.offsetHeight * VIEW_FROM / 24;
   });
 }
 
@@ -108,7 +111,7 @@ export function renderCalendar() {
   const v = state.calView;
   const view = `<div class="cal cal-${v}" data-swipe="cal">${v === 'day' ? calDayView() : v === 'month' ? calMonthView() : calWeekView()}</div>`;
   // Desktop: links die Kalenderliste wie bei Google; schmal: über den Knopf „Kalender“ in der Kopfleiste
-  return isDesktop() && state.calSide ? `<div class="cal-wrap"><aside class="cal-side">${sourcesHtml()}</aside><div class="cal-main">${view}</div></div>` : view;
+  return view;
 }
 
 // ---------- Kalenderliste: Abschnitte ein/aus, verknüpfte Kalender ----------
@@ -161,7 +164,7 @@ function allDayBars(days, content) {
     const n = bars.filter((b) => b.row >= shown && b.c0 <= k && b.c1 >= k).length;
     return n ? `<button class="gw-more" data-act="cal-allday" style="grid-column:${k + 2};grid-row:${ALL_ROWS}">+${n}<span> weitere</span></button>` : '';
   }).join('') : '';
-  const cells = days.map((d, k) => `<i class="gw-cell" style="grid-column:${k + 2}"></i>`).join('');
+  const cells = days.map((d, k) => `<i class="gw-cell ${isWeekend(d) ? 'we' : ''}" style="grid-column:${k + 2}"></i>`).join('');
   const toggle = rows > ALL_ROWS ? `<button class="gw-tog ${state.calAllOpen ? 'on' : ''}" data-act="cal-allday" aria-label="${state.calAllOpen ? 'Zuklappen' : 'Alle zeigen'}">${ICON.chevD}</button>` : '';
   return `<div class="gw-all ${state.calAllOpen ? 'open' : ''}" style="--rows:${Math.max(1, collapse ? ALL_ROWS : rows)}">
     <span class="gw-gut">ganzt.${toggle}</span>${cells}${bars.filter((b) => b.row < shown).map(bar).join('')}${more}</div>`;
@@ -170,13 +173,13 @@ function allDayBars(days, content) {
 function gridView(days) {
   const today = ymd(new Date()), narrow = days.length > 1;
   const content = days.map((d) => dayContent(d));
-  const head = days.map((d) => `<button class="gw-d ${d === today ? 'today' : ''} ${d < today ? 'past' : ''}" data-act="cal-goto" data-id="${d}" aria-label="${esc(dayName(d, { weekday: 'long', day: 'numeric', month: 'long' }))}">
+  const head = days.map((d) => `<button class="gw-d ${d === today ? 'today' : ''} ${d < today ? 'past' : ''} ${isWeekend(d) ? 'we' : ''}" data-act="cal-goto" data-id="${d}" aria-label="${esc(dayName(d, { weekday: 'long', day: 'numeric', month: 'long' }))}">
       <small>${esc(dayName(d, { weekday: 'short' }).replace('.', ''))}</small><b>${+d.slice(8)}</b></button>`).join('');
-  const cols = content.map(({ timed }, k) => `<div class="tcol ${days[k] === today && narrow ? 'today' : ''}" data-slotday="${days[k]}">${timed.map((t) => timedBlock(t, narrow)).join('')}${nowLine(days[k])}</div>`).join('');
+  const cols = content.map(({ timed }, k) => `<div class="tcol ${days[k] === today && narrow ? 'today' : ''} ${isWeekend(days[k]) ? 'we' : ''}" data-slotday="${days[k]}">${timed.map((t) => timedBlock(t, narrow)).join('')}${nowLine(days[k])}</div>`).join('');
   return `<section class="tile cal-panel gw ${narrow ? '' : 'gw-one'}" style="--n:${days.length}">
     <div class="gw-head"><span class="gw-gut"></span>${head}</div>
     ${allDayBars(days, content)}
-    <div class="cal-scroll"><div class="tgridv gw-body" style="height:${(H1 - H0) * HPX}px">${hourLines()}<div class="gw-cols">${cols}</div></div></div>
+    <div class="cal-scroll"><div class="tgridv gw-body">${hourLines()}<div class="gw-cols">${cols}</div></div></div>
   </section>`;
 }
 
@@ -193,7 +196,7 @@ function calMonthView() {
     const { timed, allday } = dayContent(x);
     const list = [...allday.filter((a) => a.kind === 'bday'), ...allday.filter((a) => a.kind === 'ev' || a.kind === 'x'), ...timed.filter((t) => t.kind === 'ev' || t.kind === 'x'), ...allday.filter((a) => a.kind === 'todo' || a.kind === 'train')];
     const meals = timed.filter((t) => t.kind === 'meal').length;
-    return `<button class="mc ${x.slice(0, 7) !== month ? 'out' : ''} ${x === today ? 'today' : ''} ${x === d ? 'sel' : ''}" data-act="cal-goto" data-id="${x}">
+    return `<button class="mc ${x.slice(0, 7) !== month ? 'out' : ''} ${x === today ? 'today' : ''} ${x === d ? 'sel' : ''} ${isWeekend(x) ? 'we' : ''}" data-act="cal-goto" data-id="${x}">
       <span class="mc-n">${+x.slice(8)}</span>
       ${list.slice(0, 3).map((a) => `<span class="mc-e k-${a.kind}" ${a.kind === 'x' ? `style="--xc:${a.color}"` : ''}>${a.kind === 'bday' ? ICON.cake : ''}${esc(a.label)}</span>`).join('')}
       ${list.length > 3 ? `<span class="mc-more">+${list.length - 3}</span>` : ''}
@@ -223,7 +226,7 @@ export function initCalendarGestures() {
     const col = e.target.closest('.tcol[data-slotday]');
     if (!col || e.target.closest('.cblk')) return;
     const r = col.getBoundingClientRect();
-    const min = Math.round(((e.clientY - r.top) / HPX * 60 + H0 * 60) / 30) * 30;
+    const min = Math.round(((e.clientY - r.top) / r.height * 1440) / 30) * 30;
     createEvent(col.dataset.slotday, 'event', hm(Math.min(min, 23 * 60 + 30)));
   });
 
@@ -238,14 +241,10 @@ export function initCalendarGestures() {
 }
 
 // ---------- Aktionen der Kalenderliste und verknüpfte Termine ----------
-export async function calAction(act, id) {
+export async function calAction(act, id, btn = null) {
   if (act === 'cal-toggle') return toggleSection(id);
   if (act === 'cal-link') return openLinkForm();
-  if (act === 'cal-sources') {
-    // Desktop: Kalenderliste links auf- und zuklappen; sonst als Fenster
-    if (id !== 'home' && isDesktop()) { state.calSide = !state.calSide; store('calSide', state.calSide ? '1' : ''); return render(); }
-    return openSourcesSheet(id === 'home' ? 'home' : 'hide');
-  }
+  if (act === 'cal-sources') return openSourcesDrop(btn, id === 'home' ? 'home' : 'hide');
   if (act === 'ext-ev') return openExtEvent(id);
   if (act === 'g-connect') return connectGoogle();
   if (act === 'cal-sync') return syncNow();
@@ -261,19 +260,31 @@ export async function calAction(act, id) {
   }
 }
 
-// Kalenderliste als Fenster: schmal im Kalender, überall für die Startseite
-// (hat eigene Klicks, weil das Fenster außerhalb der Hauptansicht liegt)
-function openSourcesSheet(where) {
-  const title = where === 'home' ? 'Auf der Startseite zeigen' : 'Kalender';
-  const sheet = openSheet(`<div class="sheet-head"><h2>${title}</h2><button class="link-btn" data-close>Fertig</button></div><div class="src-list">${sourcesHtml(where)}</div>`);
-  sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
-  sheet.addEventListener('click', async (e) => {
+// Kalenderliste als Dropdown am Knopf: Häkchen schalten sofort um, das Menü bleibt offen;
+// Klick daneben oder nochmal auf den Knopf schließt es (liegt außerhalb der Hauptansicht, daher eigene Klicks)
+let closeDrop = null;
+function openSourcesDrop(btn, where) {
+  if (closeDrop) { closeDrop(); return; }
+  if (!btn) return;
+  const el = document.createElement('div');
+  el.className = 'cmenu drop cal-drop';
+  el.innerHTML = sourcesHtml(where);
+  document.body.appendChild(el);
+  const place = () => {
+    const r = btn.getBoundingClientRect(), m = el.getBoundingClientRect();
+    el.style.left = Math.max(8, Math.min(r.left, window.innerWidth - m.width - 8)) + 'px';
+    el.style.top = (r.bottom + 8 + m.height < window.innerHeight - 8 ? r.bottom + 8 : Math.max(8, r.top - m.height - 8)) + 'px';
+  };
+  place();
+  const outside = (e) => { if (!el.contains(e.target) && !e.target.closest('[data-act="cal-sources"]')) closeDrop(); };
+  closeDrop = () => { el.remove(); document.removeEventListener('pointerdown', outside, true); closeDrop = null; };
+  document.addEventListener('pointerdown', outside, true);
+  el.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-act]');
-    if (!b || b.dataset.act === 'cal-sources') return;
-    if (b.dataset.act === 'cal-link') { closeSheet(); return openLinkForm(); }
-    if (b.dataset.act === 'cal-toggle') await toggleSection(b.dataset.id, where);
-    else await calAction(b.dataset.act, b.dataset.id);
-    sheet.querySelector('.src-list').innerHTML = sourcesHtml(where);
+    if (!b) return;
+    if (b.dataset.act === 'cal-toggle') { await toggleSection(b.dataset.id, where); el.innerHTML = sourcesHtml(where); return; }
+    closeDrop();
+    calAction(b.dataset.act, b.dataset.id);
   });
 }
 
@@ -323,18 +334,12 @@ async function syncNow() {
 function openExtEvent(id) {
   const o = extOcc(id);
   if (!o) return;
-  // Google: bearbeitbar, außer bei Kalendern nur zum Lesen (z. B. Feiertage)
-  const gc = calOf(o.cal);
-  if (o.gid && gc?.writable) return openGoogleEvent(o, { color: gc.color, name: gc.name, onDone: reloadGoogle });
-  const c = calOf(o.cal);
-  const when = o.allDay
-    ? `${o.start.toLocaleDateString('de-AT', { weekday: 'long', day: 'numeric', month: 'long' })}${ymd(new Date(o.end - 1)) !== ymd(o.start) ? ' – ' + new Date(o.end - 1).toLocaleDateString('de-AT', { weekday: 'short', day: 'numeric', month: 'long' }) : ''} · ganztägig`
-    : `${o.start.toLocaleDateString('de-AT', { weekday: 'long', day: 'numeric', month: 'long' })} · ${o.start.toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })}–${o.end.toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })}`;
-  const sheet = openSheet(`<div class="sheet-head"><span class="status"><i class="src-dot" style="background:${c?.color || EXT_COLORS[0]}"></i>${esc(c?.name || 'Verknüpfter Kalender')}</span><button class="link-btn" data-close>Fertig</button></div>
-    <h2 class="xe-t">${esc(o.title)}</h2>
-    <p class="xe-w">${ICON.clock}<span>${esc(when)}</span></p>
-    ${o.location ? `<p class="xe-w">${ICON.pin}<span>${esc(o.location)}</span></p>` : ''}
-    ${o.desc ? `<div class="xe-d">${esc(o.desc)}</div>` : ''}
-    <p class="hint">Aus einem verknüpften Kalender – ändern im Ursprungskalender (z. B. Outlook).</p>`);
-  sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
+  // Google-Kalender mit Schreibrecht: „Bearbeiten“; sonst nur ansehen (Abos, Feiertage …)
+  const c = calOf(o.cal), edit = o.gid && c?.writable;
+  showEventCard({
+    title: o.title, when: whenText(o.start, o.end, o.allDay), location: o.location, desc: o.desc,
+    calName: c?.name || 'Verknüpfter Kalender', color: c?.color || EXT_COLORS[0],
+    hint: edit ? '' : 'Nur zum Ansehen – ändern im Ursprungskalender.',
+    onEdit: edit ? () => openGoogleEvent(o, { color: c.color, name: c.name, onDone: reloadGoogle }) : null,
+  });
 }

@@ -30,6 +30,8 @@
   --gutter-r: max(16px, env(safe-area-inset-right, 0px));
   color-scheme: light;
 }
+/* kein Zoom durch versehentliches Doppeltippen (Zwei-Finger-Zoom bleibt möglich) */
+html, body, button, a, input, select, textarea, label { touch-action: manipulation; }
 body {
   font: 300 16px/1.4 var(--font);
   color: var(--ink);
@@ -214,6 +216,9 @@ body.splashing .bookmark { animation-play-state: paused; }
 .home-flt:active { background: var(--pale); color: var(--ink); }
 .dash-day[data-act] { cursor: pointer; }
 .dash-day .lgear { margin-left: 0; }
+.dash-day .ds-nav { width: 28px; height: 28px; }
+.dash-day .ds-nav svg { width: 16px; height: 16px; }
+.dash-day .ds-today { padding: 4px 12px; font-size: 13px; }
 
 /* ==========================================================================
    Steuerknopf – Startseite: groß mit Bereichen; Unterseiten: unten rechts, halten = zurück
@@ -979,9 +984,15 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .gw-d.today b { background: var(--ink); color: var(--white); }
 .gw-d.past { opacity: .6; }
 .gw-one .gw-d { align-items: flex-start; padding-left: 10px; }
-.cal-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+/* sichtbare Höhe = 13 Stunden (06:00–19:00); das Raster ist 24 Stunden hoch */
+.cal-scroll { container-type: size; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.gw-body { height: calc(100cqh * 24 / 13); }
 .gw-cols { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); }
 .gw-cols .tcol { position: relative; inset: auto; border-left: 1px solid var(--soft); }
+/* Wochenende leicht rot */
+.gw-cols .tcol.we, .gw-cell.we, .mc.we { background: rgba(194, 87, 90, .05); }
+.gw-d.we small { color: #C2575A; }
+.mon-h span:nth-child(n+6) { color: #C2575A; }
 .gw-cols .tcol.today { background: rgba(168, 190, 167, .1); }
 .gw .nowl { left: 0; }
 @media (max-width: 600px) {
@@ -989,10 +1000,9 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
   .gw-bar .cchip svg { display: none; }
   .gw-more span { display: none; }
 }
-/* Kalenderliste: Abschnitte und verknüpfte Kalender ein/aus (Desktop links, schmal als Fenster) */
-.main > .cal, .main > .cal-wrap, .ph-in.wide { max-width: none; }
-.cal-wrap { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 20px; align-items: start; }
-.cal-side { position: sticky; top: 0; padding: 12px; border-radius: 22px; background: var(--glass); border: 1px solid var(--glass-line); box-shadow: var(--tile-shadow); }
+/* Kalenderliste: Abschnitte und verknüpfte Kalender ein/aus (Dropdown am Knopf) */
+.cmenu.cal-drop { min-width: 260px; max-width: min(320px, calc(100vw - 16px)); padding: 8px; }
+.main > .cal, .ph-in.wide { max-width: none; }
 .src-h { margin: 12px 8px 6px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--grey); }
 .src-h:first-child { margin-top: 2px; }
 .src { display: flex; align-items: center; }
@@ -1019,11 +1029,12 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .ph-sync.busy svg { animation: spin .8s linear infinite; }
 .ph-in .ph-sync { margin-left: 0; background: var(--white); color: var(--ink); }
 .ph-in .ph-src { margin-left: 0; background: var(--white); color: var(--ink); }
-.ph-in .ph-src.on { background: var(--ink); color: var(--white); }
 /* verknüpfter Termin (nur lesen) und Verknüpfen-Fenster */
 .xe-t { margin: 6px 0 10px; font-family: var(--font-head); font-size: 24px; line-height: 1.2; overflow-wrap: anywhere; }
 .xe-w { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: var(--grey); }
 .xe-w svg { width: 16px; height: 16px; flex: none; }
+.xe-edit { margin-top: 16px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.xe-edit svg { width: 18px; height: 18px; }
 .xe-d { margin: 12px 0; padding: 12px 14px; border-radius: 14px; background: var(--pale); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; }
 .cl-help { margin: 2px 0 16px; font-size: 14px; }
 .cl-help summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
@@ -1466,6 +1477,7 @@ li.closed > ul { display: none; }
   .ds-b b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ds-b small { font-size: 11px; opacity: .75; }
   .ds-b.k-meal { background: var(--green-l); color: var(--ink); }
+  .ds-b.k-x { background: var(--xc); color: var(--white); }
   .ds-b.k-rem { background: var(--pale); color: var(--ink); box-shadow: 0 0 0 1.5px var(--white), inset 3px 0 0 var(--mid); }
   .ds-now { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--danger); border-radius: 1px; pointer-events: none; }
 

@@ -37,9 +37,11 @@ export function initActions() {
       case 'cal-today': state.calDate = ymd(new Date()); render(); scrollCal(); break;
       case 'cal-goto': if (state.calView === 'month' && state.calDate !== id) { state.calDate = id; render(); } else { state.calDate = id; state.calView = 'day'; store('calView', 'day'); render(); scrollCal(); } break;
       case 'cal-move': calMove(+id); break;
+      case 'home-day': state.homeDay = +id ? addDays(state.homeDay || ymd(new Date()), +id) : null; render(); break;
+      case 'home-cal': state.calDate = id; navigate('calendar'); break;
       case 'cal-allday': state.calAllOpen = !state.calAllOpen; render(); break;
       case 'new-event-menu': openNewEventMenu(); break;
-      case 'cal-sources': case 'cal-toggle': case 'cal-link': case 'cal-unlink': case 'ext-ev': case 'g-connect': case 'g-disconnect': case 'cal-sync': calAction(t.dataset.act, id); break;
+      case 'cal-sources': case 'cal-toggle': case 'cal-link': case 'cal-unlink': case 'ext-ev': case 'g-connect': case 'g-disconnect': case 'cal-sync': calAction(t.dataset.act, id, t); break;
       case 'open-list': state.list = id || ''; state.noteMode = 'text'; render(); document.querySelector('.main')?.scrollTo({ top: 0 }); break;
       case 'close-list': state.list = null; render(); break;
       case 'open': openItem(id); break;
