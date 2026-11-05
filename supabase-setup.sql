@@ -389,3 +389,24 @@ create policy ink_img_delete on storage.objects for delete to authenticated usin
 -- ==========================================================================
 alter table public.items drop constraint if exists items_type_check;
 alter table public.items add constraint items_type_check check (type in ('todo', 'note', 'meal', 'event', 'training'));
+
+-- ==========================================================================
+-- Absicherung der Funktionen (Hinweise der Supabase-Sicherheitsprüfung)
+-- Trigger-Funktionen ruft niemand direkt auf; die Hilfen der Zugriffsregeln nur angemeldete Personen.
+-- (rls_auto_enable legt Supabase selbst an: schaltet für neue Tabellen automatisch die Zugriffsregeln ein.)
+-- ==========================================================================
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+do $$ begin
+  if exists (select 1 from pg_proc where proname = 'rls_auto_enable' and pronamespace = 'public'::regnamespace) then
+    revoke execute on function public.rls_auto_enable() from public, anon, authenticated;
+  end if;
+end $$;
+revoke execute on function public.touch_updated_at() from public, anon, authenticated;
+alter function public.touch_updated_at() set search_path = '';
+revoke execute on function public.can_access_category(uuid) from public, anon;
+revoke execute on function public.is_category_owner(uuid) from public, anon;
+revoke execute on function public.is_item_owner(uuid) from public, anon;
+revoke execute on function public.is_partner(uuid) from public, anon;
+revoke execute on function public.item_shared_with_me(uuid) from public, anon;
+revoke execute on function public.can_access_ink(uuid, uuid) from public, anon;
+revoke execute on function public.can_access_ink_file(text) from public, anon;
