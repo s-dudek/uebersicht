@@ -1,6 +1,6 @@
 // Bereich Kalender: Tag, Woche (Zeitraster wie bei Google), Monat; Abschnitte ein- und ausblenden, verknüpfte Kalender
 import { addCalendar, calendars, calOf, ensureExternal, EXT_COLORS, extOn, extOcc, feedError, google, isShown, reloadGoogle, removeCalendar, SECTIONS, toggleSection, unlinkGoogle } from './cal-sources.js';
-import { $app, askConfirm, esc, isDesktop, state, toast } from './core.js';
+import { $app, askConfirm, esc, isDesktop, state, store, toast } from './core.js';
 import { addDays, dayName, isoWeek, mondayOf, parseYmd, ymd } from './dates.js';
 import { loadAll } from './data.js';
 import { createEvent, evAge, eventsOn, isBday } from './events.js';
@@ -98,8 +98,7 @@ export function scrollCal() {
   requestAnimationFrame(() => {
     const g = document.querySelector('.tgridv'), m = document.querySelector('.cal-scroll') || document.querySelector('.main');
     if (!g || !m) return;
-    // heute bzw. Woche: eine Stunde vor jetzt (höchstens 17 Uhr), sonst ab 7 Uhr
-    const n = new Date(), h = calDay() === ymd(n) || state.calView === 'week' ? Math.max(H0, Math.min(n.getHours() - 1, 17)) : 7;
+    const h = 5;   // Ansicht beginnt immer um 05:00 (frühere Stunden darüber erreichbar)
     m.scrollTop = (m.classList.contains('cal-scroll') ? 0 : g.offsetTop) + (h - H0) * HPX - 10;
   });
 }
@@ -109,7 +108,7 @@ export function renderCalendar() {
   const v = state.calView;
   const view = `<div class="cal cal-${v}" data-swipe="cal">${v === 'day' ? calDayView() : v === 'month' ? calMonthView() : calWeekView()}</div>`;
   // Desktop: links die Kalenderliste wie bei Google; schmal: über den Knopf „Kalender“ in der Kopfleiste
-  return isDesktop() ? `<div class="cal-wrap"><aside class="cal-side">${sourcesHtml()}</aside><div class="cal-main">${view}</div></div>` : view;
+  return isDesktop() && state.calSide ? `<div class="cal-wrap"><aside class="cal-side">${sourcesHtml()}</aside><div class="cal-main">${view}</div></div>` : view;
 }
 
 // ---------- Kalenderliste: Abschnitte ein/aus, verknüpfte Kalender ----------
@@ -138,16 +137,45 @@ export function sourcesHtml(where = 'hide') {
 const calDayView = () => gridView([calDay()]);
 const calWeekView = () => { const ws = mondayOf(parseYmd(calDay())); return gridView(Array.from({ length: 7 }, (_, k) => addDays(ws, k))); };
 
+// Ganztägiges als Leisten: mehrtägige Termine über ihre Tage gezogen, in Zeilen ohne Überschneidung.
+// Zugeklappt höchstens ALL_ROWS Zeilen (sonst „+n“ je Tag); aufgeklappt alle, der Bereich scrollt dann selbst.
+const ALL_ROWS = 2;
+function allDayBars(days, content) {
+  const bars = [], open = new Map();
+  content.forEach(({ allday }, k) => allday.forEach((a, i) => {
+    const key = a.kind === 'x' ? a.item.id : `${a.kind}:${a.item.id}:${k}:${i}`;
+    const b = open.get(key);
+    if (b && b.c1 === k - 1) b.c1 = k;
+    else { const nb = { a, c0: k, c1: k }; bars.push(nb); open.set(key, nb); }
+  }));
+  bars.sort((x, y) => x.c0 - y.c0 || (y.c1 - y.c0) - (x.c1 - x.c0));
+  const ends = [];
+  for (const b of bars) {
+    let r = ends.findIndex((e) => e < b.c0);
+    if (r < 0) { r = ends.length; ends.push(0); }
+    ends[r] = b.c1; b.row = r;
+  }
+  const rows = ends.length, collapse = !state.calAllOpen && rows > ALL_ROWS, shown = collapse ? ALL_ROWS - 1 : rows;
+  const bar = (b) => `<div class="gw-bar" style="grid-column:${b.c0 + 2} / ${b.c1 + 3};grid-row:${b.row + 1}">${allChip(b.a)}</div>`;
+  const more = collapse ? days.map((d, k) => {
+    const n = bars.filter((b) => b.row >= shown && b.c0 <= k && b.c1 >= k).length;
+    return n ? `<button class="gw-more" data-act="cal-allday" style="grid-column:${k + 2};grid-row:${ALL_ROWS}">+${n}<span> weitere</span></button>` : '';
+  }).join('') : '';
+  const cells = days.map((d, k) => `<i class="gw-cell" style="grid-column:${k + 2}"></i>`).join('');
+  const toggle = rows > ALL_ROWS ? `<button class="gw-tog ${state.calAllOpen ? 'on' : ''}" data-act="cal-allday" aria-label="${state.calAllOpen ? 'Zuklappen' : 'Alle zeigen'}">${ICON.chevD}</button>` : '';
+  return `<div class="gw-all ${state.calAllOpen ? 'open' : ''}" style="--rows:${Math.max(1, collapse ? ALL_ROWS : rows)}">
+    <span class="gw-gut">ganzt.${toggle}</span>${cells}${bars.filter((b) => b.row < shown).map(bar).join('')}${more}</div>`;
+}
+
 function gridView(days) {
   const today = ymd(new Date()), narrow = days.length > 1;
   const content = days.map((d) => dayContent(d));
   const head = days.map((d) => `<button class="gw-d ${d === today ? 'today' : ''} ${d < today ? 'past' : ''}" data-act="cal-goto" data-id="${d}" aria-label="${esc(dayName(d, { weekday: 'long', day: 'numeric', month: 'long' }))}">
       <small>${esc(dayName(d, { weekday: 'short' }).replace('.', ''))}</small><b>${+d.slice(8)}</b></button>`).join('');
-  const all = content.map(({ allday }, k) => `<div class="gw-ac" data-day="${days[k]}">${allday.map(allChip).join('')}</div>`).join('');
   const cols = content.map(({ timed }, k) => `<div class="tcol ${days[k] === today && narrow ? 'today' : ''}" data-slotday="${days[k]}">${timed.map((t) => timedBlock(t, narrow)).join('')}${nowLine(days[k])}</div>`).join('');
   return `<section class="tile cal-panel gw ${narrow ? '' : 'gw-one'}" style="--n:${days.length}">
     <div class="gw-head"><span class="gw-gut"></span>${head}</div>
-    <div class="gw-all"><span class="gw-gut">ganzt.</span>${all}</div>
+    ${allDayBars(days, content)}
     <div class="cal-scroll"><div class="tgridv gw-body" style="height:${(H1 - H0) * HPX}px">${hourLines()}<div class="gw-cols">${cols}</div></div></div>
   </section>`;
 }
@@ -213,7 +241,11 @@ export function initCalendarGestures() {
 export async function calAction(act, id) {
   if (act === 'cal-toggle') return toggleSection(id);
   if (act === 'cal-link') return openLinkForm();
-  if (act === 'cal-sources') return openSourcesSheet(id === 'home' ? 'home' : 'hide');
+  if (act === 'cal-sources') {
+    // Desktop: Kalenderliste links auf- und zuklappen; sonst als Fenster
+    if (id !== 'home' && isDesktop()) { state.calSide = !state.calSide; store('calSide', state.calSide ? '1' : ''); return render(); }
+    return openSourcesSheet(id === 'home' ? 'home' : 'hide');
+  }
   if (act === 'ext-ev') return openExtEvent(id);
   if (act === 'g-connect') return connectGoogle();
   if (act === 'cal-sync') return syncNow();

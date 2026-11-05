@@ -255,6 +255,8 @@
       mine.events = [
         { cal: 'primary', id: 'g1', title: 'Fotoshooting Kunde', location: 'Studio', desc: '', allDay: false, start: at(0, 15), end: at(0, 17) },
         { cal: 'primary', id: 'g2', title: 'Abendessen mit Freunden', location: '', desc: '', allDay: false, start: at(2, 19), end: at(2, 21) },
+        { cal: 'primary', id: 'g5', title: 'Messe Wien', location: '', desc: '', allDay: true, start: at(-1, 0).slice(0, 10), end: at(2, 0).slice(0, 10) },
+        { cal: 'primary', id: 'g6', title: 'Kunde vor Ort', location: '', desc: '', allDay: true, start: at(0, 0).slice(0, 10), end: at(1, 0).slice(0, 10) },
         { cal: 'sport@group.calendar.google.com', id: 'g3', title: 'Laufrunde', location: 'Prater', desc: '', allDay: false, start: at(1, 7), end: at(1, 8) },
         { cal: 'de.austrian#holiday@group.v.calendar.google.com', id: 'g4', title: 'Feiertag (Beispiel)', location: '', desc: '', allDay: true, start: at(4, 0).slice(0, 10), end: at(5, 0).slice(0, 10) },
       ];

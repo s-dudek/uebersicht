@@ -954,10 +954,23 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .mc-e.k-x { background: color-mix(in srgb, var(--xc) 18%, #fff); }
 .mc-e.k-train { background: rgba(217, 135, 62, .15); }
 /* Woche wie bei Google: Tage oben, Ganztägiges, darunter Zeitraster mit sieben Spalten (links die Uhrzeiten) */
-.gw { padding: 0; overflow: hidden; }
+.gw { padding: 0; overflow: hidden; display: flex; flex-direction: column; height: max(420px, calc(100dvh - var(--safe-top) - var(--safe-bottom) - 190px)); }
+.gw-head { flex: none; }
 .gw-head, .gw-all { display: grid; grid-template-columns: 44px repeat(var(--n), minmax(0, 1fr)); }
-/* Ganztägiges: immer gleich hoch, bei vielen Einträgen scrollen */
-.gw-all { height: 58px; overflow-y: auto; border-bottom: 1px solid var(--soft); }
+/* Ganztägiges: Leisten in Zeilen (mehrtägig über die Tage gezogen); zugeklappt höchstens 2 Zeilen,
+   aufgeklappt scrollt der Bereich selbst. Die Gesamthöhe bleibt gleich – das Zeitraster darunter nimmt den Rest. */
+.gw-all { flex: none; grid-template-rows: repeat(var(--rows), 24px); row-gap: 2px; padding: 3px 0; border-bottom: 1px solid var(--soft); }
+.gw-all.open { max-height: 40%; overflow-y: auto; }
+.gw-all .gw-gut { grid-row: 1 / -1; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; padding-top: 4px; }
+.gw-cell { grid-row: 1 / -1; border-left: 1px solid var(--soft); }
+.gw-bar { min-width: 0; padding: 0 2px; z-index: 1; }
+.gw-bar .cchip { width: 100%; height: 24px; padding: 0 6px; gap: 4px; border-radius: 6px; font-size: 11px; }
+.gw-bar .cchip svg { width: 11px; height: 11px; flex: none; }
+.gw-bar .cchip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw-more { z-index: 1; padding: 0 6px; font-size: 11px; font-weight: 600; color: var(--grey); text-align: left; white-space: nowrap; overflow: hidden; }
+.gw-tog { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; color: var(--ink); }
+.gw-tog svg { width: 16px; height: 16px; transition: rotate .2s; }
+.gw-tog.on svg { rotate: 180deg; }
 .gw-gut { font-size: 10px; color: var(--grey); text-align: right; padding: 8px 6px 0 0; }
 .gw-d { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0 6px; min-width: 0; }
 .gw-d small { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--grey); }
@@ -965,22 +978,20 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .gw-d.today small { color: var(--ink); }
 .gw-d.today b { background: var(--ink); color: var(--white); }
 .gw-d.past { opacity: .6; }
-.gw-ac { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 3px 2px; border-left: 1px solid var(--soft); }
-.gw-one .gw-ac { flex-direction: row; flex-wrap: wrap; align-content: flex-start; gap: 4px; }
 .gw-one .gw-d { align-items: flex-start; padding-left: 10px; }
-.gw-ac .cchip { padding: 2px 6px; gap: 4px; border-radius: 6px; font-size: 11px; }
-.gw-ac .cchip svg { width: 11px; height: 11px; }
-.cal-scroll { height: max(320px, calc(100dvh - var(--safe-top) - var(--safe-bottom) - 300px)); overflow-y: auto; overscroll-behavior: contain; }
+.cal-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .gw-cols { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); }
 .gw-cols .tcol { position: relative; inset: auto; border-left: 1px solid var(--soft); }
 .gw-cols .tcol.today { background: rgba(168, 190, 167, .1); }
 .gw .nowl { left: 0; }
 @media (max-width: 600px) {
   .gw-d b { width: 28px; height: 28px; font-size: 15px; }
-  .gw-ac .cchip svg { display: none; }
+  .gw-bar .cchip svg { display: none; }
+  .gw-more span { display: none; }
 }
 /* Kalenderliste: Abschnitte und verknüpfte Kalender ein/aus (Desktop links, schmal als Fenster) */
-.cal-wrap { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 20px; align-items: start; max-width: 1240px; }
+.main > .cal, .main > .cal-wrap, .ph-in.wide { max-width: none; }
+.cal-wrap { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 20px; align-items: start; }
 .cal-side { position: sticky; top: 0; padding: 12px; border-radius: 22px; background: var(--glass); border: 1px solid var(--glass-line); box-shadow: var(--tile-shadow); }
 .src-h { margin: 12px 8px 6px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--grey); }
 .src-h:first-child { margin-top: 2px; }
@@ -1008,6 +1019,7 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .ph-sync.busy svg { animation: spin .8s linear infinite; }
 .ph-in .ph-sync { margin-left: 0; background: var(--white); color: var(--ink); }
 .ph-in .ph-src { margin-left: 0; background: var(--white); color: var(--ink); }
+.ph-in .ph-src.on { background: var(--ink); color: var(--white); }
 /* verknüpfter Termin (nur lesen) und Verknüpfen-Fenster */
 .xe-t { margin: 6px 0 10px; font-family: var(--font-head); font-size: 24px; line-height: 1.2; overflow-wrap: anywhere; }
 .xe-w { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: var(--grey); }
@@ -1426,6 +1438,9 @@ li.closed > ul { display: none; }
   .fcol-i.on .fcol-ic { color: var(--green-l); }
   .fcol-i.over { box-shadow: inset 0 0 0 2px var(--ink); background: var(--pale); }
   .split-main .xhint { text-align: left; }
+
+  /* Kalender: ganze Höhe unter der Kopfleiste */
+  .gw { height: max(480px, calc(100dvh - 140px)); }
 
   /* Startseite als Übersicht */
   .dash-wrap { max-width: 1240px; margin: 0 auto; }
