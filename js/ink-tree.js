@@ -51,26 +51,41 @@ export async function openTree({ cat, open, notes, onOpen, onRename, onShow, onD
   const root = byId.get(open[0]) || rows.find((r) => !r.parent_id);
   const itemsOf = (row) => (row ? deserialize(row.data).items : []);
 
-  // Baum aufbauen; besuchte Seiten merken, damit nichts doppelt oder im Kreis läuft
+  // Baum aufbauen; besuchte Seiten merken, damit nichts doppelt oder im Kreis läuft.
+  // Jede Zeile: Aufklapp-Pfeil (wenn es Unterseiten gibt), Eintrag mit kleiner Angabe rechts, Aktionen.
   const paths = [[]], pages = [root], dels = [];   // dels: [seite, titel] zum Löschen
   const seen = new Set([root?.id, ...notes.map((n) => n.id)]);
-  const trash = (i, label) => `<button class="tree-ren tree-del" data-del="${i}" aria-label="${label}" title="${label}">${ICON.trash}</button>`;
-  // Notizen (nur Startseite): wie Titel, mit eigener Unterseite
-  function noteBranch(path, depth) {
-    return notes.map((n) => {
+  const act = (attr, icon, label, cls = '') => `<button class="tree-ren ${cls}" ${attr} aria-label="${label}" title="${label}">${ICON[icon]}</button>`;
+  // sub: { html, hasOpen } der Unterseite; geschlossen, solange darin nichts geöffnet ist
+  const li = ({ cls = '', style = '', main, meta = '', actions = '', sub = null, on = false }) => {
+    const kids = sub?.html, closed = kids && !sub.hasOpen && !on;
+    return `<li class="${cls} ${closed ? 'closed' : ''}" ${style}><div class="tree-row">
+      ${kids ? `<button class="tree-tog" data-tog aria-label="Auf- oder zuklappen">${ICON.chevR}</button>` : '<span class="tree-tog-sp"></span>'}
+      ${main.replace('>', ` class="tree-i ${on ? 'on' : ''}">`)}${meta ? `<small class="tree-m">${meta}</small>` : ''}${actions}</div>
+      ${kids ? `<ul>${kids}</ul>` : ''}</li>`;
+  };
+  const count = (row) => { const l = itemsOf(row); const n = l.filter((it) => it.t === 'f' || it.t === 't').length; return n ? `${n} ${n === 1 ? 'Eintrag' : 'Einträge'}` : ''; };
+  const group = (label, icon, n, html) => (html ? `<li class="tree-group"><span class="tree-gh">${ICON[icon]}${label}<i>${n}</i></span><ul>${html}</ul></li>` : '');
+
+  function noteItems(path, depth) {
+    let hasOpen = false;
+    const html = notes.map((n) => {
       const p = [...path, { note: n.id }];
       paths.push(p);
-      const child = byId.get(n.id);
+      const child = byId.get(n.id), pi = paths.length - 1;
       if (child) pages.push(child);
-      const pi = paths.length - 1;
-      const sub = child ? branch(child, pi, p, depth + 1) : '';
-      return `<li><div class="tree-row"><button class="tree-i tree-note ${open.includes(n.id) ? 'on' : ''}" data-n="${pi}">${ICON.notes}<span class="tree-fn">${esc(n.title) || 'Ohne Titel'}</span>${ICON.chevR}</button>
-        <button class="tree-ren tree-del" data-ndel="${esc(n.id)}" aria-label="Notiz löschen" title="Notiz löschen">${ICON.trash}</button></div>${sub ? `<ul>${sub}</ul>` : ''}</li>`;
+      const sub = child ? branch(child, pi, p, depth + 1) : null, on = open.includes(n.id);
+      hasOpen ||= on || !!sub?.hasOpen;
+      return li({ cls: 'tree-note', on, sub, main: `<button data-n="${pi}">${ICON.notes}<span class="tree-fn">${esc(n.title) || 'Ohne Titel'}</span></button>`,
+        meta: child ? count(child) : '', actions: act(`data-ndel="${esc(n.id)}"`, 'trash', 'Notiz löschen', 'tree-del') });
     }).join('');
+    return { html, hasOpen };
   }
+
   function branch(row, pi, path, depth) {
     const list = itemsOf(row);
-    const frames = list.filter((it) => it.t === 'f');
+    const frames = list.filter((it) => it.t === 'f'), titles = list.filter((it) => it.t === 't');
+    let hasOpen = false;
     // Bereich, in dem die Mitte eines Titels liegt (sonst -1)
     const frameOf = (it) => {
       const b = bbox(it), cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
@@ -82,33 +97,37 @@ export async function openTree({ cat, open, notes, onOpen, onRename, onShow, onD
       const child = byId.get(it.page);
       const p = [...path, it];
       paths.push(p);
+      const ti = paths.length - 1;
       if (child) pages.push(child);
-      const sub = child && depth < 12 ? branch(child, paths.length - 1, p, depth + 1) : '';
+      const sub = child && depth < 12 ? branch(child, ti, p, depth + 1) : null, on = open.includes(it.page);
+      hasOpen ||= on || !!sub?.hasOpen;
       dels.push([row, it]);
-      return `<li><div class="tree-row"><button class="tree-i ${open.includes(it.page) ? 'on' : ''}" data-n="${paths.length - 1}">
-          ${titleSvg(it, 'tree-ttl')}${ICON.chevR}</button>${trash(dels.length - 1, 'Titel löschen')}</div>${sub ? `<ul>${sub}</ul>` : ''}</li>`;
+      return li({ on, sub, main: `<button data-n="${ti}">${titleSvg(it, 'tree-ttl')}</button>`, meta: child ? count(child) : '',
+        actions: act(`data-del="${dels.length - 1}"`, 'trash', 'Titel löschen', 'tree-del') });
     };
-    const titles = list.filter((it) => it.t === 't');
-    const notesHtml = row === root && notes.length ? `<li class="tree-group"><span class="tree-gh">${ICON.notes}Notizen</span><ul>${noteBranch(path, depth)}</ul></li>` : '';
     const framesHtml = frames.map((f, n) => {
       const inside = titles.filter((it) => frameOf(it) === n).map(titleLi).join('');
-      return `<li class="tree-fr" ${f.fc ? `style="--fc:${f.fc}"` : ''}><div class="tree-row">
-        <button class="tree-i" data-n="${pi}" data-fr="${n}">${ICON.frame}<span class="tree-fn">${esc(frameName(f, n))}</span><small>${fmtName(f)}</small></button>
-        <button class="tree-ren" data-pg="${pages.indexOf(row)}" data-fr="${n}" aria-label="Bereich umbenennen" title="Umbenennen">${ICON.pen}</button></div>
-        ${inside ? `<ul>${inside}</ul>` : ''}</li>`;
+      return li({ cls: 'tree-fr', style: f.fc ? `style="--fc:${f.fc}"` : '', sub: inside ? { html: inside, hasOpen: true } : null,
+        main: `<button data-n="${pi}" data-fr="${n}">${ICON.frame}<span class="tree-fn">${esc(frameName(f, n))}</span></button>`,
+        meta: fmtName(f), actions: act(`data-pg="${pages.indexOf(row)}" data-fr="${n}"`, 'pen', 'Bereich umbenennen') });
     }).join('');
     const rest = titles.filter((it) => frameOf(it) < 0).map(titleLi).join('');
-    return notesHtml + framesHtml + rest;
+    const notesPart = row === root ? noteItems(path, depth) : { html: '', hasOpen: false };
+    hasOpen ||= notesPart.hasOpen;
+    // Startseite in Gruppen, Unterseiten schlicht: erst Bereiche (mit ihren Titeln), dann übrige Titel
+    const html = row === root
+      ? group('Notizen', 'notes', notes.length, notesPart.html) + group('Bereiche', 'frame', frames.length, framesHtml) + group(frames.length ? 'Weitere Titel' : 'Titel', 'chevR', titles.filter((it) => frameOf(it) < 0).length, rest)
+      : framesHtml + rest;
+    return { html, hasOpen };
   }
-  const list = branch(root, 0, [], 0);
+  const list = branch(root, 0, [], 0).html;
   const body = sheet.querySelector('.tree-body');
-  body.innerHTML = `<ul class="tree">
-      <li><button class="tree-i tree-root ${open.length === 1 ? 'on' : ''}" data-n="0">${ICON.home}<span>Startseite</span>${ICON.chevR}</button>
-      ${list ? `<ul>${list}</ul>` : ''}</li>
-    </ul>
-    ${list ? '' : '<p class="muted tree-empty">Noch keine Bereiche und Titel. Oben rechts einen Bereich anlegen, oder etwas schreiben, mit der Auswahl umkreisen und „Als Titel“ wählen.</p>'}`;
+  body.innerHTML = `<button class="tree-start ${open.length === 1 ? 'on' : ''}" data-n="0">${ICON.home}<span>Startseite</span>${ICON.chevR}</button>
+    ${list ? `<ul class="tree">${list}</ul>` : '<p class="muted tree-empty">Noch keine Notizen, Bereiche oder Titel. Oben rechts einen Bereich anlegen, oder etwas schreiben, mit der Auswahl umkreisen und „Als Titel“ wählen.</p>'}`;
 
-  body.querySelector('.tree').addEventListener('click', (e) => {
+  body.addEventListener('click', (e) => {
+    const tog = e.target.closest('[data-tog]');
+    if (tog) return tog.closest('li').classList.toggle('closed');
     const del = e.target.closest('.tree-del');
     if (del?.dataset.ndel) return onDeleteNote(del.dataset.ndel);
     if (del) { const [row, it] = dels[+del.dataset.del]; return onDeleteTitle(row, it); }

@@ -29,6 +29,7 @@ const ui = {
   text: cleanText(saved.text),
   recent: (Array.isArray(saved.r) ? saved.r.map((c) => safeColor(c)).filter(Boolean) : []).concat(['#0C3741', '#3E7CA8', '#C2575A']).filter((c, i, a) => a.indexOf(c) === i).slice(0, 3),
   eraser: [5, 9, 18].includes(+saved.e) ? +saved.e : 9,
+  grid: store('inkGrid') !== '0',
   finger: store('inkFinger') === '1',
   bar: store('inkBar') !== '0',
 };
@@ -201,8 +202,10 @@ function showOutline() {
 // schmale Kopfleiste (Smartphone): Bereich und Speichern im Menü „Mehr“
 function openMore(btn) {
   dropMenu(btn, `<button class="cm-i" data-a="ink-frame">${ICON.frame}<span>Bereich (A4) anlegen</span></button>
-    <button class="cm-i" data-a="ink-export">${ICON.download}<span>Speichern als PDF, PNG, JPEG</span></button>`, (b) => {
+    <button class="cm-i" data-a="ink-export">${ICON.download}<span>Speichern als PDF, PNG, JPEG</span></button>
+    <button class="cm-i" data-a="ink-grid">${ICON.grid}<span>${ui.grid ? 'Raster ausblenden' : 'Raster einblenden'}</span></button>`, (b) => {
     if (b.dataset.a === 'ink-frame') openFrameChoice(btn);
+    else if (b.dataset.a === 'ink-grid') inkAction('ink-grid');
     else { flushAll(); openExport(); }
   });
 }
@@ -268,6 +271,7 @@ function applyUi() {
   b.setMarker(ui.marker);
   b.setTextStyle(ui.text);
   b.setEraser(ui.eraser);
+  b.setGrid(ui.grid);
   b.setFinger(ui.finger);
 }
 
@@ -465,6 +469,7 @@ export async function inkAction(act, id, btn) {
       else ui.tool = id;
       break;
     case 'ink-ctx': contextAction(id); return;
+    case 'ink-grid': ui.grid = !ui.grid; store('inkGrid', ui.grid ? '1' : '0'); break;
     case 'ink-pen': openPen(btn); return;
     case 'ink-tree': openOutlineTree(); return;
     case 'ink-more': openMore(btn); return;
@@ -476,7 +481,6 @@ export async function inkAction(act, id, btn) {
     case 'ink-frame': openFrameChoice(btn); return;
     case 'ink-cats': openCats(btn); return;
     case 'ink-fold': toggleBar(); return;
-    case 'ink-zoom': id === 'in' ? b?.zoomIn() : b?.zoomOut(); return;
     case 'ink-export': flushAll(); openExport(); return;
     case 'ink-back': if (stack.length > 1) closePage(stack.pop()); break;
     default: return;
@@ -502,62 +506,118 @@ document.addEventListener('keydown', (e) => {
 // ---------- Export: Bereiche auswählen, Format und Hintergrund ----------
 const exp = { fmt: 'pdf', bg: 'grid' };
 
+// Fenster „Speichern“: links Bereiche, Vorlage (auch nachträglich) mit ihren Angaben, Format und Hintergrund; rechts große Vorschau
 function openExport(preselect) {
   const b = top()?.board;
   if (!b) return;
-  const frames = b.frames();
+  let frames = b.frames();
+  if (!frames.length) {
+    const sheet = openSheet(`<div class="sheet-head"><h2>Speichern</h2><button class="link-btn" data-close>Fertig</button></div>
+      <p class="exp-lead">Noch kein Bereich auf dieser Seite. Lege einen Bereich an, schreibe hinein und speichere ihn dann.</p>
+      <div class="exp-new"><button class="btn" data-f="a4p">${ICON.frame} A4 hoch</button><button class="btn" data-f="a4l">${ICON.frame} A4 quer</button></div>`);
+    sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
+    sheet.addEventListener('click', (e) => { const nf = e.target.closest('[data-f]'); if (nf) { closeSheet(); b.addFrame(nf.dataset.f); } });
+    return;
+  }
   const chosen = new Set(preselect ?? frames.map((f) => f.n));
-  const seg = (key, opts) => `<div class="seg-view exp-seg" data-key="${key}">${opts.map(([v, l]) => `<button type="button" class="${exp[key] === v ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>`;
-  const sheet = openSheet(`
-    <div class="sheet-head"><h2>Speichern</h2><button class="link-btn" data-close>Fertig</button></div>
-    ${frames.length ? `
-      <p class="muted exp-lead">Bereiche auswählen:</p>
-      <div class="exp-grid">${frames.map((f) => `<button type="button" class="exp-card ${chosen.has(f.n) ? 'on' : ''}" data-n="${f.n}"><span class="exp-th ${f.fmt}"></span><span>${esc(f.name)}</span></button>`).join('')}</div>
-      <div class="exp-row"><span>Format</span>${seg('fmt', [['pdf', 'PDF'], ['png', 'PNG'], ['jpeg', 'JPEG']])}</div>
-      <div class="exp-row"><span>Hintergrund</span>${seg('bg', [['grid', 'Mit Hintergrund'], ['none', 'Ohne']])}</div>
-      <p class="hint exp-note"></p>
-      <button class="btn block" id="exp-go">${ICON.download} Speichern</button>`
-    : `<p class="exp-lead">Noch kein Bereich auf dieser Seite. Lege einen Bereich an, schreibe hinein und exportiere ihn dann.</p>
-      <div class="exp-new"><button class="btn" data-f="a4p">${ICON.frame} A4 hoch</button><button class="btn" data-f="a4l">${ICON.frame} A4 quer</button></div>`}`);
+  let cur = preselect?.[0] ?? frames[0].n;   // Bereich in der Vorschau
+  const sheet = openSheet(`<div class="sheet-head"><h2>Speichern</h2><button class="link-btn" data-close>Fertig</button></div>
+    <div class="exp-wrap"><div class="exp-side"></div><div class="exp-prev"><div class="exp-host"></div><div class="exp-nav"></div></div></div>`, { full: true });
+  sheet.classList.add('exp-sheet');
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
+  const side = sheet.querySelector('.exp-side'), host = sheet.querySelector('.exp-host'), nav = sheet.querySelector('.exp-nav');
+  const frame = () => frames.find((f) => f.n === cur);
+  const seg = (key, opts) => `<div class="seg-view exp-seg" data-key="${key}">${opts.map(([v, l]) => `<button type="button" class="${exp[key] === v ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>`;
+  const goLabel = () => `${ICON.download} ${chosen.size === 1 ? 'Bereich' : `${chosen.size} Bereiche`} speichern`;
+  const note = () => (exp.bg === 'none' ? (exp.fmt === 'png' ? 'PNG ohne Hintergrund ist durchsichtig.' : 'Ohne Kästchen, Linien oder Punkte, auf Weiß.') : 'Jeder Bereich mit seinem Hintergrund und seiner Vorlage.');
 
-  const note = () => {
-    const el = sheet.querySelector('.exp-note');
-    if (el) el.textContent = exp.bg === 'none' ? (exp.fmt === 'png' ? 'PNG ohne Hintergrund ist durchsichtig.' : 'Ohne Kästchen, Linien oder Punkte, auf Weiß.') : 'Jeder Bereich mit seinem eigenen Hintergrund (Kästchen, Linien, Punkte oder leer).';
-  };
-  note();
+  function renderSide() {
+    const f = frame();
+    side.innerHTML = `
+      <div class="exp-h">Bereiche</div>
+      <div class="exp-list">${frames.map((x) => `<div class="exp-item ${x.n === cur ? 'cur' : ''}">
+        <button class="exp-chk ${chosen.has(x.n) ? 'on' : ''}" data-chk="${x.n}" aria-label="Mitspeichern" title="Mitspeichern">${ICON.check}</button>
+        <button class="exp-name" data-show="${x.n}"><span>${esc(x.name)}</span><small>${x.fmt === 'a4l' ? 'A4 quer' : 'A4 hoch'}</small></button></div>`).join('')}</div>
+      <div class="exp-h">Vorlage <small>für „${esc(f.name)}“</small></div>
+      <div class="pp-chips">${FRAME_LAYOUTS.map(([k, l]) => `<button type="button" class="pp-chip ${(f.ly || '') === k ? 'on' : ''}" data-ly="${k}">${esc(l.replace('Dudek · ', ''))}</button>`).join('')}</div>
+      ${f.ly ? `<div class="exp-fields">${LAYOUT_FIELDS.map(([k, l]) => `<label><span>${l}</span><input class="input" data-lf="${k}" maxlength="80" value="${esc(f.lf?.[k] || '')}"></label>`).join('')}</div>` : ''}
+      <div class="exp-h">Format</div>${seg('fmt', [['pdf', 'PDF'], ['png', 'PNG'], ['jpeg', 'JPEG']])}
+      <div class="exp-h">Hintergrund</div>${seg('bg', [['grid', 'Mit Hintergrund'], ['none', 'Ohne']])}
+      <p class="hint exp-note">${note()}</p>
+      <button class="btn block" id="exp-go" ${chosen.size ? '' : 'disabled'}>${goLabel()}</button>`;
+  }
 
-  // kleine Vorschau je Bereich
-  frames.forEach(async (f) => {
-    const cv = await b.renderBox(f.box, 220, f.bg, f.ly, f.lf);
-    sheet.querySelector(`.exp-card[data-n="${f.n}"] .exp-th`)?.appendChild(cv);
+  // Vorschau des gewählten Bereichs; nur die jüngste Anfrage wird gezeigt
+  let token = 0;
+  async function renderPreview() {
+    const f = frame(), t = ++token;
+    const bg = exp.bg === 'grid' ? f.bg : 'none';
+    const w = Math.min(1200, Math.max(300, host.clientWidth || 500) * Math.min(2, window.devicePixelRatio || 1));
+    const cv = await b.renderBox(f.box, w, bg, f.ly, f.lf);
+    if (t !== token) return;
+    cv.className = `exp-cv ${f.fmt} ${bg === 'none' ? 'clear' : ''}`;
+    host.replaceChildren(cv);
+    const i = frames.indexOf(f);
+    nav.innerHTML = frames.length > 1 ? `<button class="exp-arrow" data-step="-1" ${i ? '' : 'disabled'} aria-label="Voriger Bereich">${ICON.chevL}</button>
+      <span>${i + 1} / ${frames.length}</span><button class="exp-arrow" data-step="1" ${i < frames.length - 1 ? '' : 'disabled'} aria-label="Nächster Bereich">${ICON.chevR}</button>` : '';
+  }
+  const show = (n) => { cur = n; renderSide(); renderPreview(); };
+  const refresh = () => { frames = b.frames(); };
+  renderSide();
+  requestAnimationFrame(renderPreview);
+
+  // Angaben der Vorlage: kurz nach dem Tippen übernehmen, Liste und Vorschau aktualisieren (Eingabefeld behält den Fokus)
+  let typing = 0;
+  side.addEventListener('input', (e) => {
+    if (!e.target.dataset.lf) return;
+    clearTimeout(typing);
+    typing = setTimeout(() => {
+      const lf = Object.fromEntries([...side.querySelectorAll('[data-lf]')].map((i) => [i.dataset.lf, i.value.trim().slice(0, 80)]).filter(([, v]) => v));
+      b.setFrameInfo(cur, lf);
+      refresh();
+      side.querySelector('.exp-item.cur .exp-name span').textContent = frame().name;
+      side.querySelector('.exp-h small').textContent = `für „${frame().name}“`;
+      renderPreview();
+    }, 350);
   });
 
   sheet.addEventListener('click', async (e) => {
-    const nf = e.target.closest('[data-f]');
-    if (nf) { closeSheet(); b.addFrame(nf.dataset.f); return; }
-    const card = e.target.closest('.exp-card');
-    if (card) { const n = +card.dataset.n; chosen.has(n) ? chosen.delete(n) : chosen.add(n); card.classList.toggle('on', chosen.has(n)); return; }
+    const chk = e.target.closest('[data-chk]');
+    if (chk) {
+      const n = +chk.dataset.chk;
+      chosen.has(n) ? chosen.delete(n) : chosen.add(n);
+      chk.classList.toggle('on', chosen.has(n));
+      const go = side.querySelector('#exp-go');
+      go.innerHTML = goLabel(); go.disabled = !chosen.size;
+      return;
+    }
+    const sh = e.target.closest('[data-show]');
+    if (sh) return show(+sh.dataset.show);
+    const st = e.target.closest('[data-step]');
+    if (st) return show(frames[frames.indexOf(frame()) + +st.dataset.step].n);
+    const ly = e.target.closest('[data-ly]');
+    if (ly) { b.setFrameLayout(cur, ly.dataset.ly); refresh(); renderSide(); renderPreview(); return; }
     const sb = e.target.closest('.exp-seg button');
     if (sb) {
       exp[sb.parentElement.dataset.key] = sb.dataset.v;
       sb.parentElement.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === sb));
-      note();
+      side.querySelector('.exp-note').textContent = note();
+      renderPreview();
       return;
     }
     const go = e.target.closest('#exp-go');
     if (!go) return;
     const list = frames.filter((f) => chosen.has(f.n));
-    if (!list.length) { toast('Bitte mindestens einen Bereich auswählen.'); return; }
+    if (!list.length) return;
     go.disabled = true;
     go.textContent = 'Wird erstellt …';
     try {
       await runExport(b, list);
       closeSheet();
     } catch (err) {
-      toast('Export fehlgeschlagen: ' + (err.message || err), 4000);
+      toast('Speichern fehlgeschlagen: ' + (err.message || err), 4000);
       go.disabled = false;
-      go.innerHTML = `${ICON.download} Speichern`;
+      go.innerHTML = goLabel();
     }
   });
 }
@@ -660,22 +720,24 @@ export function inkHead() {
 const tb = (act, icon, label, { on = false, dis = false, id = '', cls = '' } = {}) =>
   `<button class="dk ink-b ${on ? 'on' : ''} ${cls}" data-act="${act}" ${id ? `data-id="${id}"` : ''} aria-label="${label}" title="${label}" ${dis ? 'disabled' : ''}>${ICON[icon]}</button>`;
 
-// rechts in der Kopfleiste: Rückgängig, Wiederholen, Bereich, Speichern, Finger, Gliederung
+// rechts in der Kopfleiste: Bereich, Speichern | Raster, Finger, Gliederung | ganz rechts Rückgängig, Wiederholen
 export function inkHeadTools() {
   const b = top()?.board;
   return `<div class="ph-ink">
-    ${tb('ink-undo', 'undo', 'Rückgängig', { dis: !b?.canUndo })}
-    ${tb('ink-redo', 'redo', 'Wiederholen', { dis: !b?.canRedo })}
     ${tb('ink-frame', 'frame', 'Bereich (A4) anlegen', { cls: 'wide-only' })}
     ${tb('ink-export', 'download', 'Speichern als PDF, PNG, JPEG', { cls: 'wide-only' })}
     ${tb('ink-more', 'dots', 'Mehr', { cls: 'narrow-only' })}
     <i class="ink-sep"></i>
+    ${tb('ink-grid', 'grid', ui.grid ? 'Raster ausblenden' : 'Raster einblenden', { on: !ui.grid, cls: 'wide-only' })}
     ${tb('ink-finger', 'hand', 'Mit Finger schreiben', { on: ui.finger })}
     ${tb('ink-tree', 'tree', 'Gliederung')}
+    <i class="ink-sep"></i>
+    ${tb('ink-undo', 'undo', 'Rückgängig', { dis: !b?.canUndo })}
+    ${tb('ink-redo', 'redo', 'Wiederholen', { dis: !b?.canRedo })}
   </div>`;
 }
 
-// Werkzeugleiste unter der Kopfleiste (einfahrbar): links Textmarker, Formen, Bemaßung, Bild, Farben, Zoom;
+// Werkzeugleiste unter der Kopfleiste (einfahrbar): links Textmarker, Formen, Bemaßung, Bild;
 // rechts der Umschalter Text / Stift / Radierer und ganz rechts eigens die Auswahl. Solange ausgewählt wird,
 // ruht der Rest (nur Farbe und Stärke wirken auf das Ausgewählte, Zoom bleibt)
 function inkBar() {
@@ -688,9 +750,6 @@ function inkBar() {
       ${tool('shape', SHAPE_ICON[ui.shape], 'Formen')}
       ${tool('dim', 'ruler', 'Bemaßung')}
       ${tb('ink-img', 'image', 'Bild hinzufügen')}
-      <i class="ink-sep"></i>
-      ${tb('ink-zoom', 'minus', 'Verkleinern', { id: 'out' })}
-      ${tb('ink-zoom', 'plus', 'Vergrößern', { id: 'in' })}
       <div class="ink-right">
         <div class="seg-view ink-seg">${seg('text', 'text', 'Text')}${seg('pen', 'pen', 'Zeichnen')}${seg('eraser', 'eraser', 'Radieren')}</div>
         <button class="ink-select ${selecting ? 'on' : ''}" data-act="ink-tool" data-id="lasso" aria-pressed="${selecting}" aria-label="Auswählen" title="Auswählen: antippen oder umkreisen">${ICON.lasso}<span>Auswahl</span></button>

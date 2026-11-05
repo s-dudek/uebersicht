@@ -35,7 +35,7 @@ const NEAR = [280, 6000];   // Berührung so nah (Punkte) an der letzten Stiftst
 // ====================================================================
 export function createBoard(opts) {
   let items = opts.items;
-  let tool = 'pen', shape = 'line', finger = false, eraseR = ERASE_R;
+  let tool = 'pen', shape = 'line', finger = false, eraseR = ERASE_R, gridOn = true;
   let pen = { c: '#0C3741', w: 2.2 }, marker = { c: '#F2D33B', w: 16 }, textStyle = { c: '#0C3741', ff: 'sans', fw: 400, i: false, fs: TEXT_FS };
   const past = [], future = [];
   let sel = null;            // { set: Set<item>, box: [x0,y0,x1,y1] }
@@ -270,6 +270,7 @@ export function createBoard(opts) {
   function drawItem(ctx, it) {
     if (it.t === 'f') {   // Hintergrund und Layout; Rahmen und Reiter sind HTML darüber
       if (it.bg || it.ly) drawFrameBg(ctx, bbox(it), it.bg || 'blank', scale);
+      else if (!gridOn) drawFrameBg(ctx, bbox(it), 'grid', scale);   // Raster der Fläche aus: Bereich bleibt kariert
       if (it.ly) drawFrameLayout(ctx, bbox(it), it.ly, it.lf);
       return;
     }
@@ -1389,6 +1390,11 @@ export function createBoard(opts) {
     clearSelection: () => clearSel(),
     get hasSelection() { return !!sel; },
     setEraser(r) { eraseR = r; },
+    // Kästchen der Fläche zeigen oder ausblenden (Bereiche bleiben kariert)
+    setGrid(on) { if (on === gridOn) return; gridOn = on; gridCv.hidden = !on; redrawAll(); },
+    // Vorlage (Layout) und Angaben eines Bereichs, z. B. aus dem Speichern-Fenster
+    setFrameLayout(n, ly) { const f = frameList()[n]; if (f) setFrame(f, { ly }); },
+    setFrameInfo(n, lf) { const f = frameList()[n]; if (f) setFrame(f, { lf: Object.keys(lf).length ? lf : null }); },
     refreshNotes: () => renderNotes(),
     // Titel entfernen (Unterseite wurde schon gelöscht), z. B. aus der Gliederung
     removeTitle(pageId) {
