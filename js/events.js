@@ -1,7 +1,7 @@
 // Termine und Geburtstage (jährliche Wiederholung, Erinnerungen)
 import { reloadGoogle, writableGoogle } from './cal-sources.js';
 import { calDay, hm, toMin } from './calendar.js';
-import { askConfirm, canDeleteItem, debounce, esc, itemById, sb, state, toast } from './core.js';
+import { askConfirm, canDeleteItem, debounce, esc, itemById, sb, state, store, toast } from './core.js';
 import { saveItem, silentDelete } from './data.js';
 import { addDays, parseYmd, remindLabel } from './dates.js';
 import { openGoogleEvent } from './google-cal.js';
@@ -67,19 +67,25 @@ export function openNewEventMenu() {
     <div class="nev">
       <button class="nev-b" data-k="event">${ICON.calendar}<b>Termin</b><small>einmalig oder jährlich</small></button>
       <button class="nev-b" data-k="birthday">${ICON.cake}<b>Geburtstag</b><small>jedes Jahr mit Erinnerung</small></button>
-      ${writableGoogle().length ? `<button class="nev-b" data-k="google">${ICON.calendar}<b>Google-Termin</b><small>direkt im Google-Kalender</small></button>` : ''}
     </div>`);
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
-  sheet.querySelectorAll('[data-k]').forEach((b) => b.addEventListener('click', () => {
-    closeSheet();
-    if (b.dataset.k === 'google') openGoogleEvent(null, { day: calDay(), cals: writableGoogle(), onDone: reloadGoogle });
-    else createEvent(null, b.dataset.k);
-  }));
+  sheet.querySelectorAll('[data-k]').forEach((b) => b.addEventListener('click', () => { closeSheet(); createEvent(null, b.dataset.k); }));
 }
 
-export async function createEvent(day, kind = 'event', time = '') {
+// Wohin neue Termine gehen: zuletzt gewählter Google-Kalender (falls noch beschreibbar) oder die App
+const googleTarget = () => { const t = store('calTarget'); return writableGoogle().some((c) => c.gcal === t) ? t : null; };
+
+// neuer Termin direkt in Google; „Übersicht (App)“ in der Auswahl wechselt zum App-Termin (Eingetipptes bleibt)
+function newGoogleEvent(day, time, gcal, pre = {}) {
+  openGoogleEvent(null, { day, time, cals: writableGoogle(), sel: gcal, pre, onDone: reloadGoogle,
+    toApp: (p) => createEvent(p.day, 'event', p.time, { title: p.title, body: p.desc, app: true }) });
+}
+
+export async function createEvent(day, kind = 'event', time = '', pre = {}) {
+  const g = kind === 'event' && !pre.app && googleTarget();
+  if (g) return newGoogleEvent(day || calDay(), time, g);
   if (createEvent.blocked) return toast('Für Termine muss die Datenbank noch erweitert werden (SQL in Supabase ausführen).', 5000);
-  const { data, error } = await sb.from('items').insert({ type: 'event', title: '', due_date: day || calDay(), meta: { kind, remind: kind === 'birthday' ? '0' : '', repeat: kind === 'birthday' ? 'yearly' : '', time: kind === 'birthday' ? '' : time, end: time ? hm(Math.min(toMin(time) + 60, 23 * 60 + 59)) : '' } }).select().single();
+  const { data, error } = await sb.from('items').insert({ type: 'event', title: String(pre.title || ''), body: String(pre.body || ''), due_date: day || calDay(), meta: { kind, remind: kind === 'birthday' ? '0' : '', repeat: kind === 'birthday' ? 'yearly' : '', time: kind === 'birthday' ? '' : time, end: time ? hm(Math.min(toMin(time) + 60, 23 * 60 + 59)) : '' } }).select().single();
   if (error) {
     if (/items_type_check/.test(error.message)) { createEvent.blocked = true; return toast('Für Termine muss die Datenbank noch erweitert werden (SQL in Supabase ausführen).', 5000); }
     return toast('Fehler: ' + error.message);
@@ -103,6 +109,8 @@ export function openEvent(id, { isNew = false } = {}) {
         </div>
         <button class="link-btn" data-close>Fertig</button>
       </div>
+      ${isNew && !b && writableGoogle().length ? `<div class="field"><label for="ev-cal">Kalender</label><select class="select" id="ev-cal">
+        <option value="" selected>Übersicht (App)</option>${writableGoogle().map((c) => `<option value="${esc(c.gcal)}">${esc(c.name)}</option>`).join('')}</select></div>` : ''}
       <input class="title-input" id="ev-title" placeholder="${b ? 'Wer hat Geburtstag?' : 'Was steht an?'}" value="${esc(ev.title)}" autocomplete="off">
       <div class="field" style="margin-top:12px"><label>${b ? 'Geburtsdatum' : 'Datum'}</label>
         <div class="row-inline"><input class="input" type="date" id="ev-date" value="${esc(ev.due_date || '')}">
@@ -148,6 +156,16 @@ export function openEvent(id, { isNew = false } = {}) {
       if (k === (isBday(itemById(id)) ? 'birthday' : 'event')) return;
       setMeta(k === 'birthday' ? { kind: k, repeat: 'yearly', time: '', remind: m.remind === 'h' ? '0' : m.remind || '0' } : { kind: k });
     }));
+    // Google-Kalender gewählt: Eingetipptes mitnehmen, Entwurf in der App verwerfen, Wahl fürs nächste Mal merken
+    sheet.querySelector('#ev-cal')?.addEventListener('change', (x) => {
+      const gcal = x.target.value;
+      if (!gcal) return;
+      store('calTarget', gcal);
+      const pre = { title: sheet.querySelector('#ev-title').value, desc: sheet.querySelector('#ev-body').value };
+      const day = sheet.querySelector('#ev-date').value || itemById(id).due_date, time = itemById(id).meta?.time || '';
+      clearSheetClose(); closeSheet(); silentDelete(id);
+      newGoogleEvent(day, time, gcal, pre);
+    });
     sheet.querySelector('#ev-date').addEventListener('change', (x) => { if (x.target.value) setMeta({}, { due_date: x.target.value }); });
     sheet.querySelector('#ev-time')?.addEventListener('change', (x) => {
       const t = x.target.value;

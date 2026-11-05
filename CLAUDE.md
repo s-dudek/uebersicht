@@ -76,6 +76,8 @@ In der App zeigt Training → „Übungen“ die ganze Datenbank.
   Verknüpfte Kalender (Outlook, Google, iCloud) als ICS-Abo in Tabelle `calendars` (nur eigene, nur lesen); geladen über
   Edge Function `supabase/functions/calendar-feed` (CORS-Umweg, prüft Anmeldung und Adresse), gelesen in `js/ics.js`.
   Google-Kalender bearbeitbar (`js/google-cal.js`): Edge Function `supabase/functions/google-calendar` (OAuth; alle Kalender der Kalenderliste je als Eintrag `x:g:<google-id>`, nur beschreibbare bearbeitbar),
+  Neue Termine gehen in den zuletzt gewählten Kalender (`calTarget` im Browser: 'app' oder Google-ID), Auswahl oben im Termin-Fenster;
+  Tag/Woche mit fester Höhe; Knopf „Aktualisieren“ lädt alles sofort, sonst verknüpfte Kalender höchstens alle 15 Minuten.
   Schlüssel in `google_links` (nur Dienstzugang, keine Regeln), Secrets `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` nur im Dashboard.
   Weiterleitungs-Adresse bei Google: `https://gerpilzxolufdnlsltxk.supabase.co/functions/v1/google-calendar`.
 - Push: Edge Function `supabase/functions/send-reminders`, Zeitplan in `supabase/push-zeitplan.sql` (Platzhalter, echte Werte nur bei Simon).

@@ -2,6 +2,7 @@
 import { addCalendar, calendars, calOf, ensureExternal, EXT_COLORS, extOn, extOcc, feedError, google, isShown, reloadGoogle, removeCalendar, SECTIONS, toggleSection, unlinkGoogle } from './cal-sources.js';
 import { $app, askConfirm, esc, isDesktop, state, toast } from './core.js';
 import { addDays, dayName, isoWeek, mondayOf, parseYmd, ymd } from './dates.js';
+import { loadAll } from './data.js';
 import { createEvent, evAge, eventsOn, isBday } from './events.js';
 import { connectGoogle, openGoogleEvent } from './google-cal.js';
 import { ICON } from './icons.js';
@@ -132,27 +133,19 @@ export function sourcesHtml(where = 'hide') {
       ${google.connected ? '' : `<button class="src-add" data-act="g-connect">${ICON.calendar}<span>Google-Kalender verbinden</span></button>`}` : ''}`;
 }
 
-function calDayView() {
-  const d = calDay(), { timed, allday } = dayContent(d);
-  return `<section class="tile cal-panel">
-    ${allday.length ? `<div class="allday">${allday.map(allChip).join('')}</div>` : ''}
-    <div class="tgridv" data-day="${d}" style="height:${(H1 - H0) * HPX}px">
-      ${hourLines()}
-      <div class="tcol" data-slotday="${d}">${timed.map((t) => timedBlock(t)).join('')}${nowLine(d)}</div>
-    </div>
-    <p class="hint cal-hint">Auf eine freie Stelle tippen für einen neuen Termin.</p>
-  </section>`;
-}
+// Tag und Woche wie bei Google: Kopfzeile mit Tagen, Zeile für Ganztägiges, darunter Zeitraster mit einer Spalte je Tag.
+// Feste Höhe, damit der Kalender beim Blättern nicht springt.
+const calDayView = () => gridView([calDay()]);
+const calWeekView = () => { const ws = mondayOf(parseYmd(calDay())); return gridView(Array.from({ length: 7 }, (_, k) => addDays(ws, k))); };
 
-// Woche wie bei Google: Kopfzeile mit Tagen, Zeile für Ganztägiges, darunter Zeitraster mit sieben Spalten
-function calWeekView() {
-  const ws = mondayOf(parseYmd(calDay())), days = Array.from({ length: 7 }, (_, k) => addDays(ws, k)), today = ymd(new Date());
+function gridView(days) {
+  const today = ymd(new Date()), narrow = days.length > 1;
   const content = days.map((d) => dayContent(d));
   const head = days.map((d) => `<button class="gw-d ${d === today ? 'today' : ''} ${d < today ? 'past' : ''}" data-act="cal-goto" data-id="${d}" aria-label="${esc(dayName(d, { weekday: 'long', day: 'numeric', month: 'long' }))}">
       <small>${esc(dayName(d, { weekday: 'short' }).replace('.', ''))}</small><b>${+d.slice(8)}</b></button>`).join('');
   const all = content.map(({ allday }, k) => `<div class="gw-ac" data-day="${days[k]}">${allday.map(allChip).join('')}</div>`).join('');
-  const cols = content.map(({ timed }, k) => `<div class="tcol ${days[k] === today ? 'today' : ''}" data-slotday="${days[k]}">${timed.map((t) => timedBlock(t, true)).join('')}${nowLine(days[k])}</div>`).join('');
-  return `<section class="tile cal-panel gw">
+  const cols = content.map(({ timed }, k) => `<div class="tcol ${days[k] === today && narrow ? 'today' : ''}" data-slotday="${days[k]}">${timed.map((t) => timedBlock(t, narrow)).join('')}${nowLine(days[k])}</div>`).join('');
+  return `<section class="tile cal-panel gw ${narrow ? '' : 'gw-one'}" style="--n:${days.length}">
     <div class="gw-head"><span class="gw-gut"></span>${head}</div>
     <div class="gw-all"><span class="gw-gut">ganzt.</span>${all}</div>
     <div class="cal-scroll"><div class="tgridv gw-body" style="height:${(H1 - H0) * HPX}px">${hourLines()}<div class="gw-cols">${cols}</div></div></div>
@@ -223,6 +216,7 @@ export async function calAction(act, id) {
   if (act === 'cal-sources') return openSourcesSheet(id === 'home' ? 'home' : 'hide');
   if (act === 'ext-ev') return openExtEvent(id);
   if (act === 'g-connect') return connectGoogle();
+  if (act === 'cal-sync') return syncNow();
   if (act === 'g-disconnect') {
     if (!(await askConfirm('Google trennen?', 'Trennen', 'Die App darf dann nicht mehr auf Google zugreifen. Deine Kalender in Google bleiben unverändert.'))) return;
     try { await unlinkGoogle(); } catch (e) { toast('Fehler: ' + e.message, 4000); }
@@ -282,6 +276,15 @@ function openLinkForm() {
     catch (err) { toast('Fehler: ' + err.message, 5000); go.disabled = false; go.textContent = 'Verknüpfen'; }
   });
   setTimeout(() => sheet.querySelector('#cl-name')?.focus(), 60);
+}
+
+// Aktualisieren: eigene Daten und alle verknüpften Kalender sofort neu holen (Knopf dreht sich solange)
+async function syncNow() {
+  const spin = (on) => document.querySelectorAll('.ph-sync').forEach((b) => b.classList.toggle('busy', on));
+  spin(true);
+  await Promise.all([loadAll(), ensureExternal(true)]);
+  spin(false);
+  toast('Kalender aktualisiert');
 }
 
 // verknüpften Termin ansehen (nur lesen; ändern im Ursprungskalender)

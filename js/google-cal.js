@@ -1,7 +1,7 @@
 // Google-Kalender bearbeiten: Verbinden (einmal „Zugriff erlauben“), Kalenderliste samt Unterkalendern,
 // Termine laden, ändern, anlegen, löschen.
 // Alles läuft über die Edge Function "google-calendar"; die Google-Schlüssel bleiben auf dem Server.
-import { askConfirm, esc, safeColor, sb, toast } from './core.js';
+import { askConfirm, esc, safeColor, sb, store, toast } from './core.js';
 import { addDays, ymd } from './dates.js';
 import { closeSheet, openSheet } from './sheet.js';
 
@@ -65,23 +65,25 @@ export async function listGoogle(gcal, from, to) {
 }
 
 // Bearbeiten-Fenster: o = vorhandenes Vorkommen (mit gcal) oder null für neu.
-// cals = beschreibbare Kalender zur Auswahl (nur beim Anlegen); onDone(gcal) lädt den Kalender neu
-export function openGoogleEvent(o, { day = ymd(new Date()), time = '', cals = [], color = G_BLUE, name = 'Google', onDone } = {}) {
+// Beim Anlegen: cals = beschreibbare Kalender, sel = vorgewählter, pre = schon Eingetipptes,
+// toApp(pre) wechselt zum Termin in der App. onDone(gcal) lädt den Kalender neu.
+export function openGoogleEvent(o, { day = ymd(new Date()), time = '', cals = [], sel = '', pre = {}, toApp = null, color = G_BLUE, name = 'Google', onDone } = {}) {
   const isNew = !o;
-  const pick = isNew && cals.length > 1;
+  const pick = isNew && (cals.length > 1 || toApp);
   const st = o ? o.start : new Date(`${day}T${time || '09:00'}`);
   const en = o ? (o.allDay ? new Date(o.end - 864e5) : o.end) : new Date(st.getTime() + 36e5);
   const allDay = o ? o.allDay : false;
-  const head = isNew ? cals[0] || { name: 'Google', color: G_BLUE } : { name, color };
+  const head = isNew ? cals.find((c) => c.gcal === sel) || cals[0] || { name: 'Google', color: G_BLUE } : { name, color };
   const sheet = openSheet(`<div class="sheet-head"><span class="status"><i class="src-dot" style="background:${safeColor(head.color, G_BLUE)}"></i>${esc(head.name)}</span><button class="link-btn" data-close>Abbrechen</button></div>
     <form id="ge-form">
-      ${pick ? `<div class="field"><label for="ge-cal">Kalender</label><select class="select" id="ge-cal">${cals.map((c) => `<option value="${esc(c.gcal)}">${esc(c.name)}</option>`).join('')}</select></div>` : ''}
-      <input class="title-input" id="ge-title" placeholder="Was steht an?" value="${esc(o?.title || '')}" autocomplete="off" maxlength="300">
+      ${pick ? `<div class="field"><label for="ge-cal">Kalender</label><select class="select" id="ge-cal">
+        ${toApp ? '<option value="">Übersicht (App)</option>' : ''}${cals.map((c) => `<option value="${esc(c.gcal)}" ${c.gcal === head.gcal ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>` : ''}
+      <input class="title-input" id="ge-title" placeholder="Was steht an?" value="${esc(o?.title || pre.title || '')}" autocomplete="off" maxlength="300">
       <button class="menu-item" id="ge-all" type="button" style="margin-top:12px">Ganztägig<span class="sw ${allDay ? 'on' : ''}"></span></button>
       <div class="field"><label>Beginn</label><div class="row-inline"><input class="input" type="date" id="ge-d1" value="${ymd(st)}" required><input class="input ge-t" type="time" id="ge-t1" value="${hhmm(st)}"></div></div>
       <div class="field"><label>Ende</label><div class="row-inline"><input class="input" type="date" id="ge-d2" value="${ymd(en)}" required><input class="input ge-t" type="time" id="ge-t2" value="${hhmm(en)}"></div></div>
       <div class="field"><label for="ge-loc">Ort</label><input class="input" id="ge-loc" maxlength="300" value="${esc(o?.location || '')}"></div>
-      <div class="field"><label for="ge-desc">Beschreibung</label><textarea class="textarea" id="ge-desc" style="min-height:80px" maxlength="4000">${esc(o?.desc || '')}</textarea></div>
+      <div class="field"><label for="ge-desc">Beschreibung</label><textarea class="textarea" id="ge-desc" style="min-height:80px" maxlength="4000">${esc(o?.desc || pre.desc || '')}</textarea></div>
       ${o?.recurring ? '<p class="hint">Wiederkehrender Termin: geändert wird nur dieser eine Termin.</p>' : ''}
       <button class="btn block" id="ge-save">${isNew ? 'In Google anlegen' : 'Speichern'}</button>
       ${isNew ? '' : `<button class="btn danger block" type="button" id="ge-del" style="margin-top:10px">Termin löschen</button>`}
@@ -91,7 +93,15 @@ export function openGoogleEvent(o, { day = ymd(new Date()), time = '', cals = []
   const showTimes = () => sheet.querySelectorAll('.ge-t').forEach((t) => { t.hidden = all; });
   showTimes();
   $('[data-close]').addEventListener('click', closeSheet);
+  // anderer Kalender gewählt: merken (gilt fürs nächste Anlegen); „Übersicht“ wechselt zum Termin in der App
   $('#ge-cal')?.addEventListener('change', (e) => {
+    if (!e.target.value) {
+      store('calTarget', 'app');
+      const p = { title: $('#ge-title').value, desc: $('#ge-desc').value, day: $('#ge-d1').value || day, time: all ? '' : $('#ge-t1').value };
+      closeSheet();
+      return toApp(p);
+    }
+    store('calTarget', e.target.value);
     const c = cals.find((x) => x.gcal === e.target.value);
     if (c) { $('.sheet-head .src-dot').style.background = c.color; $('.sheet-head .status').lastChild.textContent = c.name; }
   });

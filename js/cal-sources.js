@@ -40,11 +40,12 @@ const feeds = new Map();        // id -> { at, byDay: Map<tag, Vorkommen[]>, err
 const occById = new Map();      // Vorkommen-ID -> Vorkommen (für das Fenster mit Einzelheiten)
 let loading = null, listAt = 0;
 
-// einmal laden und dann nur, wenn veraltet; danach neu zeichnen
+// einmal laden und dann nur, wenn veraltet; danach neu zeichnen (gibt das Laden zurück, falls es läuft)
 export function ensureExternal(force = false) {
-  if (!state.me || loading) return;
-  if (!force && Date.now() - listAt < STALE) return;
+  if (!state.me || loading) return loading;
+  if (!force && Date.now() - listAt < STALE) return null;
   loading = refresh(force).finally(() => { loading = null; });
+  return loading;
 }
 
 async function refresh(force) {
