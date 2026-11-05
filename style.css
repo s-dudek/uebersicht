@@ -216,6 +216,7 @@ body.splashing .bookmark { animation-play-state: paused; }
 .home-flt:active { background: var(--pale); color: var(--ink); }
 .dash-day[data-act] { cursor: pointer; }
 .dash-day .lgear { margin-left: 0; }
+.dash-day .ds-t { flex: none; width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* fest, damit die Pfeile nicht springen */
 .dash-day .ds-nav { width: 28px; height: 28px; }
 .dash-day .ds-nav svg { width: 16px; height: 16px; }
 .dash-day .ds-today { padding: 4px 12px; font-size: 13px; }
@@ -1081,7 +1082,10 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 }
 .cal-t small { display: block; font-family: var(--font); font-weight: 400; font-size: 13px; color: var(--grey); }
 .cal-pt { display: flex; flex-direction: column; line-height: 1.05; }
-.cal-pt small { font-family: var(--font); font-weight: 400; font-size: 14px; color: var(--grey); margin-top: 3px; }
+/* feste Breite, damit die Knöpfe daneben beim Blättern nicht springen */
+.ph-in .cal-pt { flex: none; width: 230px; }
+@media (max-width: 600px) { .ph-in .cal-pt { width: 148px; } }
+.cal-pt small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font); font-weight: 400; font-size: 14px; color: var(--grey); margin-top: 3px; }
 
 /* ==========================================================================
    Notiz lesen und Rechtsklick-Menü
@@ -1462,7 +1466,11 @@ li.closed > ul { display: none; }
   .dash-day .th svg, .dash-meals .th svg { width: 20px; height: 20px; }
   .link-more { display: inline-flex; align-items: center; gap: 4px; }
   .link-more svg { width: 14px; height: 14px; }
-  .dash-day .allday { padding: 10px 0 0; }
+  /* Tageskachel immer gleich hoch: eine Zeile Ganztägiges (seitlich scrollbar), Leiste mit fester Höhe */
+  .dash-day .allday { height: 44px; padding: 8px 0 0; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+  .dash-day .allday .cchip { flex: none; max-width: 260px; }
+  .dash-day .allday .cchip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ds-empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; }
 
   /* Tagesleiste: Stunden 6–24 nebeneinander */
   .ds { position: relative; margin-top: 10px; }
@@ -1470,7 +1478,7 @@ li.closed > ul { display: none; }
   .ds-h { position: absolute; top: 0; translate: -50% 0; font-size: 11px; color: var(--grey); font-variant-numeric: tabular-nums; }
   .ds-h:first-child { translate: 0 0; }
   .ds-h:last-child { translate: -100% 0; }
-  .ds-track { position: relative; height: calc(var(--rows) * 52px); margin-top: 6px;
+  .ds-track { position: relative; height: 104px; margin-top: 6px;
     background-image: repeating-linear-gradient(90deg, var(--pale) 0 1px, transparent 1px calc(100% / 9)); border-radius: 10px; }
   .ds-b { min-width: 120px; position: absolute; display: flex; flex-direction: column; justify-content: center; padding: 4px 8px; border-radius: 10px; overflow: hidden; text-align: left;
     background: var(--ink); color: var(--white); font-size: 13px; line-height: 1.2; box-shadow: 0 0 0 1.5px var(--white); }

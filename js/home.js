@@ -84,20 +84,20 @@ function dayStrip(today) {
       <small>${hm(t.start)}</small><b>${esc(t.label)}</b></button>`;
   // ganze Kachel führt zum Kalender (an diesen Tag); Blättern, Termin +, Auswahl und Termine haben eigene Aktionen
   return `<section class="tile dash-day" data-act="home-cal" data-id="${day}">
-    <div class="th">${ICON.calendar}<b>${esc(dayLabel(day))}</b>
+    <div class="th">${ICON.calendar}<b class="ds-t">${esc(dayLabel(day))}</b>
       <button class="lgear ds-nav" data-act="home-day" data-id="-1" aria-label="Tag zurück">${ICON.chevL}</button>
       <button class="lgear ds-nav" data-act="home-day" data-id="1" aria-label="Tag vor">${ICON.chevR}</button>
       ${isToday ? '' : '<button class="chip ds-today" data-act="home-day" data-id="0">Heute</button>'}
       <span class="th-sp"></span>
       <button class="link-more" data-act="new-event" data-id="${day}">${ICON.plus} Termin</button>
       <button class="lgear" data-act="cal-sources" data-id="home" aria-label="Was die Startseite zeigt" title="Auswahl">${ICON.eye}</button></div>
-    ${allday.length ? `<div class="allday">${allday.map(allChip).join('')}</div>` : ''}
+    <div class="allday">${allday.map(allChip).join('')}</div>
     <div class="ds">
       <div class="ds-grid">${hours.join('')}</div>
-      <div class="ds-track" style="--rows:${rows}">${timed.map(block).join('')}
-        ${isToday && nowMin >= DAY_FROM ? `<i class="ds-now" style="left:${pct(nowMin)}%"></i>` : ''}</div>
+      <div class="ds-track">${timed.map(block).join('')}
+        ${isToday && nowMin >= DAY_FROM ? `<i class="ds-now" style="left:${pct(nowMin)}%"></i>` : ''}
+        ${!timed.length && !allday.length ? `<p class="kempty ds-empty">${isToday ? 'Heute ist' : 'An diesem Tag ist'} nichts eingetragen.</p>` : ''}</div>
     </div>
-    ${!timed.length && !allday.length ? `<p class="kempty">${isToday ? 'Heute ist' : 'An diesem Tag ist'} nichts eingetragen.</p>` : ''}
   </section>`;
 }
 
