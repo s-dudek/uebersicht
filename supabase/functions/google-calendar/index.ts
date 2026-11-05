@@ -1,13 +1,17 @@
 // Supabase Edge Function "google-calendar"
-// Verbindet je Person ein Google-Konto (OAuth) und liest/ändert Termine im Hauptkalender ("primary").
+// Verbindet je Person ein Google-Konto (OAuth): Liste der Kalender (auch Unterkalender), Termine lesen/ändern.
 // Die Google-Schlüssel (refresh/access token) liegen nur in der Tabelle google_links, die allein diese
 // Funktion lesen darf (keine Zugriffsregeln für Browser). Der Browser bekommt nur Termine zu sehen.
 // Secrets: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET (im Supabase-Dashboard, nie im Repository).
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const APP_URL = 'https://s-dudek.github.io/uebersicht/';
-const SCOPE = 'https://www.googleapis.com/auth/calendar.events';
-const API = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
+// Termine bearbeiten + Kalenderliste lesen (für Unterkalender)
+const SCOPE = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly';
+const BASE = 'https://www.googleapis.com/calendar/v3';
+const eventsUrl = (cal: string) => `${BASE}/calendars/${encodeURIComponent(cal)}/events`;
+// Kalender-IDs von Google: "primary", E-Mail-Adressen, …@group.calendar.google.com, Feiertage mit "#"
+const calId = (v: unknown) => (typeof v === 'string' && /^[\w.@#+-]{1,300}$/.test(v) ? v : 'primary');
 const CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') ?? '';
 const CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
@@ -107,7 +111,7 @@ Deno.serve(async (req) => {
     try {
       const t = await tokenRequest({ grant_type: 'authorization_code', code: q.get('code')!, redirect_uri: CALLBACK });
       if (!t.refresh_token) return back('fehler');
-      const cal = await google(t.access_token, 'https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults=1').catch(() => null);
+      const cal = await google(t.access_token, `${eventsUrl('primary')}?maxResults=1`).catch(() => null);
       const { error } = await admin.from('google_links').upsert({
         user_id: uid, email: String(cal?.summary ?? '').slice(0, 200), refresh_token: t.refresh_token,
         access_token: t.access_token, expires_at: new Date(Date.now() + t.expires_in * 1000).toISOString(),
@@ -149,7 +153,17 @@ Deno.serve(async (req) => {
     const token = await accessToken(user.id);
     if (!token) return json({ error: 'Google ist nicht verbunden' }, 400);
     const id = /^[a-z0-9_]{1,1024}$/i.test(body.id ?? '') ? body.id : null;
+    const API = eventsUrl(calId(body.cal));
     switch (body.action) {
+      case 'calendars': {
+        // ältere Verbindung ohne Erlaubnis für die Liste: nur der Hauptkalender, mit Hinweis zum Neu-Verbinden
+        const data = await google(token, `${BASE}/users/me/calendarList?maxResults=250`).catch(() => null);
+        if (!data) return json({ calendars: [{ id: 'primary', name: 'Google', primary: true, writable: true }], reconnect: true });
+        return json({ calendars: (data.items ?? []).filter((c: any) => !c.deleted).map((c: any) => ({
+          id: c.id, name: String(c.summaryOverride || c.summary || 'Kalender').slice(0, 100), color: c.backgroundColor || '',
+          primary: !!c.primary, writable: c.accessRole === 'owner' || c.accessRole === 'writer',
+        })) });
+      }
       case 'list': {
         const from = new Date(body.from), to = new Date(body.to);
         if (isNaN(+from) || isNaN(+to)) return json({ error: 'Zeitraum fehlt' }, 400);

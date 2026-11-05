@@ -253,8 +253,10 @@
     if (!mine.events) {
       const at = (k, h) => { const x = new Date(); x.setDate(x.getDate() + k); x.setHours(h, 0, 0, 0); return x.toISOString(); };
       mine.events = [
-        { id: 'g1', title: 'Fotoshooting Kunde', location: 'Studio', desc: '', allDay: false, start: at(0, 15), end: at(0, 17) },
-        { id: 'g2', title: 'Abendessen mit Freunden', location: '', desc: '', allDay: false, start: at(2, 19), end: at(2, 21) },
+        { cal: 'primary', id: 'g1', title: 'Fotoshooting Kunde', location: 'Studio', desc: '', allDay: false, start: at(0, 15), end: at(0, 17) },
+        { cal: 'primary', id: 'g2', title: 'Abendessen mit Freunden', location: '', desc: '', allDay: false, start: at(2, 19), end: at(2, 21) },
+        { cal: 'sport@group.calendar.google.com', id: 'g3', title: 'Laufrunde', location: 'Prater', desc: '', allDay: false, start: at(1, 7), end: at(1, 8) },
+        { cal: 'de.austrian#holiday@group.v.calendar.google.com', id: 'g4', title: 'Feiertag (Beispiel)', location: '', desc: '', allDay: true, start: at(4, 0).slice(0, 10), end: at(5, 0).slice(0, 10) },
       ];
     }
     const ok = (data) => ({ data, error: null });
@@ -262,12 +264,17 @@
       case 'status': return ok({ connected: mine.connected, email: mine.connected ? mine.email : '' });
       case 'start': mine.connected = true; save(); return ok({ url: 'https://accounts.google.com/o/oauth2/v2/auth?vorschau' });
       case 'disconnect': mine.connected = false; save(); return ok({ ok: true });
-      case 'list': return ok({ events: mine.connected ? mine.events : [] });
+      case 'calendars': return ok({ calendars: [
+        { id: 'primary', name: 'simon@gmail.com', color: '#039BE5', primary: true, writable: true },
+        { id: 'sport@group.calendar.google.com', name: 'Sport', color: '#33B679', writable: true },
+        { id: 'de.austrian#holiday@group.v.calendar.google.com', name: 'Feiertage in Österreich', color: '#8E24AA', writable: false },
+      ] });
+      case 'list': return ok({ events: mine.connected ? mine.events.filter((e) => (e.cal || 'primary') === (b.cal || 'primary')) : [] });
       case 'save': {
         const e = { ...b.event };
         if (!e.allDay) { e.start = new Date(e.start).toISOString(); e.end = new Date(e.end).toISOString(); }
         if (b.id) Object.assign(mine.events.find((x) => x.id === b.id) || {}, e);
-        else mine.events.push({ id: 'g' + Date.now(), ...e });
+        else mine.events.push({ id: 'g' + Date.now(), cal: b.cal || 'primary', ...e });
         save(); return ok({ event: e });
       }
       case 'delete': mine.events = mine.events.filter((x) => x.id !== b.id); save(); return ok({ ok: true });

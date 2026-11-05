@@ -1,5 +1,5 @@
 // Bereich Kalender: Tag, Woche (Zeitraster wie bei Google), Monat; Abschnitte ein- und ausblenden, verknüpfte Kalender
-import { addCalendar, calendars, calOf, ensureExternal, EXT_COLORS, extOn, extOcc, feedError, google, GOOGLE_ID, isShown, reloadCalendar, removeCalendar, SECTIONS, toggleSection } from './cal-sources.js';
+import { addCalendar, calendars, calOf, ensureExternal, EXT_COLORS, extOn, extOcc, feedError, google, isShown, reloadGoogle, removeCalendar, SECTIONS, toggleSection, unlinkGoogle } from './cal-sources.js';
 import { $app, askConfirm, esc, isDesktop, state, toast } from './core.js';
 import { addDays, dayName, isoWeek, mondayOf, parseYmd, ymd } from './dates.js';
 import { createEvent, evAge, eventsOn, isBday } from './events.js';
@@ -120,10 +120,14 @@ export function sourcesHtml(where = 'hide') {
       <i class="src-c">${ICON.check}</i><span>${esc(name)}</span></button>${cal ? extra : ''}</div>`;
   return `<div class="src-h">Meine Kalender</div>
     ${SECTIONS.map(([k, n, c]) => row(k, n, c)).join('')}
+    ${google.connected ? `<div class="src-h">Google${google.email ? ` <small>${esc(google.email)}</small>` : ''}</div>
+      ${calendars.filter((c) => c.google).map((c) => row('x:' + c.id, c.name, c.color, feedError(c.id) ? `<span class="src-err" title="${esc(feedError(c.id))}">!</span>` : '')).join('')}
+      ${cal && google.reconnect ? `<button class="src-add" data-act="g-connect">${ICON.calendar}<span>Neu verbinden für Unterkalender</span></button>` : ''}
+      ${cal ? `<button class="src-more" data-act="g-disconnect">Google trennen</button>` : ''}` : ''}
     <div class="src-h">Verknüpfte Kalender</div>
-    ${calendars.map((c) => row('x:' + c.id, c.name, c.color,
+    ${calendars.filter((c) => !c.google).map((c) => row('x:' + c.id, c.name, c.color,
       `${feedError(c.id) ? `<span class="src-err" title="${esc(feedError(c.id))}">!</span>` : ''}<button class="src-x" data-act="cal-unlink" data-id="${esc(c.id)}" aria-label="${esc(c.name)} entfernen" title="Entfernen">${ICON.trash}</button>`)).join('')
-      || '<p class="src-empty">Noch keiner. Outlook, Google oder iCloud über die Abo-Adresse (ICS) verknüpfen.</p>'}
+      || '<p class="src-empty">Noch keiner. Outlook, iCloud u. a. über die Abo-Adresse (ICS) verknüpfen.</p>'}
     ${cal ? `<button class="src-add" data-act="cal-link">${ICON.plus}<span>Kalender verknüpfen</span></button>
       ${google.connected ? '' : `<button class="src-add" data-act="g-connect">${ICON.calendar}<span>Google-Kalender verbinden</span></button>`}` : ''}`;
 }
@@ -219,10 +223,14 @@ export async function calAction(act, id) {
   if (act === 'cal-sources') return openSourcesSheet(id === 'home' ? 'home' : 'hide');
   if (act === 'ext-ev') return openExtEvent(id);
   if (act === 'g-connect') return connectGoogle();
+  if (act === 'g-disconnect') {
+    if (!(await askConfirm('Google trennen?', 'Trennen', 'Die App darf dann nicht mehr auf Google zugreifen. Deine Kalender in Google bleiben unverändert.'))) return;
+    try { await unlinkGoogle(); } catch (e) { toast('Fehler: ' + e.message, 4000); }
+    return;
+  }
   if (act === 'cal-unlink') {
     const c = calOf(id);
-    const note = c?.google ? 'Die App darf dann nicht mehr auf Google zugreifen. Der Kalender in Google bleibt unverändert.' : 'Der Kalender selbst (z. B. in Outlook) bleibt unverändert.';
-    if (!c || !(await askConfirm(`„${c.name}“ trennen?`, 'Trennen', note))) return;
+    if (!c || !(await askConfirm(`„${c.name}“ trennen?`, 'Trennen', 'Der Kalender selbst (z. B. in Outlook) bleibt unverändert.'))) return;
     try { await removeCalendar(id); } catch (e) { toast('Fehler: ' + e.message, 4000); }
   }
 }
@@ -280,7 +288,9 @@ function openLinkForm() {
 function openExtEvent(id) {
   const o = extOcc(id);
   if (!o) return;
-  if (o.gid) return openGoogleEvent(o, { onDone: () => reloadCalendar(GOOGLE_ID) });   // Google: bearbeitbar
+  // Google: bearbeitbar, außer bei Kalendern nur zum Lesen (z. B. Feiertage)
+  const gc = calOf(o.cal);
+  if (o.gid && gc?.writable) return openGoogleEvent(o, { color: gc.color, name: gc.name, onDone: reloadGoogle });
   const c = calOf(o.cal);
   const when = o.allDay
     ? `${o.start.toLocaleDateString('de-AT', { weekday: 'long', day: 'numeric', month: 'long' })}${ymd(new Date(o.end - 1)) !== ymd(o.start) ? ' – ' + new Date(o.end - 1).toLocaleDateString('de-AT', { weekday: 'short', day: 'numeric', month: 'long' }) : ''} · ganztägig`

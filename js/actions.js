@@ -38,7 +38,7 @@ export function initActions() {
       case 'cal-goto': if (state.calView === 'month' && state.calDate !== id) { state.calDate = id; render(); } else { state.calDate = id; state.calView = 'day'; store('calView', 'day'); render(); scrollCal(); } break;
       case 'cal-move': calMove(+id); break;
       case 'new-event-menu': openNewEventMenu(); break;
-      case 'cal-sources': case 'cal-toggle': case 'cal-link': case 'cal-unlink': case 'ext-ev': case 'g-connect': calAction(t.dataset.act, id); break;
+      case 'cal-sources': case 'cal-toggle': case 'cal-link': case 'cal-unlink': case 'ext-ev': case 'g-connect': case 'g-disconnect': calAction(t.dataset.act, id); break;
       case 'open-list': state.list = id || ''; state.noteMode = 'text'; render(); document.querySelector('.main')?.scrollTo({ top: 0 }); break;
       case 'close-list': state.list = null; render(); break;
       case 'open': openItem(id); break;

@@ -12,7 +12,6 @@ export const SECTIONS = [
   ['meal', 'Gerichte', '#A8BEA7'], ['train', 'Training', '#D9873E'], ['rem', 'Erinnerungen', '#6E8582'],
 ];
 export const EXT_COLORS = ['#7A5AA6', '#C2575A', '#3E7CA8', '#D9873E', '#C9A227', '#4E7569'];
-export const GOOGLE_ID = 'google';   // der verbundene Google-Kalender (bearbeitbar) steht mit in der Liste
 const STALE = 15 * 60e3;          // verknüpfte Kalender höchstens alle 15 Minuten neu holen
 const WINDOW = [-120, 500];       // aufgeklappt von … bis … Tage um heute
 
@@ -35,8 +34,8 @@ export async function toggleSection(key, where = 'hide') {
 }
 
 // ---------- Verknüpfte Kalender ----------
-export let calendars = [];      // [{ id, name, color, google? }]
-export const google = { connected: false, email: '' };
+export let calendars = [];      // [{ id, name, color }] – Google-Kalender zusätzlich mit gcal, writable
+export const google = { connected: false, email: '', reconnect: false, cals: [] };
 const feeds = new Map();        // id -> { at, byDay: Map<tag, Vorkommen[]>, error }
 const occById = new Map();      // Vorkommen-ID -> Vorkommen (für das Fenster mit Einzelheiten)
 let loading = null, listAt = 0;
@@ -53,7 +52,8 @@ async function refresh(force) {
   const [{ data, error }, g] = await Promise.all([sb.from('calendars').select('id, name, color').order('created_at'), googleStatus()]);
   Object.assign(google, g);
   calendars = error ? [] : data.map((c) => ({ id: c.id, name: String(c.name).slice(0, 60), color: safeColor(c.color, EXT_COLORS[0]) }));
-  if (google.connected) calendars.unshift({ id: GOOGLE_ID, name: google.email ? `Google (${google.email})` : 'Google', color: '#4285F4', google: true });
+  // jeder Google-Kalender (auch Unterkalender) als eigener Eintrag zum Ein- und Ausblenden
+  calendars.push(...google.cals.map((c) => ({ id: 'g:' + c.gcal, gcal: c.gcal, name: c.name, color: c.color, writable: c.writable, google: true })));
   for (const id of feeds.keys()) if (!calendars.some((c) => c.id === id)) feeds.delete(id);
   await Promise.all(calendars.filter((c) => force || !feeds.has(c.id) || Date.now() - feeds.get(c.id).at > STALE).map(loadFeed));
   render();
@@ -61,7 +61,7 @@ async function refresh(force) {
 
 // Termine eines Kalenders holen: Google über die eigene Funktion, sonst das ICS-Abo
 async function occurrences(cal, from, to) {
-  if (cal.google) return (await listGoogle(from, to)).map((o) => ({ ...o, key: o.gid }));
+  if (cal.google) return (await listGoogle(cal.gcal, from, to)).map((o) => ({ ...o, key: o.gid, gcal: cal.gcal }));
   const { data, error } = await sb.functions.invoke('calendar-feed', { body: { id: cal.id } });
   if (error) throw new Error((await error.context?.text?.().catch(() => '')) || error.message);
   return expand(parseIcs(typeof data === 'string' ? data : ''), from, to).map((o, k) => ({ ...o, key: k }));
@@ -96,6 +96,17 @@ export async function reloadCalendar(id) {
   const cal = calOf(id);
   if (cal) { await loadFeed(cal); render(); }
 }
+export const reloadGoogle = (gcal) => reloadCalendar('g:' + gcal);
+export const writableGoogle = () => calendars.filter((c) => c.google && c.writable);
+
+// Google trennen: Zugriff aufheben, Google-Kalender aus der Liste nehmen
+export async function unlinkGoogle() {
+  await disconnectGoogle();
+  Object.assign(google, { connected: false, email: '', reconnect: false, cals: [] });
+  calendars.filter((c) => c.google).forEach((c) => feeds.delete(c.id));
+  calendars = calendars.filter((c) => !c.google);
+  render();
+}
 
 export const feedError = (id) => feeds.get(id)?.error || null;
 export const extOcc = (id) => occById.get(id);
@@ -113,8 +124,8 @@ export async function addCalendar({ name, url, color }) {
 }
 
 export async function removeCalendar(id) {
-  if (id === GOOGLE_ID) { await disconnectGoogle(); google.connected = false; }
-  else { const { error } = await sb.from('calendars').delete().eq('id', id); if (error) throw error; }
+  const { error } = await sb.from('calendars').delete().eq('id', id);
+  if (error) throw error;
   calendars = calendars.filter((c) => c.id !== id);
   feeds.delete(id);
   render();

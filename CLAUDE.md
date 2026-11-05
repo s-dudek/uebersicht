@@ -75,7 +75,7 @@ In der App zeigt Training → „Übungen“ die ganze Datenbank.
   Einstellungen in `profiles.cal_prefs` = `{ hide: [], home: [] }` (Schlüssel `ev`, `bday`, `todo`, `meal`, `train`, `rem`, `x:<id>`), `home` gilt für die Startseite.
   Verknüpfte Kalender (Outlook, Google, iCloud) als ICS-Abo in Tabelle `calendars` (nur eigene, nur lesen); geladen über
   Edge Function `supabase/functions/calendar-feed` (CORS-Umweg, prüft Anmeldung und Adresse), gelesen in `js/ics.js`.
-  Google-Kalender bearbeitbar (`js/google-cal.js`): Edge Function `supabase/functions/google-calendar` (OAuth, Hauptkalender „primary“),
+  Google-Kalender bearbeitbar (`js/google-cal.js`): Edge Function `supabase/functions/google-calendar` (OAuth; alle Kalender der Kalenderliste je als Eintrag `x:g:<google-id>`, nur beschreibbare bearbeitbar),
   Schlüssel in `google_links` (nur Dienstzugang, keine Regeln), Secrets `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` nur im Dashboard.
   Weiterleitungs-Adresse bei Google: `https://gerpilzxolufdnlsltxk.supabase.co/functions/v1/google-calendar`.
 - Push: Edge Function `supabase/functions/send-reminders`, Zeitplan in `supabase/push-zeitplan.sql` (Platzhalter, echte Werte nur bei Simon).
@@ -92,7 +92,7 @@ In der App zeigt Training → „Übungen“ die ganze Datenbank.
 ## Stand und offene Punkte (November 2026)
 - Datenbank ist auf dem Stand von `supabase-setup.sql` (geprüft 5.11.2026: Tabellen, Spalten, Funktionen, Regeln, Bucket `ink`, Realtime).
   Supabase ist als Connector verbunden: Claude kann SQL selbst ausführen (`apply_migration`), Änderungen trotzdem in `supabase-setup.sql` nachtragen.
-- Google-Kalender: Simon muss noch das Google-Cloud-Projekt (OAuth-Client) anlegen und die zwei Secrets setzen.
+- Google-Kalender: eingerichtet und verbunden (5.11.2026); Google-App „Übersicht“ im Projekt „My Project 87146“.
 - Push-Erinnerungen: App-Teil fertig; Edge Function deployen, Secrets setzen und Zeitplan (`supabase/push-zeitplan.sql`) einrichten ist noch offen.
 - Ideen, die Simon angeboten wurden: Pinnwand der Startseite auch am Smartphone.
 - Handschrift am iPad mit Apple Pencil noch von Simon zu testen (Handballen, langes Drücken, Export über das Teilen-Menü).
