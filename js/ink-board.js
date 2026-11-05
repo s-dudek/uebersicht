@@ -16,7 +16,7 @@ import { FRAMES, getImage, newId } from './ink-store.js';
 const VIEW = 1000;       // so viele Einheiten passen bei 100 % in die Breite
 const TILE_PX = 512;     // Kachelgröße in Bildschirmpunkten
 const ZOOM = [.25, 4];   // kleinster und größter Zoom
-const ERASE_R = 9;       // Radierer-Radius in Einheiten (bei 100 %)
+const ERASE_R = 9;       // Radierer-Radius in Einheiten (bei 100 %), voreingestellt
 const HISTORY = 60;      // Schritte zum Rückgängigmachen
 const SEL_PX = 4096;     // größte Kantenlänge der Auswahl-Vorschau in Pixel
 const LONG = 480;        // lange drücken (ms)
@@ -29,12 +29,13 @@ const NEAR = [280, 6000];   // Berührung so nah (Punkte) an der letzten Stiftst
 // ====================================================================
 // opts: { items, colors, onCommit(items, h, w), onOpenTitle(titleItem), onDeleteTitles(titles) -> Promise<bool>,
 //         onExport(frameIndex), onTool(tool), onFrames(), hold(bool),
+//         onSelect() nach jeder Änderung der Auswahl, onView(beiUrsprung) wenn die Ansicht zur Ursprungsansicht wird oder sie verlässt,
 //         Notizen (nur Startseite): notes() -> [{ id, title }], onNote(id), onNoteAdd(), onNoteDelete(id),
 //         Notiz-Unterseite: desc() -> Beschreibungstext, onDesc() }
 // ====================================================================
 export function createBoard(opts) {
   let items = opts.items;
-  let tool = 'pen', shape = 'line', finger = false;
+  let tool = 'pen', shape = 'line', finger = false, eraseR = ERASE_R;
   let pen = { c: '#0C3741', w: 2.2 }, marker = { c: '#F2D33B', w: 16 }, textStyle = { c: '#0C3741', ff: 'sans', fw: 400, i: false, fs: TEXT_FS };
   const past = [], future = [];
   let sel = null;            // { set: Set<item>, box: [x0,y0,x1,y1] }
@@ -60,13 +61,7 @@ export function createBoard(opts) {
       <div class="ink-titles"></div>
     </div>
     <canvas class="ink-live" aria-hidden="true"></canvas>
-    <svg class="ink-lasso" aria-hidden="true"><polyline/></svg>
-    <div class="ink-zoom" hidden>
-      <button type="button" data-zoom="out" aria-label="Verkleinern" title="Verkleinern">${ICON.minus}</button>
-      <span class="ink-zpct"></span>
-      <button type="button" data-zoom="in" aria-label="Vergrößern" title="Vergrößern">${ICON.plus}</button>
-      <button type="button" data-zoom="reset" class="ink-zreset">${ICON.target}<span>Ursprungsansicht</span></button>
-    </div>`;
+    <svg class="ink-lasso" aria-hidden="true"><polyline/></svg>`;
   const gridCv = sc.querySelector('.ink-grid'), liveCv = sc.querySelector('.ink-live');
   const pg = sc.querySelector('.ink-page');
   const tileLayer = pg.querySelector('.ink-tiles');
@@ -75,8 +70,6 @@ export function createBoard(opts) {
   const notesLayer = pg.querySelector('.ink-notes-layer');
   const lassoSvg = sc.querySelector('.ink-lasso');
   const lassoLine = lassoSvg.firstElementChild;
-  const zoomBar = sc.querySelector('.ink-zoom');
-  const zoomPct = zoomBar.querySelector('.ink-zpct');
 
   function setTool(t) {
     tool = t;
@@ -92,9 +85,10 @@ export function createBoard(opts) {
     pg.style.transform = `translate(${-view.x * s}px, ${-view.y * s}px) scale(${s / scale})`;
     drawGrid(gridCv, sc.clientWidth, sc.clientHeight, dpr, view.x, view.y, s);
     const o = originView();
-    zoomBar.hidden = Math.abs(view.z - o.z) < .005 && Math.abs(view.x - o.x) < 2 && Math.abs(view.y - o.y) < 2;
-    zoomPct.textContent = Math.round(view.z * 100) + ' %';
+    const atOrigin = Math.abs(view.z - o.z) < .005 && Math.abs(view.x - o.x) < 2 && Math.abs(view.y - o.y) < 2;
+    if (atOrigin !== lastOrigin) { lastOrigin = atOrigin; opts.onView?.(atOrigin); }
   }
+  let lastOrigin = null;
 
   // Ursprungsansicht: der erste Bereich ganz sichtbar und mittig (ohne Bereich der Notizen-Bereich, sonst Anfang der Seite bei 100 % mit Rand)
   function originView() {
@@ -205,11 +199,6 @@ export function createBoard(opts) {
   }
   const endOutline = () => { outline = false; sc.classList.remove('outline'); };
 
-  zoomBar.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-zoom]');
-    if (b?.dataset.zoom === 'reset') resetView();
-    else if (b) zoomStep(b.dataset.zoom === 'in' ? 1.25 : .8);
-  });
 
   // Schwung nach dem Verschieben mit dem Finger
   function glide(vx, vy) {
@@ -490,13 +479,7 @@ export function createBoard(opts) {
   const selBox = document.createElement('div');
   selBox.className = 'ink-sel';
   selBox.hidden = true;
-  selBox.innerHTML = `<canvas></canvas><i class="ink-sel-h" aria-hidden="true"></i>
-    <div class="ink-selbar">
-      <button type="button" data-sel="title">Als Titel</button>
-      <button type="button" data-sel="crop">Zuschneiden</button>
-      <button type="button" data-sel="edit">Bearbeiten</button>
-      <button type="button" data-sel="delete" class="danger">Löschen</button>
-    </div>`;
+  selBox.innerHTML = '<canvas></canvas><i class="ink-sel-h" aria-hidden="true"></i>';   // Aktionen stehen in der Eigenschaften-Leiste
   pg.appendChild(selBox);
   const selCv = selBox.querySelector('canvas');
   const single = (t) => (sel?.set.size === 1 && [...sel.set][0].t === t ? [...sel.set][0] : null);
@@ -510,16 +493,12 @@ export function createBoard(opts) {
   function clearSel() { if (sel) setSel([]); }
 
   function renderSel(dx = 0, dy = 0, k = 1) {
+    if (!dx && !dy && k === 1) opts.onSelect?.();
     if (!sel) { selBox.hidden = true; return; }
     const [x0, y0, x1, y1] = sel.box, pad = 6;
     const w = (x1 - x0) * k + pad * 2, hh = (y1 - y0) * k + pad * 2;
     selBox.hidden = false;
     Object.assign(selBox.style, { left: (x0 - pad + dx) * scale + 'px', top: (y0 - pad + dy) * scale + 'px', width: w * scale + 'px', height: hh * scale + 'px' });
-    selBox.classList.toggle('below', (y0 - view.y) * cur() < 56);
-    const list = [...sel.set];
-    selBox.querySelector('[data-sel="title"]').hidden = !list.some(titlePart) || list.some((it) => it.t === 't');
-    selBox.querySelector('[data-sel="crop"]').hidden = !single('i');
-    selBox.querySelector('[data-sel="edit"]').hidden = !single('d') && !single('x');
     if (dx || dy || k !== 1) return;   // beim Ziehen nur verschieben, nicht neu zeichnen
     const q = Math.min(dpr, SEL_PX / (Math.max(w, hh) * scale));   // bei starkem Zoom nicht riesig
     selCv.width = Math.max(1, Math.round(w * scale * q));
@@ -763,7 +742,7 @@ export function createBoard(opts) {
 
   // ---------- Menü: Rechtsklick oder lange drücken ----------
   let menu = null, menuAt = 0;
-  const closeMenu = () => { menu?.remove(); menu = null; selBox.classList.remove('menu'); };
+  const closeMenu = () => { menu?.remove(); menu = null; };
 
   function showMenu(cx, cy, html, onPick) {
     closeMenu();
@@ -813,7 +792,6 @@ export function createBoard(opts) {
       else if (m === 'title') makeTitle();
       else if (m === 'delete') deleteSel();
     });
-    selBox.classList.add('menu');   // Leiste über der Auswahl ausblenden, solange das Menü offen ist
   }
 
   // Menü eines Bereichs (Tippen auf seinen Reiter)
@@ -876,13 +854,22 @@ export function createBoard(opts) {
     }, LONG) };
   }
 
-  selBox.querySelector('.ink-selbar').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-sel]')?.dataset.sel;
-    if (b === 'title') makeTitle();
-    else if (b === 'crop') cropImage(single('i'));
-    else if (b === 'edit') editSingle();
-    else if (b === 'delete') deleteSel();
-  });
+  // Aktionen für die Auswahl (Eigenschaften-Leiste): welche gerade passen, und ausführen
+  function selectionActions() {
+    if (!sel) return [];
+    const list = [...sel.set], g = list[0].g, oneGroup = g && list.every((it) => it.g === g);
+    return [
+      list.some(titlePart) && !list.some((it) => it.t === 't') && 'title',
+      (single('d') || single('x')) && 'edit',
+      single('i') && 'crop',
+      single('i')?.er?.length && 'unerase',
+      list.length > 1 && !oneGroup && 'group',
+      oneGroup && 'ungroup',
+      'delete',
+    ].filter(Boolean);
+  }
+  const ACTIONS = { title: () => makeTitle(), edit: () => editSingle(), crop: () => cropImage(single('i')), unerase: () => unerase(),
+    group: () => group(), ungroup: () => ungroup(), delete: () => deleteSel() };
 
   // ---------- Eingabe: Stift und Maus schreiben, Finger verschieben und zoomen (wahlweise schreibt ein Finger) ----------
   let act = null;               // laufende Geste
@@ -1218,7 +1205,7 @@ export function createBoard(opts) {
 
   // Radierer: Striche, Maße und Texte ganz, bei Bildern nur die überfahrene Stelle
   function erase(x, y) {
-    const r = ERASE_R / view.z;
+    const r = eraseR / view.z;
     const gone = items.filter((it) => (it.t === 's' || it.t === 'd' || it.t === 'x') && nearItem(it, x, y, r));
     if (gone.length) {
       act.hit = true;
@@ -1397,6 +1384,11 @@ export function createBoard(opts) {
     showOutline,
     selectionKind,
     styleSelection,
+    selectionActions,
+    runAction: (key) => ACTIONS[key]?.(),
+    clearSelection: () => clearSel(),
+    get hasSelection() { return !!sel; },
+    setEraser(r) { eraseR = r; },
     refreshNotes: () => renderNotes(),
     // Titel entfernen (Unterseite wurde schon gelöscht), z. B. aus der Gliederung
     removeTitle(pageId) {

@@ -1054,21 +1054,6 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .ink-page { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
 .ink-tiles canvas { position: absolute; pointer-events: none; }
 .ink-titles, .ink-frames { position: absolute; inset: 0; pointer-events: none; }
-/* Zoom: erscheint, sobald die Ansicht nicht mehr die ursprüngliche ist */
-.ink-zoom { position: absolute; z-index: 3; left: 50%; bottom: calc(var(--safe-bottom) + 18px); translate: -50% 0; display: flex; align-items: center; gap: 2px; padding: 4px;
-  border-radius: 999px; background: var(--ink); color: var(--white); box-shadow: 0 8px 22px rgba(12, 55, 65, .28); animation: fade .15s ease; cursor: default; }
-.ink-zoom[hidden] { display: none; }
-.ink-zoom button { height: 36px; min-width: 36px; display: grid; place-items: center; border-radius: 999px; color: var(--white); }
-.ink-zoom button svg { width: 18px; height: 18px; }
-.ink-zoom button:active { background: rgba(255, 255, 255, .16); }
-.ink-zpct { min-width: 50px; text-align: center; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.ink-zoom .ink-zreset { display: flex; align-items: center; gap: 6px; padding: 0 14px 0 10px; margin-left: 4px; background: var(--white); color: var(--ink); font-size: 14px; font-weight: 600; white-space: nowrap; }
-.ink-zoom .ink-zreset:active { background: var(--pale); }
-@media (max-width: 1023px) {
-  /* Smartphone/Tablet: links unten, rechts sitzt der Steuerknopf */
-  .ink-zoom { left: var(--gutter-l); translate: none; bottom: calc(var(--safe-bottom) + 22px); }
-}
-@media (max-width: 420px) { .ink-zreset span { display: none; } .ink-zoom .ink-zreset { padding: 0 10px; } }
 /* Bereiche (A4): feiner, heller Rahmen in der Farbe des Bereichs (--fc), dezenter Reiter zum Verschieben und für das Menü */
 .ink-frame { --fc: #3E7CA8; position: absolute; box-sizing: border-box; border: 1px dashed color-mix(in srgb, var(--fc) 30%, transparent); border-radius: 2px; transition: border-color .2s, background .2s; }
 .ink-ftab { position: absolute; left: -1px; bottom: 100%; margin-bottom: 3px; pointer-events: auto; touch-action: none; cursor: grab; white-space: nowrap;
@@ -1076,8 +1061,38 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .ink-ftab:hover, .ink-ftab:active { background: var(--fc); color: var(--white); }
 .ink-ftab:active { cursor: grabbing; }
 .ink-sel.bare { border-color: transparent; background: none; }
-.ink-sel.bare .ink-sel-h, .ink-sel.bare .ink-selbar { display: none; }
+.ink-sel.bare .ink-sel-h { display: none; }
 .ink-msg { margin: 24px; }
+/* Eigenschaften-Leiste unten (wie in Illustrator): je nach Werkzeug bzw. Auswahl Farbe, Stärke, Schrift, Aktionen; rechts Ursprungsansicht */
+.ink-ctx { position: absolute; z-index: 3; left: 50%; bottom: calc(var(--safe-bottom) + 16px); translate: -50% 0; max-width: calc(100% - 32px); display: flex; align-items: center; gap: 4px;
+  padding: 5px 5px 5px 14px; border-radius: 999px; background: rgba(255, 255, 255, .97); box-shadow: 0 0 0 1px var(--soft), 0 10px 28px rgba(12, 55, 65, .16);
+  overflow-x: auto; scrollbar-width: none; cursor: default; }
+.ink-ctx::-webkit-scrollbar { display: none; }
+.ctx-l { flex: none; font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--grey); margin-right: 2px; }
+.ctx-sep { flex: none; width: 1px; height: 22px; margin: 0 4px; background: var(--soft); }
+.ctx-g { display: flex; align-items: center; gap: 2px; flex: none; }
+.ctx-b { flex: none; min-width: 34px; height: 34px; padding: 0 8px; display: grid; place-items: center; border-radius: 999px; color: var(--ink); font-size: 14px; }
+.ctx-b svg { width: 18px; height: 18px; }
+.ctx-b.on { background: var(--ink); color: var(--white); }
+@media (hover: hover) { .ctx-b:not(.on):hover { background: var(--pale); } }
+.ctx-c { padding: 0; }
+.ctx-c::before { content: ''; width: 22px; height: 22px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px rgba(12, 55, 65, .18); }
+.ctx-c.on { background: none; box-shadow: inset 0 0 0 2px var(--ink); }
+.ctx-more { padding: 0; }
+.ctx-more::before { content: ''; width: 22px; height: 22px; border-radius: 50%; background: conic-gradient(#C2575A, #C9A227, #7FA08A, #3E7CA8, #7A5AA6, #C2575A); }
+.ctx-w i { width: var(--w); height: var(--w); border-radius: 50%; background: currentColor; }
+.ctx-v { min-width: 30px; font-size: 13px; font-weight: 600; color: var(--grey); text-align: center; font-variant-numeric: tabular-nums; }
+.ctx-t { font-size: 13px; padding: 0 10px; }
+.ctx-i { font-style: italic; font-family: Georgia, serif; font-size: 15px; }
+.ctx-hint { flex: none; font-size: 13px; color: var(--grey); padding: 0 4px; }
+.ctx-a { display: flex; gap: 6px; padding: 0 12px 0 10px; font-weight: 600; }
+.ctx-a.danger { color: var(--danger); }
+.ctx-origin { position: sticky; right: 0; background: var(--ink); color: var(--white); box-shadow: 0 0 0 6px #fff, -10px 0 0 6px #fff; }   /* bleibt sichtbar, auch wenn die Leiste wischt */
+.ctx-origin.at { background: var(--pale); color: var(--grey); }
+@media (max-width: 1023px) {
+  /* Smartphone/Tablet: links unten, rechts sitzt der Steuerknopf */
+  .ink-ctx { left: var(--gutter-l); translate: none; max-width: calc(100% - var(--gutter-l) - 96px); bottom: calc(var(--safe-bottom) + 22px); }
+}
 /* Notizen-Bereich im Canvas: Liste der Notizen des Ordners, wächst nach unten; Größen in em (folgen dem Zoom) */
 .ink-notes-layer { position: absolute; left: 0; top: 0; }
 .ink-notes { position: absolute; padding: .9em 1em 1em; border-radius: .9em; background: rgba(255, 255, 255, .96); box-shadow: 0 0 0 1px rgba(12, 55, 65, .08), 0 .4em 1.4em rgba(12, 55, 65, .06); cursor: default; }
@@ -1117,12 +1132,6 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .ink-sel { position: absolute; border: 1.5px dashed #3E7CA8; border-radius: 8px; background: rgba(62, 124, 168, .05); cursor: move; touch-action: none; }
 .ink-sel canvas { display: block; transform-origin: 0 0; pointer-events: none; }
 .ink-sel-h { position: absolute; right: -12px; bottom: -12px; width: 24px; height: 24px; border-radius: 50%; background: var(--white); border: 2px solid #3E7CA8; cursor: nwse-resize; }
-.ink-selbar { position: absolute; left: 50%; bottom: 100%; translate: -50% -10px; display: flex; gap: 2px; padding: 4px; border-radius: 999px; background: var(--ink); box-shadow: 0 8px 20px rgba(12, 55, 65, .25); white-space: nowrap; cursor: default; }
-.ink-sel.menu .ink-selbar { display: none; }
-.ink-sel.below .ink-selbar { bottom: auto; top: 100%; translate: -50% 14px; }
-.ink-selbar button { padding: 8px 14px; border-radius: 999px; color: var(--white); font-weight: 500; font-size: 14px; }
-.ink-selbar button.danger { color: #F2B8C6; }
-.ink-selbar button:active { background: rgba(255, 255, 255, .14); }
 .ink-hint { position: absolute; z-index: 1; left: 50%; top: 48px; translate: -50% 0; width: min(440px, 86%); margin: 0; text-align: center; color: var(--grey); font-size: 16px; pointer-events: none; }
 .ink-ttl { height: 38px; width: auto; max-width: min(60vw, 520px); flex: none; }
 /* Werkzeugleiste unter der Kopfleiste; eingefahren bleibt nur der kleine Reiter */
@@ -1153,11 +1162,6 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .ink-bar.selecting .ink-tools-in > .dk.ink-b:not([data-act="ink-zoom"]), .ink-bar.selecting .ink-seg { opacity: .3; pointer-events: none; }
 .ink-view[data-tool="lasso"] :is(.ink-notes, .ink-desc, .ink-ftab, .ink-ntab) { pointer-events: none; }
 @media (max-width: 600px) { .ink-select span { display: none; } .ink-select { padding: 0 9px; } }
-.ink-pens { display: flex; align-items: center; gap: 8px; padding: 0 6px; flex: none; }
-.ink-dot { width: 22px; height: 22px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 2px var(--white), 0 0 0 3.5px transparent; flex: none; }
-.ink-dot.on { box-shadow: 0 0 0 2px var(--white), 0 0 0 3.5px var(--c); }
-.ink-penchip { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1.5px var(--soft); }
-.ink-penchip i { width: var(--w, 9px); height: var(--w, 9px); max-width: 26px; max-height: 26px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1px rgba(12, 55, 65, .15); }
 /* Stift-Fenster: Farben, eigene Farbe, Strichstärke */
 .ink-penpanel { width: 268px; max-width: calc(100vw - 16px); padding: 12px; }
 .pp-h { display: flex; justify-content: space-between; margin: 2px 2px 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--grey); }

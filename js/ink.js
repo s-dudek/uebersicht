@@ -7,10 +7,10 @@ import { createNote, deleteItem } from './data.js';
 import { folderIc, noteFolders } from './folders.js';
 import { ICON } from './icons.js';
 import { createBoard } from './ink-board.js';
-import { GRID, NOTES_W, SHAPES, union } from './ink-draw.js';
+import { FONTS, GRID, NOTES_W, SHAPES, union, WEIGHTS } from './ink-draw.js';
 import { deliver, exportWidth, fileName, toImage, toPdf } from './ink-export.js';
 import { FRAME_LAYOUTS, LAYOUT_FIELDS } from './ink-layout.js';
-import { clampSize, cleanText, openPenPanel, PALETTE } from './ink-pen.js';
+import { clampSize, cleanText, KINDS, openPenPanel, PALETTE } from './ink-pen.js';
 import { deletePageTree, deserialize, loadChild, loadRoot, removeImages, savePage, serialize, titleIn, uploadImage } from './ink-store.js';
 import { openTree, titleSvg } from './ink-tree.js';
 import { openItem } from './items.js';
@@ -28,10 +28,11 @@ const ui = {
   marker: style('marker', '#F2D33B'),
   text: cleanText(saved.text),
   recent: (Array.isArray(saved.r) ? saved.r.map((c) => safeColor(c)).filter(Boolean) : []).concat(['#0C3741', '#3E7CA8', '#C2575A']).filter((c, i, a) => a.indexOf(c) === i).slice(0, 3),
+  eraser: [5, 9, 18].includes(+saved.e) ? +saved.e : 9,
   finger: store('inkFinger') === '1',
   bar: store('inkBar') !== '0',
 };
-const saveStyle = () => store('inkStyle', JSON.stringify({ pen: ui.pen, marker: ui.marker, text: ui.text, r: ui.recent }));
+const saveStyle = () => store('inkStyle', JSON.stringify({ pen: ui.pen, marker: ui.marker, text: ui.text, r: ui.recent, e: ui.eraser }));
 // welche Einstellung Farbe und Stärke gerade betreffen (Formen und Bemaßung zeichnen mit dem Stift)
 const kindOf = () => (ui.tool === 'text' || ui.tool === 'marker' ? ui.tool : 'pen');
 const DRAW = ['pen', 'marker', 'text', 'shape', 'dim'];   // Werkzeuge mit Farbe
@@ -76,6 +77,8 @@ function openPage(row, note = null) {
     colors: PALETTE,
     hold,
     onTool: (t) => { ui.tool = t; render(); },
+    onSelect: () => updateContext(),
+    onView: (at) => { ui.atOrigin = at; $app.querySelector('.ctx-origin')?.classList.toggle('at', at); },
     onCommit: (list, hh, ww) => { page.pending = { list, hh, ww }; scheduleSave(page); updateTools(); },
     onOpenTitle: (it) => openTitle(page, it),
     onDeleteTitles: deleteTitles,
@@ -264,6 +267,7 @@ function applyUi() {
   b.setPen(ui.pen);
   b.setMarker(ui.marker);
   b.setTextStyle(ui.text);
+  b.setEraser(ui.eraser);
   b.setFinger(ui.finger);
 }
 
@@ -341,7 +345,7 @@ function openShapes(btn) {
 function openPen(btn) {
   const b = top()?.board, sk = b?.selectionKind();
   if (sk) {   // etwas ist ausgewählt: Farbe, Stärke bzw. Schrift der Auswahl ändern
-    openPenPanel($app.querySelector('[data-act="ink-pen"]') || btn, sk.kind, sk.val, (v) => b.styleSelection(sk.kind, v), () => remember(sk.val.c));
+    openPenPanel($app.querySelector('[data-act="ink-pen"]') || btn, sk.kind, sk.val, (v) => b.styleSelection(sk.kind, v), () => { remember(sk.val.c); updateContext(); });
     return;
   }
   if (!DRAW.includes(ui.tool)) { ui.tool = 'pen'; applyUi(); render(); }
@@ -350,12 +354,9 @@ function openPen(btn) {
   openPenPanel(anchor, kind, ui[kind], (v) => {
     ui[kind] = v;
     applyUi();
-    const chip = $app.querySelector('.ink-penchip');
-    chip?.style.setProperty('--c', v.c);
-    chip?.style.setProperty('--w', penDot(kind, v.w));
-  }, () => { remember(ui[kind].c); saveStyle(); render(); });
+    updateContext();
+  }, () => { remember(ui[kind].c); saveStyle(); updateContext(); });
 }
-const penDot = (kind, w) => Math.round(Math.min(24, kind === 'text' ? 12 : kind === 'marker' ? 6 + w * .5 : 6 + w * 1.1)) + 'px';
 const remember = (c) => { ui.recent = [c, ...ui.recent.filter((x) => x !== c)].slice(0, 3); };
 
 // Kategorien (Notiz-Ordner) aus der Kopfleiste wählen (Canvas und Notizen); nochmal tippen schließt
@@ -376,6 +377,76 @@ function openCats(btn) {
   });
 }
 
+// ---------- Eigenschaften-Leiste unten (wie in Illustrator): zeigt, was zum Werkzeug bzw. zur Auswahl passt ----------
+const TOOL_LABEL = { pen: 'Stift', marker: 'Textmarker', text: 'Text', shape: 'Form', dim: 'Bemaßung', eraser: 'Radierer', lasso: 'Auswahl' };
+const ACTION = { title: ['chevR', 'Als Titel'], edit: ['pen', 'Bearbeiten'], crop: ['crop', 'Zuschneiden'], unerase: ['undo', 'Radiertes zurück'],
+  group: ['stack', 'Gruppieren'], ungroup: ['stack', 'Aufheben'], delete: ['trash', 'Löschen'] };
+const ERASERS = [[5, 'Fein'], [9, 'Mittel'], [18, 'Breit']];
+
+// was die Leiste gerade einstellt: { kind, val } aus der Auswahl oder dem Werkzeug (null: nichts mit Farbe)
+function contextTarget() {
+  const b = top()?.board;
+  if (b?.hasSelection) return b.selectionKind();
+  if (!DRAW.includes(ui.tool)) return null;
+  const kind = kindOf();
+  return { kind, val: ui[kind] };
+}
+
+function contextHtml() {
+  const b = top()?.board;
+  const t = contextTarget(), selecting = !!b?.hasSelection;
+  const btn = (id, html, { on = false, label = '', cls = '', style = '' } = {}) =>
+    `<button class="ctx-b ${on ? 'on' : ''} ${cls}" data-act="ink-ctx" data-id="${id}" ${label ? `aria-label="${label}" title="${label}"` : ''} ${style ? `style="${style}"` : ''}>${html}</button>`;
+  const out = [`<span class="ctx-l">${selecting ? 'Auswahl' : TOOL_LABEL[ui.tool] || ''}</span>`];
+  if (!selecting && ui.tool === 'shape') out.push(`<div class="ctx-g">${SHAPES.map(([k, l]) => btn('shape:' + k, ICON[SHAPE_ICON[k]], { on: ui.shape === k, label: l })).join('')}</div>`);
+  if (t) {
+    const colors = [...new Set([t.val.c, ...ui.recent])].slice(0, 4);
+    out.push(`<div class="ctx-g">${colors.map((c) => btn('c:' + c, '', { on: c === t.val.c, cls: 'ctx-c', style: `--c:${c}`, label: 'Farbe' })).join('')}
+      <button class="ctx-b ctx-more" data-act="ink-pen" aria-label="Alle Farben" title="Alle Farben"></button></div>`);
+    if (t.kind === 'text') {
+      const ff = FONTS[t.val.ff] ? t.val.ff : 'sans';
+      out.push(`<div class="ctx-g">${Object.entries(FONTS).map(([k, f]) => btn('ff:' + k, 'Aa', { on: ff === k, label: f.label, style: `font-family:${f.css}` })).join('')}</div>`);
+      out.push(`<div class="ctx-g">${FONTS[ff].weights.map((w) => btn('fw:' + w, WEIGHTS[w], { on: t.val.fw === w, cls: 'ctx-t', style: `font-weight:${w}` })).join('')}
+        ${btn('i:', 'I', { on: !!t.val.i, label: 'Kursiv', cls: 'ctx-t ctx-i' })}</div>`);
+    } else {
+      out.push(`<div class="ctx-g">${KINDS[t.kind].presets.slice(0, 4).map((w) => btn('w:' + w, `<i style="--w:${Math.max(2, Math.min(18, w * (t.kind === 'marker' ? .55 : 1.5)))}px"></i>`,
+        { on: Math.abs(t.val.w - w) < .05, cls: 'ctx-w', label: `Stärke ${w}` })).join('')}<span class="ctx-v">${(+t.val.w).toLocaleString('de-AT', { maximumFractionDigits: 1 })}</span></div>`);
+    }
+  }
+  if (!selecting && ui.tool === 'eraser') out.push(`<div class="ctx-g">${ERASERS.map(([r, l]) => btn('er:' + r, l, { on: ui.eraser === r, cls: 'ctx-t' })).join('')}</div>`);
+  if (!selecting && ui.tool === 'lasso') out.push('<span class="ctx-hint">Antippen oder umkreisen</span>');
+  if (selecting) out.push(`<div class="ctx-g">${b.selectionActions().map((a) => btn('act:' + a, `${ICON[ACTION[a][0]]}<span>${ACTION[a][1]}</span>`, { cls: `ctx-a ${a === 'delete' ? 'danger' : ''}` })).join('')}</div>`);
+  out.push(btn('origin', ICON.target, { cls: `ctx-origin ${ui.atOrigin ? 'at' : ''}`, label: 'Ursprungsansicht' }));
+  return out.join('<i class="ctx-sep"></i>');
+}
+
+function updateContext() {
+  const el = $app.querySelector('.ink-ctx');
+  if (el) el.innerHTML = contextHtml();
+}
+
+// Tipp in der Eigenschaften-Leiste: wirkt auf die Auswahl, sonst auf das Werkzeug (und wird gemerkt)
+function contextAction(id) {
+  const b = top()?.board;
+  if (!b) return;
+  const [k, v] = [id.slice(0, id.indexOf(':') < 0 ? id.length : id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
+  if (k === 'origin') return b.resetView();
+  if (k === 'act') return b.runAction(v);
+  if (k === 'shape') { ui.shape = v; store('inkShape', v); applyUi(); return updateContext(); }
+  if (k === 'er') { ui.eraser = +v; saveStyle(); applyUi(); return updateContext(); }
+  const t = contextTarget();
+  if (!t) return;
+  const patch = k === 'c' ? { c: safeColor(v, t.val.c) } : k === 'w' ? { w: clampSize(t.kind, v) } : k === 'ff' ? { ff: v } : k === 'fw' ? { fw: +v } : { i: !t.val.i };
+  if (b.hasSelection) b.styleSelection(t.kind, patch);   // ruft über onSelect auch updateContext auf
+  else {
+    ui[t.kind] = t.kind === 'text' ? cleanText({ ...ui.text, ...patch }) : { ...ui[t.kind], ...patch };
+    if (patch.c) remember(patch.c);
+    saveStyle();
+    applyUi();
+    updateContext();
+  }
+}
+
 // Werkzeugleiste ein- und ausfahren (ohne Neuaufbau, damit sie weich gleitet)
 function toggleBar() {
   ui.bar = !ui.bar;
@@ -393,14 +464,7 @@ export async function inkAction(act, id, btn) {
       if (id === 'lasso') { if (ui.tool === 'lasso') ui.tool = ui.before || 'pen'; else { ui.before = ui.tool; ui.tool = 'lasso'; } }   // Auswahl ein/aus
       else ui.tool = id;
       break;
-    case 'ink-color': {
-      if (b?.selectionKind()) { b.styleSelection('pen', { c: ui.recent[+id] }); return; }   // Auswahl umfärben
-      if (!DRAW.includes(ui.tool)) ui.tool = 'pen';
-      const kind = kindOf();
-      ui[kind] = { ...ui[kind], c: ui.recent[+id] || ui[kind].c };
-      saveStyle();
-      break;
-    }
+    case 'ink-ctx': contextAction(id); return;
     case 'ink-pen': openPen(btn); return;
     case 'ink-tree': openOutlineTree(); return;
     case 'ink-more': openMore(btn); return;
@@ -537,6 +601,7 @@ export function renderInk(fid) {
   if (status === 'error') return '<div class="ink-slot"><p class="empty ink-msg">Der Canvas ist gerade nicht erreichbar. Bitte später nochmal versuchen.</p></div>';
   if (!top()) return '<div class="ink-slot"><p class="center muted ink-msg">Lädt …</p></div>';
   return `${inkBar()}<div class="ink-slot">
+    <div class="ink-ctx" role="toolbar" aria-label="Eigenschaften">${contextHtml()}</div>
     <p class="ink-hint" ${stack.length === 1 && top().board.isEmpty ? '' : 'hidden'}>Mit dem Stift schreiben, mit dem Finger verschieben, mit zwei Fingern zoomen. Etwas mit der Auswahl umkreisen und „Als Titel“ wählen: der Titel öffnet eine eigene Seite und lässt sich ziehen (mit dem Finger: lange drücken). Oben rechts mit „Bereich“ ein A4-Blatt markieren und später speichern.</p>
   </div>`;
 }
@@ -614,7 +679,6 @@ export function inkHeadTools() {
 // rechts der Umschalter Text / Stift / Radierer und ganz rechts eigens die Auswahl. Solange ausgewählt wird,
 // ruht der Rest (nur Farbe und Stärke wirken auf das Ausgewählte, Zoom bleibt)
 function inkBar() {
-  const kind = kindOf(), cur = ui[kind];
   const tool = (id, icon, label) => tb('ink-tool', icon, label, { id, on: ui.tool === id });
   const seg = (id, icon, label) => `<button class="${ui.tool === id ? 'on' : ''}" data-act="ink-tool" data-id="${id}" aria-label="${label}" title="${label}">${ICON[icon]}</button>`;
   const selecting = ui.tool === 'lasso';
@@ -624,11 +688,6 @@ function inkBar() {
       ${tool('shape', SHAPE_ICON[ui.shape], 'Formen')}
       ${tool('dim', 'ruler', 'Bemaßung')}
       ${tb('ink-img', 'image', 'Bild hinzufügen')}
-      <i class="ink-sep"></i>
-      <div class="ink-pens">
-        ${ui.recent.map((c, i) => `<button class="ink-dot ${cur.c === c ? 'on' : ''}" data-act="ink-color" data-id="${i}" style="--c:${c}" aria-label="Farbe ${i + 1}"></button>`).join('')}
-        <button class="ink-penchip" data-act="ink-pen" style="--c:${cur.c};--w:${penDot(kind, cur.w)}" aria-label="Farbe und Stärke" title="Farbe und Stärke"><i></i></button>
-      </div>
       <i class="ink-sep"></i>
       ${tb('ink-zoom', 'minus', 'Verkleinern', { id: 'out' })}
       ${tb('ink-zoom', 'plus', 'Vergrößern', { id: 'in' })}
