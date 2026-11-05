@@ -410,3 +410,24 @@ revoke execute on function public.is_partner(uuid) from public, anon;
 revoke execute on function public.item_shared_with_me(uuid) from public, anon;
 revoke execute on function public.can_access_ink(uuid, uuid) from public, anon;
 revoke execute on function public.can_access_ink_file(text) from public, anon;
+
+-- ==========================================================================
+-- Kalender: verknüpfte Kalender (Outlook, Google, iCloud … per Abo-Adresse/ICS) und Anzeige-Einstellungen
+-- Die Abo-Adressen sind privat: nur die eigene Person sieht und ändert sie. Geholt werden sie
+-- über die Edge Function "calendar-feed" (Browser dürfen fremde Kalender wegen CORS nicht direkt laden).
+-- ==========================================================================
+create table if not exists public.calendars (
+  id         uuid primary key default gen_random_uuid(),
+  owner_id   uuid not null default auth.uid() references auth.users on delete cascade,
+  name       text not null check (char_length(name) between 1 and 60),
+  url        text not null check (char_length(url) between 10 and 2000),
+  color      text,
+  created_at timestamptz not null default now()
+);
+alter table public.calendars enable row level security;
+drop policy if exists calendars_own on public.calendars;
+create policy calendars_own on public.calendars for all to authenticated
+  using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+
+-- Anzeige im Kalender und auf der Startseite: ausgeblendete Abschnitte { hide: [...], home: [...] }
+alter table public.profiles add column if not exists cal_prefs jsonb;

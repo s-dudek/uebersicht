@@ -1,4 +1,5 @@
 // Startseite
+import { ensureExternal, extOn, isShown } from './cal-sources.js';
 import { allChip, dayContent, hm } from './calendar.js';
 import { askConfirm, esc, isDesktop, isTodoList, safeColor, sb, state } from './core.js';
 import { addDays, ymd } from './dates.js';
@@ -15,11 +16,15 @@ const HOME_BTNS = [
   { key: 'logout', label: 'Abmelden', icon: 'power' },
 ];
 
+// Termine heute und morgen – nur die Abschnitte, die für die Startseite eingeschaltet sind
 function homeEvents() {
   const t = ymd(new Date()), m = addDays(t, 1);
-  const list = [...eventsOn(t).map((e) => [e, 'Heute']), ...eventsOn(m).map((e) => [e, 'Morgen'])].slice(0, 3);
-  if (!list.length) return '';
-  return `<div class="home-ev">${list.map(([e, w]) => `<button class="hev ${isBday(e) ? 'bday' : ''}" data-act="open" data-id="${e.id}">${isBday(e) ? ICON.cake : ICON.calendar}<span><em>${w}</em> ${esc(isBday(e) ? (e.title || 'Geburtstag') : e.title || 'Termin')}${!isBday(e) && e.meta?.time ? ' · ' + esc(e.meta.time) : ''}</span></button>`).join('')}</div>`;
+  const own = (d, w) => eventsOn(d).filter((e) => isShown(isBday(e) ? 'bday' : 'ev', 'home')).map((e) =>
+    `<button class="hev ${isBday(e) ? 'bday' : ''}" data-act="open" data-id="${e.id}">${isBday(e) ? ICON.cake : ICON.calendar}<span><em>${w}</em> ${esc(isBday(e) ? (e.title || 'Geburtstag') : e.title || 'Termin')}${!isBday(e) && e.meta?.time ? ' · ' + esc(e.meta.time) : ''}</span></button>`);
+  const ext = (d, w) => extOn(d, 'home').map((o) =>
+    `<button class="hev" data-act="ext-ev" data-id="${esc(o.id)}" style="--xc:${o.color}">${ICON.calendar}<span><em>${w}</em> ${esc(o.title)}${o.multi ? '' : ' · ' + hm(o.start.getHours() * 60 + o.start.getMinutes())}</span></button>`);
+  const list = [...own(t, 'Heute'), ...ext(t, 'Heute'), ...own(m, 'Morgen'), ...ext(m, 'Morgen')].slice(0, 3);
+  return list.length ? `<div class="home-ev">${list.join('')}</div>` : '';
 }
 
 // Das Lesezeichen-Logo fällt nur beim Betreten der Startseite herunter, nicht bei jedem Neuzeichnen
@@ -27,6 +32,7 @@ let introShown = false;
 export function resetHomeIntro() { introShown = false; }
 
 export function renderHome() {
+  ensureExternal();
   if (isDesktop()) return renderDashboard();
   const settled = introShown;
   introShown = true;
@@ -34,8 +40,9 @@ export function renderHome() {
   return `
   <div class="home">
     <header class="home-head">
-      <div class="home-day"><b>${d.toLocaleDateString('de-AT', { weekday: 'long' })}</b><span>${d.toLocaleDateString('de-AT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-        ${homeEvents()}</div>
+      <div class="home-day" data-act="nav" data-id="calendar"><b>${d.toLocaleDateString('de-AT', { weekday: 'long' })}</b><span>${d.toLocaleDateString('de-AT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+        ${homeEvents()}
+        <button class="home-flt" data-act="cal-sources" data-id="home" aria-label="Was die Startseite zeigt" title="Auswahl">${ICON.eye}</button></div>
     </header>
     <div class="bookmark ${settled ? 'settled' : ''}">${LOGO_PORTRAIT}</div>
     <div class="home-plate" aria-hidden="true"><i></i><i></i></div>
@@ -56,7 +63,7 @@ export async function homeAction(k) {
 const DAY_FROM = 6 * 60, DAY_TO = 24 * 60;   // sichtbarer Zeitraum der Tagesleiste
 
 function dayStrip(today) {
-  const { timed, allday } = dayContent(today);
+  const { timed, allday } = dayContent(today, 'home');
   const pct = (min) => ((Math.min(Math.max(min, DAY_FROM), DAY_TO) - DAY_FROM) / (DAY_TO - DAY_FROM)) * 100;
   const rows = Math.max(1, ...timed.map((t) => t.cols));
   const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
@@ -65,10 +72,11 @@ function dayStrip(today) {
   const block = (t) => `<button class="ds-b k-${t.kind}" data-act="open" data-id="${t.item.id}" title="${esc(t.label)}"
       style="left:${pct(t.start)}%;width:calc(${pct(t.end) - pct(t.start)}% - 3px);top:${(t.col / rows) * 100}%;height:calc(${100 / rows}% - 4px)">
       <small>${hm(t.start)}</small><b>${esc(t.label)}</b></button>`;
-  return `<section class="tile dash-day">
+  // ganze Kachel führt zum Kalender; Termin +, Auswahl und einzelne Termine haben eigene Aktionen
+  return `<section class="tile dash-day" data-act="nav" data-id="calendar">
     <div class="th">${ICON.calendar}<b>Heute im Kalender</b><span class="th-sp"></span>
       <button class="link-more" data-act="new-event" data-id="${today}">${ICON.plus} Termin</button>
-      <button class="link-more" data-act="nav" data-id="calendar">Kalender</button></div>
+      <button class="lgear" data-act="cal-sources" data-id="home" aria-label="Was die Startseite zeigt" title="Auswahl">${ICON.eye}</button></div>
     ${allday.length ? `<div class="allday">${allday.map(allChip).join('')}</div>` : ''}
     <div class="ds">
       <div class="ds-grid">${hours.join('')}</div>

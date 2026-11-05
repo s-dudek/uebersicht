@@ -71,6 +71,10 @@ In der App zeigt Training → „Übungen“ die ganze Datenbank.
 - Jede Tabelle mit Row Level Security. Zugriff auf Ordner über `can_access_category(id)`, Handschrift über `can_access_ink(...)`.
 - Neue Zeilen mit selbst erzeugter UUID einfügen, ohne `.select()` danach (sonst greift die Lese-Regel vor dem Einfügen).
 - `ink_pages` bewusst nicht in den Live-Updates (Realtime), sonst lädt jedes Speichern alles neu.
+- Kalender: Woche wie bei Google (7 Spalten, Zeitraster), Kalenderliste (Desktop links, sonst Fenster) blendet Abschnitte ein/aus;
+  Einstellungen in `profiles.cal_prefs` = `{ hide: [], home: [] }` (Schlüssel `ev`, `bday`, `todo`, `meal`, `train`, `rem`, `x:<id>`), `home` gilt für die Startseite.
+  Verknüpfte Kalender (Outlook, Google, iCloud) als ICS-Abo in Tabelle `calendars` (nur eigene, nur lesen); geladen über
+  Edge Function `supabase/functions/calendar-feed` (CORS-Umweg, prüft Anmeldung und Adresse), gelesen in `js/ics.js`.
 - Push: Edge Function `supabase/functions/send-reminders`, Zeitplan in `supabase/push-zeitplan.sql` (Platzhalter, echte Werte nur bei Simon).
 
 ## Prüfen und veröffentlichen
@@ -86,5 +90,5 @@ In der App zeigt Training → „Übungen“ die ganze Datenbank.
 - Datenbank ist auf dem Stand von `supabase-setup.sql` (geprüft 5.11.2026: Tabellen, Spalten, Funktionen, Regeln, Bucket `ink`, Realtime).
   Supabase ist als Connector verbunden: Claude kann SQL selbst ausführen (`apply_migration`), Änderungen trotzdem in `supabase-setup.sql` nachtragen.
 - Push-Erinnerungen: App-Teil fertig; Edge Function deployen, Secrets setzen und Zeitplan (`supabase/push-zeitplan.sql`) einrichten ist noch offen.
-- Ideen, die Simon angeboten wurden: Wochenansicht im Kalender mit 7 Spalten am Desktop, Pinnwand der Startseite auch am Smartphone.
+- Ideen, die Simon angeboten wurden: Pinnwand der Startseite auch am Smartphone.
 - Handschrift am iPad mit Apple Pencil noch von Simon zu testen (Handballen, langes Drücken, Export über das Teilen-Menü).

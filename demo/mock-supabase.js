@@ -48,11 +48,13 @@
         { id: 'n3', owner_id: S, type: 'note', icon: 'gift', title: 'Geschenkideen', body: 'Fotobuch, Konzertkarten', done: false, due_date: null, category_id: null, created_at: ago(40), updated_at: ago(12) },
       ],
       item_shares: [{ item_id: 'n3', user_id: A }],
+      calendars: [{ id: 'cal-outlook', owner_id: S, name: 'Outlook Arbeit', url: 'https://outlook.example/kalender.ics', color: '#7A5AA6', created_at: ago(5) }],
     };
   }
 
   let db = (() => { try { return JSON.parse(ls.get(DB_KEY)) || seed(); } catch { return seed(); } })();
   db.ink_pages ||= [];   // Handschrift-Seiten (auch für ältere Vorschau-Daten)
+  db.calendars ||= [];   // verknüpfte Kalender (ICS-Abos)
   const save = () => ls.set(DB_KEY, JSON.stringify(db));
   let session = (() => { try { return JSON.parse(ls.get(SESSION_KEY)); } catch { return null; } })();
   const me = () => session?.user?.id || null;
@@ -83,6 +85,7 @@
     items: (r) => canItem(r),
     item_shares: (r) => r.user_id === me() || isItemOwner(r.item_id),
     ink_pages: (r) => (r.category_id ? canCat(r.category_id) : r.owner_id === me()),
+    calendars: (r) => r.owner_id === me(),
   };
   const mayUpdate = {
     profiles: (r) => r.id === me(),
@@ -96,6 +99,7 @@
     items: (r) => r.owner_id === me() || (r.category_id && canCat(r.category_id)),
     item_shares: (r) => r.user_id === me() || isItemOwner(r.item_id),
     ink_pages: (r) => (r.category_id ? canCat(r.category_id) : r.owner_id === me()),
+    calendars: (r) => r.owner_id === me(),
   };
 
   const listeners = new Set();
@@ -140,6 +144,9 @@
             if (pl.parent_id && !rows.some((r) => r.id === pl.parent_id && (r.category_id || null) === cid && visible.ink_pages(r))) return err('Keine Berechtigung');
             if (!pl.parent_id && rows.some((r) => !r.parent_id && (r.category_id || null) === cid && (cid || r.owner_id === me()))) return err('duplicate key value');
             row = { id: uuid(), owner_id: me(), parent_id: null, title: null, data: { v: 1, items: [] }, created_at: now, updated_at: now, ...structuredClone(pl) };
+          } else if (table === 'calendars') {
+            if (pl.owner_id && pl.owner_id !== me()) return err('Keine Berechtigung');
+            row = { id: uuid(), owner_id: me(), color: null, created_at: now, ...pl };
           } else if (table === 'categories') {
             row = { id: uuid(), owner_id: me(), color: '#2f7d5b', created_at: now, ...pl };
           } else return err('Nicht erlaubt');
@@ -223,6 +230,21 @@
     authCallbacks.forEach((cb) => cb(event, s));
   };
 
+  // Edge Function "calendar-feed": Beispiel-Kalender um heute (wöchentliche Besprechung, Termin, Urlaub)
+  async function invokeFn(name, { body } = {}) {
+    await new Promise((r) => setTimeout(r, 120));
+    if (name !== 'calendar-feed' || !me()) return { data: null, error: { message: 'nicht erlaubt' } };
+    if (!db.calendars.some((c) => c.id === body?.id && c.owner_id === me())) return { data: null, error: { message: 'Kalender nicht gefunden' } };
+    const d = (k) => { const x = new Date(); x.setDate(x.getDate() + k); return `${x.getFullYear()}${String(x.getMonth() + 1).padStart(2, '0')}${String(x.getDate()).padStart(2, '0')}`; };
+    const ev = (uid, title, start, end, extra = '') => `BEGIN:VEVENT\r\nUID:${uid}\r\nSUMMARY:${title}\r\nDTSTART;TZID=W. Europe Standard Time:${start}\r\nDTEND;TZID=W. Europe Standard Time:${end}\r\n${extra}END:VEVENT\r\n`;
+    const ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\n'
+      + ev('w1', 'Teambesprechung', `${d(-14)}T093000`, `${d(-14)}T103000`, 'RRULE:FREQ=WEEKLY;BYDAY=MO,TH\r\nLOCATION:Büro\r\n')
+      + ev('k1', 'Kundentermin Druckerei', `${d(1)}T140000`, `${d(1)}T153000`, 'DESCRIPTION:Andruck prüfen\\nMuster mitnehmen\r\n')
+      + `BEGIN:VEVENT\r\nUID:u1\r\nSUMMARY:Urlaub\r\nDTSTART;VALUE=DATE:${d(3)}\r\nDTEND;VALUE=DATE:${d(6)}\r\nEND:VEVENT\r\n`
+      + 'END:VCALENDAR\r\n';
+    return { data: ics, error: null };
+  }
+
   const client = {
     auth: {
       onAuthStateChange(cb) {
@@ -250,6 +272,7 @@
     from: query,
     rpc,
     storage: { from: () => storage },
+    functions: { invoke: invokeFn },
     channel() {
       let fn = null;
       const ch = {

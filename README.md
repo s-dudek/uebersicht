@@ -45,7 +45,9 @@ js/
   categories.js     Kategorien-Seite und -Fenster
   items.js          Todo-/Notiz-Fenster, Teilen
   events.js         Termine und Geburtstage
-  calendar.js       Kalender (Tag, Woche, Monat)
+  calendar.js       Kalender (Tag, Woche wie bei Google, Monat), Kalenderliste
+  cal-sources.js    Abschnitte ein/aus (cal_prefs), verknüpfte Kalender laden
+  ics.js            ICS-Abos lesen (Wiederholungen, Zeitzonen)
   meals.js          Gerichte, Wochenplan, Einkaufsliste
   training.js       Training: Woche, Einheiten mit Übungen zum Abhaken
   plan-import.js    Code einfügen: Gerichte, Einkauf und Training (Tag oder Woche)
