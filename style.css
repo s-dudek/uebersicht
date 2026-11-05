@@ -1400,7 +1400,15 @@ li.closed > ul { display: none; }
    Desktop – Seitenleiste, Aktionen in der Kopfleiste, Platz nutzen (ab 1024 px)
    ========================================================================== */
 @media (min-width: 1024px) {
-  .app.desk { display: grid; grid-template-columns: 248px minmax(0, 1fr); height: 100%; }
+  .app.desk { display: grid; grid-template-columns: 248px minmax(0, 1fr); height: 100%; transition: grid-template-columns .25s ease; }
+  /* Canvas: Seitenleiste eingefahren */
+  .app.desk.side-off { grid-template-columns: 0 minmax(0, 1fr); }
+  .app.desk.side-off .side { visibility: hidden; padding-inline: 0; }
+  .app.desk.side-off .watermark { left: 0; }
+  .ph-side { flex: none; width: 34px; height: 34px; margin-left: -6px; display: grid; place-items: center; border-radius: 50%; color: var(--ink); }
+  .ph-side svg { width: 20px; height: 20px; }
+  .ph-side:hover { background: var(--pale); }
+  .ph-side.on { color: var(--grey); }
   .desk-main { display: flex; flex-direction: column; min-width: 0; height: 100%; overflow: hidden; }
   :where(.main > *) { max-width: 1240px; }
   .main { padding: 20px 32px 40px; }

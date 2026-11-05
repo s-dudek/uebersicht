@@ -100,6 +100,7 @@ export const state = {
   doneOpen: new Set(),   // Todo-Listen, deren erledigte Einträge aufgeklappt sind
   folded: new Set(),    // zugeklappte Ordner in der Listenansicht
   calView: store('calView') || 'week',   // 'day' | 'week' | 'month'
+  inkSideOff: store('inkSideOff') === '1',   // Canvas am Desktop: Seitenleiste eingefahren
   homeDay: null,                         // Startseite: gezeigter Tag (null = heute)
   calAllOpen: false,                     // Ganztägiges: alle Zeilen zeigen
   calDate: null,        // gezeigter Tag im Kalender (YYYY-MM-DD)

@@ -33,7 +33,7 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   Bereiche mit Name `n`, Hintergrund `bg` (lines/dots/blank), Farbe `fc`, Layout `ly` im Dudek-CI (ink-layout.js) mit Angaben `lf` (Titel, Projekt, Nr., Kontakt), Gliederung (Notizen zuerst, Titel unter ihrem Bereich, „Auf der Fläche zeigen“),
   Werkzeugleiste: Umschalter Text/Zeichnen/Radieren, Auswahl als eigener Knopf (solange aktiv ruhen die anderen Werkzeuge),
   Eigenschaften-Leiste unten (`.ink-ctx`, contextHtml in ink.js): je nach Werkzeug/Auswahl Farbe, Stärke, Schrift, Radiergröße, Aktionen; rechts runder Knopf „Ursprungsansicht“,
-  Kopfleiste rechts: Bereich, Speichern | Raster aus/ein (Bereiche bleiben kariert), Finger, Gliederung | Rückgängig, Wiederholen.
+  Kopfleiste links (Desktop): Knopf ☰ fährt die Seitenleiste ein/aus (`state.inkSideOff`, gemerkt); rechts: Bereich, Speichern | Raster aus/ein (Bereiche bleiben kariert), Finger, Gliederung | Rückgängig, Wiederholen.
   Speichern-Fenster: links Bereiche, Vorlage samt Angaben (nachträglich), Format, Hintergrund; rechts große Vorschau.
   Text mit Schriftart `ff` (FONTS in ink-draw.js, Google Fonts in index.html), Schnitt `fw`, kursiv `i`; Ursprungsansicht = erster Bereich,
   Titel aus Strichen und Texten (`tx`). Handballen: großer Kontakt, Finger kurz nach dem Stift oder nahe der letzten Stiftstelle,

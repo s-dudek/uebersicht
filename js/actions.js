@@ -39,6 +39,7 @@ export function initActions() {
       case 'cal-move': calMove(+id); break;
       case 'home-day': state.homeDay = +id ? addDays(state.homeDay || ymd(new Date()), +id) : null; render(); break;
       case 'home-cal': state.calDate = id; navigate('calendar'); break;
+      case 'ink-side': state.inkSideOff = !state.inkSideOff; store('inkSideOff', state.inkSideOff ? '1' : ''); render(); break;
       case 'cal-allday': state.calAllOpen = !state.calAllOpen; render(); break;
       case 'new-event-menu': openNewEventMenu(); break;
       case 'cal-sources': case 'cal-toggle': case 'cal-link': case 'cal-unlink': case 'ext-ev': case 'g-connect': case 'g-disconnect': case 'cal-sync': calAction(t.dataset.act, id, t); break;
