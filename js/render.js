@@ -1,7 +1,7 @@
 // Hauptansicht zeichnen: Smartphone mit Kopfleiste und Leiste unten, Desktop mit Seitenleiste
 import { calDay, calTitle, renderCalendar } from './calendar.js';
 import { ctl } from './control.js';
-import { $app, catById, esc, isDesktop, state } from './core.js';
+import { $app, catById, esc, isDesktop, state, store } from './core.js';
 import { addDays, isoWeek, ymd } from './dates.js';
 import { folderIc } from './folders.js';
 import { homeBar, renderHome } from './home.js';
@@ -41,6 +41,7 @@ export function render() {
   const content = (PAGES[tab] || renderHome)();
   const inkOn = isInkView();
   if (!inkOn) leaveInk();
+  else store('inkFolder', state.list ?? '');   // zuletzt benutzter Canvas (Kachel „Notizen“ der Startseite)
   const ink = inkOn ? 'is-ink' : '';
   $app.innerHTML = desk
     ? `<div class="app desk ${inkOn && state.inkSideOff ? 'side-off' : ''}">

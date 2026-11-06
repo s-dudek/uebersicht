@@ -42,7 +42,7 @@ export function initActions() {
       case 'home-day': state.homeDay = +id ? addDays(state.homeDay || ymd(new Date()), +id) : null; render(); break;
       case 'home-cal': state.calDate = id; navigate('calendar'); break;
       case 'ink-side': state.inkSideOff = !state.inkSideOff; store('inkSideOff', state.inkSideOff ? '1' : ''); render(); break;
-      case 'tile-size': case 'home-edit': tileAction(t.dataset.act, id); break;
+      case 'tile-size': case 'home-edit': case 'home-canvas': tileAction(t.dataset.act, id); break;
       case 'note-sel': case 'note-pick': case 'note-sel-all': case 'note-sel-done': case 'note-sel-move': case 'note-sel-del': noteSelAction(t.dataset.act, id); break;
       case 'cal-allday': state.calAllOpen = !state.calAllOpen; render(); break;
       case 'new-event-menu': openNewEventMenu(); break;

@@ -5,7 +5,7 @@ import { deleteItem, saveItem, toggleTodo } from './data.js';
 import { noteFolders, saveCatOrder, todoLists } from './folders.js';
 import { ICON } from './icons.js';
 import { openItem } from './items.js';
-import { SIZES, setHomeEdit, setTileSize, tileSize } from './home-tiles.js';
+import { defaultSize, isPinTile, SIZES, setHomeEdit, setTileSize, tileSize } from './home-tiles.js';
 import { isPinned, pinKey, togglePin } from './pins.js';
 import { render } from './render.js';
 
@@ -61,9 +61,10 @@ export function openMenuFor(target, x, y) {
   const tileEl = target.closest('[data-tile]');
   if (tileEl) {
     if (tileEl.closest('.editing')) return false;
-    const key = tileEl.dataset.tile, cur = tileSize(key);
+    const key = tileEl.dataset.tile, cur = tileSize(key, defaultSize(key));
     const entries = [...SIZES.map(([k, label, icon]) => [icon, label, () => setTileSize(key, k), { on: k === cur }]), 'sep',
       ['pen', 'Home-Bildschirm bearbeiten', () => setHomeEdit(true)]];
+    if (isPinTile(key)) entries.push(['home', 'Von Home entfernen', () => togglePin(key)]);
     const order = orderEntry(tileEl);
     if (order) entries.splice(entries.indexOf('sep'), 0, order);
     showMenu(x, y, entries, null);

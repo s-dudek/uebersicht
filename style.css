@@ -258,6 +258,16 @@ button.pin-r:hover, .pin-t:hover { color: var(--mid); }
 .mt.sz-l { grid-column: span 4; grid-row: span 2; }
 .mt-h { display: flex; flex-direction: column; gap: 8px; }
 .mt.sz-m .mt-h, .mt.sz-l .mt-h { flex-direction: row; align-items: center; }
+.mt-h { min-width: 0; max-width: 100%; }
+.mt-h > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mt-ic { flex: none; display: grid; place-items: center; }
+/* Knopf direkt in den Canvas (Notizen, Notiz-Ordner) */
+.mt-ink { position: absolute; right: 10px; bottom: 10px; z-index: 2; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--ink); color: var(--green-l); }
+.mt-ink svg { width: 18px; height: 18px; }
+.mt-ink:active { transform: scale(.92); }
+.mt.sz-s .mt-ink { top: 10px; bottom: auto; }
+.mt.sz-s:has(.mt-ink) > i { right: 50px; }
+.mt:has(.mt-ink) .mt-list { padding-right: 40px; }
 .mt svg { width: 26px; height: 26px; flex: none; }
 .mt > i { position: absolute; top: 12px; right: 12px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--ink); color: var(--white); font-size: 12px; font-style: normal; line-height: 22px; text-align: center; }
 .mt-list { list-style: none; margin: 0; padding: 0; width: 100%; font-size: 14px; font-weight: 400; color: var(--mid); }

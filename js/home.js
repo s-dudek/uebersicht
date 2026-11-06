@@ -117,25 +117,25 @@ function pinCard({ key, type, obj }) {
     <button class="pin-more" data-act="open" data-id="${i.id}">Öffnen</button></article>`;
 }
 
-// Pinnwand („Meine Übersicht“); anheften geht per Rechtsklick am Computer
-function pinBoard(desk) {
+// Pinnwand („Meine Übersicht“, Desktop); anheften per Rechtsklick „Zu Home hinzufügen“
+function pinBoard() {
   const pins = pinned();
   return `<section class="dash-pins">
-      <div class="dp-h"><b>Meine Übersicht</b><span>${desk ? 'Rechtsklick auf eine Notiz, ein Todo oder eine Liste → „Zu Home hinzufügen“. Karten lange drücken zum Verschieben.' : 'Am Computer per Rechtsklick „Zu Home hinzufügen“ – erscheint auch hier.'}</span></div>
+      <div class="dp-h"><b>Meine Übersicht</b><span>Rechtsklick auf eine Notiz, ein Todo oder eine Liste → „Zu Home hinzufügen“. Karten lange drücken zum Verschieben.</span></div>
       ${pins.length ? `<div class="pins" data-cgrid="home">${pins.map(pinCard).join('')}</div>`
-        : `<div class="pins-empty">Noch leer. ${desk ? 'Füge in Todos oder Notizen per Rechtsklick „Zu Home hinzufügen“ hinzu.' : 'Am Computer in Todos oder Notizen per Rechtsklick „Zu Home hinzufügen“.'}</div>`}
+        : '<div class="pins-empty">Noch leer. Füge in Todos oder Notizen per Rechtsklick „Zu Home hinzufügen“ hinzu.</div>'}
     </section>`;
 }
 
 // Desktop: Datum, Tag im Kalender, Essen heute, Pinnwand
 function renderDashboard() {
   const today = ymd(new Date()), d = new Date();
-  if (!isDesktop()) return `<div class="dash-wrap">${renderTiles(today, d)}${state.homeEdit ? '' : pinBoard(false)}</div>`;
+  if (!isDesktop()) return `<div class="dash-wrap">${renderTiles(today, d)}</div>`;   // Angeheftetes ist dort eine Kachel
   return `<div class="dash-wrap">
     <header class="dash-head"><b>${d.toLocaleDateString('de-AT', { weekday: 'long' })}</b><span>${d.toLocaleDateString('de-AT', { day: 'numeric', month: 'long', year: 'numeric' })}</span></header>
     ${dayStrip(today)}
     ${mealsToday(today)}
-    ${pinBoard(true)}
+    ${pinBoard()}
   </div>`;
 }
 
