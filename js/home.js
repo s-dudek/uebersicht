@@ -5,6 +5,7 @@ import { askConfirm, esc, isDesktop, isTodoList, safeColor, sb, state } from './
 import { addDays, parseYmd, ymd } from './dates.js';
 import { catSym } from './folders.js';
 import { renderTiles } from './home-tiles.js';
+import { openTrash } from './trash.js';
 import { ICON, LOGO_MARK, LOGO_WORD } from './icons.js';
 import { SLOTS, cookOn, mealRow, mealsOn } from './meals.js';
 import { openSettings } from './panels.js';
@@ -20,6 +21,7 @@ export function renderHome() {
 
 export async function homeAction(k) {
   if (k === 'settings') return openSettings();
+  if (k === 'trash') return openTrash();
   if (k === 'logout' && (await askConfirm('Abmelden?', 'Abmelden'))) sb.auth.signOut();
 }
 

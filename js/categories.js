@@ -17,7 +17,6 @@ import {
 } from './core.js';
 import { insertCategory, loadAll } from './data.js';
 import { ICON, ITEM_ICONS } from './icons.js';
-import { removeFolderImages } from './ink-store.js';
 import { personPicker, shareMessage } from './items.js';
 import { render } from './render.js';
 import { closeSheet, openSheet } from './sheet.js';
@@ -166,12 +165,13 @@ export function openCategory(cid) {
 // Kategorie löschen (nur Besitzer) bzw. eine geteilte Kategorie verlassen
 export async function deleteCategory(cid) {
   const c = catById(cid);
-  if (!c || !(await askConfirm(`Kategorie „${c.name}“ löschen?`, 'Löschen', 'Die Einträge bleiben erhalten, nur ohne Kategorie.'))) return;
-  const { error } = await sb.from('categories').delete().eq('id', cid);
+  if (!c || !(await askConfirm(`Kategorie „${c.name}“ löschen?`, 'Löschen', 'Landet samt Canvas im Papierkorb (30 Tage wiederherstellbar). Die Einträge bleiben erhalten, bis dahin ohne Kategorie.'))) return;
+  // in den Papierkorb: nur markieren; endgültig gelöscht wird erst im Papierkorb bzw. nach 30 Tagen (trash.js)
+  const { error } = await sb.from('categories').update({ deleted_at: new Date().toISOString() }).eq('id', cid);
   if (error) return toast('Fehler: ' + error.message);
   if (state.list === cid) state.list = null;
-  removeFolderImages(cid).catch(() => {});   // Bilder der Handschrift in diesem Ordner
   closeSheet(); await loadAll();
+  toast(`„${c.name}“ in den Papierkorb gelegt`);
 }
 export async function leaveCategory(cid) {
   const c = catById(cid);

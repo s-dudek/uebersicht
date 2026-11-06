@@ -2,6 +2,7 @@
 import { askConfirm, esc, sb, state, toast } from './core.js';
 import { disablePush, enablePush, pushOn, pushSupport } from './reminders.js';
 import { render } from './render.js';
+import { openTrash, trashCount } from './trash.js';
 import { categoryOptions, closeSheet, openSheet } from './sheet.js';
 
 // ---------- Menü ----------
@@ -52,7 +53,7 @@ export function openSettings() {
       <div class="hint">${pushSupport() || 'Kommen auch bei geschlossener App. Einmal pro Gerät aktivieren (iPhone und Mac getrennt).'}</div>
     </div>
     <div class="menu-list">
-      <button class="menu-item" data-go="ctl-reset">Steuerknopf an Standardplatz setzen</button>
+      <button class="menu-item" data-go="trash">Papierkorb<span class="muted">${trashCount() || ''}</span></button>
       ${window.__DEMO ? '<button class="menu-item" data-go="reset">Beispieldaten zurücksetzen</button>' : ''}
     </div>`);
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
@@ -69,10 +70,7 @@ export function openSettings() {
     if (pushOn()) { await disablePush(); sw.classList.remove('on'); }
     else if (await enablePush()) sw.classList.add('on');
   });
-  sheet.querySelector('[data-go=ctl-reset]').addEventListener('click', () => {
-    try { localStorage.removeItem('uebersicht-ctl-pos'); } catch {}
-    location.reload();
-  });
+  sheet.querySelector('[data-go=trash]').addEventListener('click', () => { closeSheet(); openTrash(); });
   sheet.querySelector('[data-go=reset]')?.addEventListener('click', async () => {
     if (!(await askConfirm('Beispieldaten zurücksetzen?', 'Zurücksetzen'))) return;
     window.__resetDemo?.();

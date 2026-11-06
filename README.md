@@ -54,6 +54,7 @@ js/
   google-cal.js     Google-Kalender verbinden und Termine bearbeiten
   meals.js          Gerichte, Wochenplan, Einkaufsliste
   training.js       Training: Woche, Einheiten mit Übungen zum Abhaken
+  trash.js          Papierkorb: wiederherstellen, endgültig löschen (30 Tage)
   plan-import.js    Code einfügen: Gerichte, Einkauf und Training (Tag oder Woche)
   training-catalog.js  Übungs-Datenbank mit festen Nummern, kurze Trainings-Codes (TR-…)
   reminders.js      Erinnerungen und Push

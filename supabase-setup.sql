@@ -447,3 +447,10 @@ create table if not exists public.google_links (
 );
 alter table public.google_links enable row level security;
 revoke all on public.google_links from anon, authenticated;
+
+-- ==========================================================================
+-- Papierkorb: Gelöschtes wird nur markiert (deleted_at) und nach 30 Tagen endgültig gelöscht (App beim Laden).
+-- Wiederherstellen = deleted_at wieder leeren. Rechte wie beim Bearbeiten (bestehende Regeln).
+-- ==========================================================================
+alter table public.items add column if not exists deleted_at timestamptz;
+alter table public.categories add column if not exists deleted_at timestamptz;

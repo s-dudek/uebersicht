@@ -24,6 +24,7 @@ Deno.serve(async (req) => {
     .lte('remind_at', new Date().toISOString())
     .eq('reminded', false)
     .eq('done', false)
+    .is('deleted_at', null)   // nichts aus dem Papierkorb erinnern
     .limit(100);
   if (error) return new Response(error.message, { status: 500 });
 

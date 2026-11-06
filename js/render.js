@@ -5,6 +5,7 @@ import { $app, catById, esc, isDesktop, state } from './core.js';
 import { addDays, isoWeek, ymd } from './dates.js';
 import { folderIc } from './folders.js';
 import { homeBar, renderHome } from './home.js';
+import { trashCount } from './trash.js';
 import { inkHead, inkHeadTools, leaveInk, mountInk } from './ink.js';
 import { ICON, LOGO_MARK, LOGO_WORD } from './icons.js';
 import { renderMeals } from './meals.js';
@@ -85,6 +86,7 @@ function sidebar(tab) {
     <button class="btn block side-new" data-act="nav" data-id="quick">${ICON.plus} Neue Notiz</button>
     <nav class="side-nav">${NAV.filter((n) => n.key !== 'quick').map(item).join('')}</nav>
     <div class="side-foot">
+      <button class="sn" data-home="trash">${ICON.trash}<span>Papierkorb</span>${trashCount() ? `<i>${trashCount()}</i>` : ''}</button>
       <button class="sn" data-home="settings">${ICON.gear}<span>Einstellungen</span></button>
       <button class="sn out" data-home="logout">${ICON.power}<span>Abmelden</span></button>
     </div>

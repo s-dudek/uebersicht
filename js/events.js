@@ -2,7 +2,7 @@
 import { reloadGoogle, writableGoogle } from './cal-sources.js';
 import { calDay, hm, toMin } from './calendar.js';
 import { askConfirm, canDeleteItem, catById, debounce, esc, itemById, safeColor, sb, state, store, toast } from './core.js';
-import { saveItem, silentDelete } from './data.js';
+import { saveItem, silentDelete, trashItems } from './data.js';
 import { addDays, parseYmd, remindLabel } from './dates.js';
 import { showEventCard } from './event-view.js';
 import { openGoogleEvent } from './google-cal.js';
@@ -195,8 +195,8 @@ export function openEvent(id, { isNew = false } = {}) {
     sheet.querySelectorAll('[data-rem]').forEach((x) => x.addEventListener('click', () => setMeta({ remind: x.dataset.rem })));
     sheet.querySelector('#ev-cat').addEventListener('change', (x) => saveItem(id, { category_id: x.target.value || null }).then(() => renderShareArea(sheet, id)));
     sheet.querySelector('#ev-del')?.addEventListener('click', async () => {
-      if (!(await askConfirm(`„${evTitle(itemById(id))}“ löschen?`, 'Löschen'))) return;
-      clearSheetClose(); closeSheet(); silentDelete(id);
+      if (!(await askConfirm(`„${evTitle(itemById(id))}“ löschen?`, 'Löschen', 'Landet im Papierkorb.'))) return;
+      clearSheetClose(); closeSheet(); trashItems([id]);
     });
     renderShareArea(sheet, id);
     if (isNew && !itemById(id).title) setTimeout(() => sheet.querySelector('#ev-title')?.focus(), 50);

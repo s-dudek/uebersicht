@@ -1,6 +1,6 @@
 // Notizen: mehrere auswählen, dann verschieben oder löschen (Knopf „Auswählen“ im geöffneten Ordner)
 import { askConfirm, catById, esc, safeColor, state, toast } from './core.js';
-import { deleteItems, moveItems } from './data.js';
+import { moveItems, TRASH_DAYS, trashItems } from './data.js';
 import { noteFolders } from './folders.js';
 import { ICON } from './icons.js';
 import { notesIn } from './notes.js';
@@ -44,9 +44,9 @@ function openMoveSheet(ids) {
 
 async function removeSelected(ids) {
   const n = ids.length;
-  if (!(await askConfirm(`${n} ${n === 1 ? 'Notiz' : 'Notizen'} löschen?`, 'Löschen', 'Auch ihre Seiten im Canvas werden gelöscht.'))) return;
+  if (!(await askConfirm(`${n} ${n === 1 ? 'Notiz' : 'Notizen'} löschen?`, 'Löschen', `Landen im Papierkorb und lassen sich ${TRASH_DAYS} Tage lang wiederherstellen.`))) return;
   state.noteSel = null;
-  if (await deleteItems(ids)) toast(`${n} ${n === 1 ? 'Notiz' : 'Notizen'} gelöscht`);
+  if (await trashItems(ids)) toast(`${n} ${n === 1 ? 'Notiz' : 'Notizen'} in den Papierkorb gelegt`);
 }
 
 // Leiste unten (bzw. Kopfleiste am Desktop) während der Auswahl; schmal nur Symbole außer „Fertig“

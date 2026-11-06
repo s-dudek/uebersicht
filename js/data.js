@@ -4,6 +4,7 @@ import { openItem } from './items.js';
 import { deletePageTree } from './ink-store.js';
 import { checkReminders } from './reminders.js';
 import { render } from './render.js';
+import { purgeCategory } from './trash.js';
 
 // ====================================================================
 // Daten laden + Live-Updates
@@ -18,14 +19,60 @@ export async function loadAll() {
   ]);
   const err = c.error || m.error || i.error || s.error || p.error;
   if (err) { toast('Laden fehlgeschlagen: ' + err.message, 4000); return; }
-  state.categories = c.data;
+  // Papierkorb: Markiertes getrennt halten; Einträge einer gelöschten Kategorie erscheinen bis dahin „ohne Kategorie“
+  state.categories = c.data.filter((x) => !x.deleted_at);
   state.members = m.data;
-  state.items = i.data;
+  state.items = i.data.filter((x) => !x.deleted_at);
+  state.trash = { items: i.data.filter((x) => x.deleted_at), cats: c.data.filter((x) => x.deleted_at) };
   state.shares = s.data;
   state.profiles = Object.fromEntries(p.data.map((x) => [x.id, x]));
   state.loaded = true;
   render();
   setTimeout(checkReminders, 1200);
+  purgeOld();
+}
+
+// ---------- Papierkorb ----------
+export const TRASH_DAYS = 30;
+const expired = (x) => Date.now() - new Date(x.deleted_at).getTime() > TRASH_DAYS * 864e5;
+
+// in den Papierkorb legen (ohne Rückfrage – die stellt der Aufrufer)
+export async function trashItems(ids) {
+  const now = new Date().toISOString();
+  const moved = state.items.filter((i) => ids.includes(i.id));
+  state.items = state.items.filter((i) => !ids.includes(i.id));
+  moved.forEach((i) => { i.deleted_at = now; state.trash.items.unshift(i); });
+  render();
+  const { error } = await sb.from('items').update({ deleted_at: now }).in('id', ids);
+  if (error) { toast('Fehler: ' + error.message); await loadAll(); return false; }
+  return true;
+}
+
+export async function restoreItems(ids) {
+  const back = state.trash.items.filter((i) => ids.includes(i.id));
+  state.trash.items = state.trash.items.filter((i) => !ids.includes(i.id));
+  back.forEach((i) => { i.deleted_at = null; state.items.unshift(i); });
+  render();
+  const { error } = await sb.from('items').update({ deleted_at: null }).in('id', ids);
+  if (error) { toast('Fehler: ' + error.message); await loadAll(); }
+}
+
+// endgültig löschen (samt Canvas-Unterseite einer Notiz)
+export async function purgeItems(ids) {
+  const { error } = await sb.from('items').delete().in('id', ids);
+  if (error) { toast('Fehler: ' + error.message); return false; }
+  const notes = state.trash.items.filter((i) => ids.includes(i.id) && i.type === 'note').map((i) => i.id);
+  state.trash.items = state.trash.items.filter((i) => !ids.includes(i.id));
+  notes.forEach((id) => deletePageTree(id).catch(() => {}));
+  render();
+  return true;
+}
+
+// nach 30 Tagen still endgültig löschen (nur, was man selbst löschen darf)
+async function purgeOld() {
+  const items = state.trash.items.filter(expired).map((i) => i.id);
+  if (items.length) await purgeItems(items).catch(() => {});
+  for (const c of state.trash.cats.filter((x) => expired(x) && x.owner_id === state.me)) await purgeCategory(c.id, { silent: true }).catch(() => {});
 }
 
 const reload = debounce(loadAll, 300);
@@ -94,15 +141,13 @@ export async function saveItem(id, patch) {
   return { error };
 }
 
+// Löschen = in den Papierkorb (30 Tage wiederherstellbar)
 export async function deleteItem(id) {
   const i = itemById(id);
-  const what = { note: 'Notiz', todo: 'Todo', event: 'Termin', meal: 'Gericht' }[i?.type] || 'Eintrag';
-  if (!i || !(await askConfirm(`${what} „${i.title || 'Ohne Titel'}“ löschen?`, 'Löschen'))) return false;
-  const { error } = await sb.from('items').delete().eq('id', id);
-  if (error) { toast('Fehler: ' + error.message); return false; }
-  state.items = state.items.filter((x) => x.id !== id);
-  if (i.type === 'note') deletePageTree(id).catch(() => {});   // Unterseite der Notiz im Canvas mit löschen
-  render();
+  const what = { note: 'Notiz', todo: 'Todo', event: 'Termin', meal: 'Gericht', training: 'Training' }[i?.type] || 'Eintrag';
+  if (!i || !(await askConfirm(`${what} „${i.title || 'Ohne Titel'}“ löschen?`, 'Löschen', `Landet im Papierkorb und lässt sich ${TRASH_DAYS} Tage lang wiederherstellen.`))) return false;
+  if (!(await trashItems([id]))) return false;
+  toast('In den Papierkorb gelegt');
   return true;
 }
 
@@ -113,15 +158,6 @@ export async function moveItems(ids, categoryId) {
   render();
   const { error } = await sb.from('items').update({ category_id: categoryId }).in('id', ids);
   if (error) toast('Verschieben fehlgeschlagen: ' + error.message, 4000);
-}
-export async function deleteItems(ids) {
-  const { error } = await sb.from('items').delete().in('id', ids);
-  if (error) { toast('Fehler: ' + error.message); return false; }
-  const notes = state.items.filter((i) => ids.includes(i.id) && i.type === 'note').map((i) => i.id);
-  state.items = state.items.filter((i) => !ids.includes(i.id));
-  notes.forEach((id) => deletePageTree(id).catch(() => {}));   // Unterseiten im Canvas mit löschen
-  render();
-  return true;
 }
 export async function silentDelete(id) {
   state.items = state.items.filter((x) => x.id !== id);
