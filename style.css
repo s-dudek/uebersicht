@@ -80,11 +80,20 @@ html, body { margin: 0; height: 100%; position: fixed; inset: 0; width: 100%; ov
 #app { position: relative; z-index: 1; height: 100%; }
 body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: var(--safe-top); background: var(--white); z-index: 4; pointer-events: none; }
 
-/* Startbild: Zeichen hell auf dunkel, wird zum Ball und gibt die Startseite frei (js/splash.js) */
-.splash { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: var(--ink); overflow: hidden; }
-.splash > * { grid-area: 1 / 1; }
+/* Startbild: Zeichen hell auf dunkel, schaltet sich ab wie ein alter Röhrenfernseher (js/splash.js).
+   Außen der fast schwarze Grund, innen das „Bild“, das zusammenfällt */
+.splash { position: fixed; inset: 0; z-index: 1000; background: #041a20; overflow: hidden; }
+.splash-screen { position: absolute; inset: 0; display: grid; place-items: center; background: var(--ink); transform-origin: center; }
+.splash-screen > * { grid-area: 1 / 1; }
 .splash .logo-mark { width: min(34vmin, 170px); height: auto; fill: var(--green-l); }
-.splash-ball { width: min(16vmin, 80px); aspect-ratio: 1; border-radius: 50%; background: var(--green-l); transform: scale(0); }
+/* feine Bildzeilen wie auf einer Röhre */
+.splash-screen::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,.18) 0 1px, transparent 1px 3px); }
+.splash-glow { position: absolute; inset: 0; background: #fff; opacity: 0; }
+/* heller Strich und Punkt beim Abschalten */
+.crt-line, .crt-dot { position: absolute; background: #fff; pointer-events: none; }
+.crt-line { left: 0; right: 0; top: 50%; height: 3px; margin-top: -1.5px; box-shadow: 0 0 10px 2px var(--green-l), 0 0 36px 8px rgba(168, 190, 167, .55); }
+.crt-dot { left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; box-shadow: 0 0 14px 5px var(--green-l), 0 0 40px 12px rgba(168, 190, 167, .5); }
 /* Lesezeichen erst fallen lassen, wenn das Startbild weg ist */
 body.splashing .bookmark { animation-play-state: paused; }
 

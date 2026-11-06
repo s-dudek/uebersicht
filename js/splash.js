@@ -1,5 +1,7 @@
-// Startbild: Dudek-Zeichen hell auf dunkel, wird zu einem Ball gequetscht,
-// der Ball wächst schnell und gibt die Startseite frei. Läuft einmal pro App-Start.
+// Startbild: Dudek-Zeichen hell auf dunkel (mit leichten Bildzeilen wie auf einer Röhre).
+// Zum Schluss schaltet es sich ab wie ein alter Fernseher: das Bild fällt auf dunklem Grund zu einem hellen Strich
+// zusammen, der Strich zieht sich zu einem leuchtenden Punkt, der verlischt; dann gibt der Grund die App frei.
+// Läuft einmal pro App-Start.
 import { LOGO_MARK } from './icons.js';
 
 const el = document.getElementById('splash');
@@ -9,9 +11,9 @@ let done = false;
 
 export function initSplash() {
   if (!el) return;
-  el.innerHTML = `${LOGO_MARK}<i class="splash-ball"></i>`;
+  el.innerHTML = `<div class="splash-screen">${LOGO_MARK}<i class="splash-glow"></i></div>`;
   document.body.classList.add('splashing');
-  el.firstElementChild.animate(
+  el.querySelector('.logo-mark').animate(
     [{ opacity: 0, transform: 'scale(.85)' }, { opacity: 1, transform: 'scale(1)' }],
     { duration: 260, easing: 'ease-out', fill: 'both' });
 }
@@ -33,32 +35,33 @@ async function play() {
     await el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, fill: 'both' }).finished;
     return finish();
   }
-  const mark = el.querySelector('.logo-mark');
-  const ball = el.querySelector('.splash-ball');
+  const screen = el.querySelector('.splash-screen'), glow = el.querySelector('.splash-glow');
+  const add = (cls) => { const x = document.createElement('i'); x.className = cls; el.appendChild(x); return x; };
 
-  // 1. Zeichen zusammenquetschen, Ball entsteht an seiner Stelle
-  const squash = { duration: 380, easing: 'cubic-bezier(.5,0,.6,1)', fill: 'both' };
-  mark.animate([
-    { transform: 'scale(1)', opacity: 1 },
-    { transform: 'scale(1.18, .72)', opacity: 1, offset: .45 },
-    { transform: 'scale(.4)', opacity: 0 },
-  ], squash);
-  await ball.animate([
-    { transform: 'scale(0)', offset: 0 },
-    { transform: 'scale(0)', offset: .45 },
-    { transform: 'scale(1.12, .88)', offset: .8 },
-    { transform: 'scale(1)' },
-  ], squash).finished;
+  // 1. kurzes Flackern, dann fällt das Bild senkrecht zu einem Strich zusammen und wird dabei hell
+  await el.querySelector('.logo-mark').animate(
+    [{ opacity: 1 }, { opacity: .55 }, { opacity: 1 }, { opacity: .8 }, { opacity: 1 }],
+    { duration: 160, easing: 'steps(5)' }).finished;
+  const collapse = { duration: 260, easing: 'cubic-bezier(.7,0,.9,.45)', fill: 'both' };
+  glow.animate([{ opacity: 0 }, { opacity: .2, offset: .4 }, { opacity: 1 }], collapse);
+  await screen.animate([{ transform: 'scale(1, 1)' }, { transform: 'scale(1, .006)' }], collapse).finished;
 
-  // 2. Ball wächst über den ganzen Bildschirm und nimmt die Hintergrundfarbe an
-  const cover = Math.hypot(window.innerWidth, window.innerHeight) / ball.offsetWidth + 1;
-  const css = getComputedStyle(document.documentElement);
-  await ball.animate([
-    { transform: 'scale(1)', backgroundColor: css.getPropertyValue('--green-l').trim() },
-    { transform: `scale(${cover})`, backgroundColor: css.getPropertyValue('--bg').trim() },
-  ], { duration: 480, easing: 'cubic-bezier(.55,0,.75,.2)', fill: 'both' }).finished;
+  // 2. der helle Strich zieht sich waagrecht zu einem Punkt zusammen
+  const line = add('crt-line');
+  screen.remove();
+  await line.animate([{ transform: 'scaleX(1)' }, { transform: 'scaleX(.004)' }],
+    { duration: 220, easing: 'cubic-bezier(.6,0,.85,.4)', fill: 'both' }).finished;
 
-  // 3. sanft ausblenden, darunter liegt die fertige Startseite
-  await el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, fill: 'both' }).finished;
+  // 3. der Punkt glüht kurz nach und verlischt
+  const dot = add('crt-dot');
+  line.remove();
+  await dot.animate([
+    { transform: 'scale(.6)', opacity: 1 },
+    { transform: 'scale(1)', opacity: 1, offset: .3 },
+    { transform: 'scale(0)', opacity: 0 },
+  ], { duration: 320, easing: 'ease-out', fill: 'both' }).finished;
+
+  // 4. dunkler Grund blendet aus, darunter die fertige App
+  await el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 220, easing: 'ease-out', fill: 'both' }).finished;
   finish();
 }
