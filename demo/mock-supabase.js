@@ -400,6 +400,5 @@
     };
   };
   window.__DEMO = true;
-  window.__DEMO_TILES = { todos: ['c-einkauf', ''], notes: ['c-urlaub'], categories: ['c-haushalt'] };
   window.APP_CONFIG = { SUPABASE_URL: 'https://demo.local', SUPABASE_KEY: 'demo' };
 })();

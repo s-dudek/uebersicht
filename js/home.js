@@ -136,7 +136,7 @@ function renderDashboard() {
   </div>`;
 }
 
-// Smartphone/Tablet: Kacheln – groß der Kalender mit dem heutigen Datum, daneben und darunter die Bereiche
+// Smartphone/Tablet: Kacheln – groß der Kalender mit dem heutigen Datum, daneben Todos und Notizen, darunter Gerichte und Training
 function renderTiles(today, d) {
   const count = { todos: state.items.filter((i) => i.type === 'todo' && !i.done).length, notes: state.items.filter((i) => i.type === 'note').length };
   const tile = (key, icon, label) => `<button class="mt mt-${key}" data-act="nav" data-id="${key}">
@@ -146,7 +146,7 @@ function renderTiles(today, d) {
       <button class="mt mt-cal" data-act="home-cal" data-id="${today}" aria-label="Kalender">
         <small>${d.toLocaleDateString('de-AT', { weekday: 'long' })}</small><b>${d.getDate()}</b><span>${d.toLocaleDateString('de-AT', { month: 'long', year: 'numeric' })}</span></button>
       ${tile('todos', 'todos', 'Todos')}${tile('notes', 'notes', 'Notizen')}
-      ${tile('meals', 'pot', 'Gerichte')}${tile('training', 'dumbbell', 'Training')}${tile('categories', 'tag', 'Kategorien')}
+      ${tile('meals', 'pot', 'Gerichte')}${tile('training', 'dumbbell', 'Training')}
     </div>
     ${pinBoard(false)}
   </div>`;

@@ -2,7 +2,7 @@
 import { deleteCategory, leaveCategory, openCategory } from './categories.js';
 import { $app, COLORS, canDeleteItem, catById, esc, itemById, safeColor, state } from './core.js';
 import { deleteItem, saveItem, toggleTodo } from './data.js';
-import { noteFolders, todoLists } from './folders.js';
+import { noteFolders, saveCatOrder, todoLists } from './folders.js';
 import { ICON } from './icons.js';
 import { openItem } from './items.js';
 import { isPinned, pinKey, togglePin } from './pins.js';
@@ -10,7 +10,7 @@ import { render } from './render.js';
 
 let menuEl = null;
 
-function closeMenu() {
+export function closeMenu() {
   menuEl?.remove();
   menuEl = null;
 }
@@ -43,6 +43,36 @@ function folderMenu(c) {
   return entries;
 }
 
+// Reihenfolge in einer Kachel-Übersicht (Ordner, Pinnwand) ändern – Alternative zum Ziehen
+function orderEntry(el) {
+  const grid = el?.closest('[data-cgrid]');
+  if (!grid) return null;
+  const key = el.dataset.cdrag, ids = [...grid.querySelectorAll('[data-cdrag]')].map((x) => x.dataset.cdrag), k = ids.indexOf(key);
+  const to = (n) => () => { const rest = ids.filter((x) => x !== key); rest.splice(n, 0, key); saveCatOrder(grid.dataset.cgrid, rest); };
+  const order = [['Ganz nach vorne', to(0), k > 0], ['Eine Stelle nach vorne', to(k - 1), k > 0],
+    ['Eine Stelle nach hinten', to(k + 1), k < ids.length - 1], ['Ganz nach hinten', to(ids.length - 1), k < ids.length - 1]].filter((o) => o[2]);
+  return order.length ? { order } : null;
+}
+
+// Menü zu einem Element (Eintrag, Ordner-Karte oder Karte der Pinnwand) – Rechtsklick oder langes Drücken
+export function openMenuFor(target, x, y) {
+  const itemEl = target.closest('[data-drag], [data-act="open"][data-id]');
+  const folderEl = target.closest('.fcard[data-cdrag], .fcol-i[data-id]');
+  const pinEl = target.closest('[data-pin]');
+  let i = itemEl && itemById(itemEl.dataset.drag || itemEl.dataset.id);
+  let c = !i && folderEl && catById(folderEl.dataset.cdrag || folderEl.dataset.id);
+  if (!i && !c && pinEl) {
+    const key = pinEl.dataset.pin;
+    if (key.startsWith('i:')) i = itemById(key.slice(2)); else c = catById(key.slice(2));
+  }
+  if (!c && !i) return false;
+  const entries = c ? folderMenu(c) : itemMenu(i);
+  const order = orderEntry(target.closest('[data-cgrid] [data-cdrag]'));
+  if (order) entries.splice(entries.indexOf('sep'), 0, order);
+  showMenu(x, y, entries, i || null);
+  return true;
+}
+
 function showMenu(x, y, entries, item) {
   closeMenu();
   const actions = [];
@@ -53,6 +83,10 @@ function showMenu(x, y, entries, item) {
         <button class="cm-color none ${!e.colors.meta?.color ? 'on' : ''}" data-col="" aria-label="Keine Farbe"></button>
         ${COLORS.map((c) => `<button class="cm-color ${e.colors.meta?.color === c ? 'on' : ''}" data-col="${c}" style="background:${safeColor(c)}" aria-label="Farbe"></button>`).join('')}
       </div>`;
+    }
+    if (e.order) {
+      const subs = e.order.map(([label, fn]) => { actions.push(fn); return `<button class="cm-i" data-i="${actions.length - 1}"><span>${esc(label)}</span></button>`; }).join('');
+      return `<button class="cm-i" data-sub>${ICON.move}<span>Verschieben</span>${ICON.chevR}</button><div class="cm-sub" hidden>${subs}</div>`;
     }
     if (e.move) {
       return `<button class="cm-i" data-sub>${ICON.move}<span>Verschieben nach</span>${ICON.chevR}</button>
@@ -92,7 +126,7 @@ function showMenu(x, y, entries, item) {
 }
 
 export function initContextMenu() {
-  // Nur mit der Maus: am Touchscreen bleibt langes Drücken fürs Ziehen reserviert
+  // Rechtsklick nur mit der Maus; am Touchscreen öffnet langes Drücken auf Ordner und Karten das Menü (drag.js)
   let pointer = 'mouse';
   document.addEventListener('pointerdown', (e) => {
     pointer = e.pointerType;
@@ -102,20 +136,8 @@ export function initContextMenu() {
   window.addEventListener('resize', closeMenu);
   document.addEventListener('scroll', closeMenu, true);
 
+  // innerster Treffer zählt: Eintrag vor Ordner vor Karte auf der Startseite
   $app.addEventListener('contextmenu', (e) => {
-    if (pointer !== 'mouse') return;
-    // innerster Treffer zählt: Eintrag vor Ordner vor Karte auf der Startseite
-    const itemEl = e.target.closest('[data-drag], [data-act="open"][data-id]');
-    const folderEl = e.target.closest('.fcard[data-cdrag], .fcol-i[data-id]');
-    const pinEl = e.target.closest('[data-pin]');
-    let i = itemEl && itemById(itemEl.dataset.drag || itemEl.dataset.id);
-    let c = !i && folderEl && catById(folderEl.dataset.cdrag || folderEl.dataset.id);
-    if (!i && !c && pinEl) {
-      const key = pinEl.dataset.pin;
-      if (key.startsWith('i:')) i = itemById(key.slice(2)); else c = catById(key.slice(2));
-    }
-    if (!c && !i) return;
-    e.preventDefault();
-    showMenu(e.clientX, e.clientY, c ? folderMenu(c) : itemMenu(i), i || null);
+    if (pointer === 'mouse' && openMenuFor(e.target, e.clientX, e.clientY)) e.preventDefault();
   });
 }

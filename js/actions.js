@@ -1,6 +1,6 @@
 // Tippen und Absenden in der Hauptansicht
 import { calAction, calMove, scrollCal } from './calendar.js';
-import { openCategory, openNewList, toggleTile } from './categories.js';
+import { openCategory, openNewList } from './categories.js';
 import { $app, catById, isTodoList, sb, state, store, toast } from './core.js';
 import { createNote, createTodo, toggleTodo } from './data.js';
 import { addDays, mondayOf, ymd } from './dates.js';
@@ -55,10 +55,8 @@ export function initActions() {
       case 'week-today': state.weekStart = mondayOf(new Date()); render(); break;
       case 'goto-shop': state.tab = 'todos'; state.keepList = true; state.list = shopCat()?.id ?? null; render(); break;
       case 'demo-plan': importPlan(window.__DEMO_PLAN()).then((r) => { render(); toast(`${r.meals} Gerichte und ${r.added} Einkäufe übernommen`); }); break;
-      case 'tile-toggle': toggleTile(t.dataset.tt, id); break;
       case 'fold': state.folded.has(id) ? state.folded.delete(id) : state.folded.add(id); render(); break;
       case 'new-note-in': createNote(id || null); break;
-      case 'new-cat': openNewList({ mode: 'category' }); break;
       case 'list-edit': openCategory(id); break;
       case 'new-note': createNote(); break;
       case 'note-mode': state.noteMode = id === 'ink' ? 'ink' : 'text'; render(); break;

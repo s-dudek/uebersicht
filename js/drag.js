@@ -2,11 +2,13 @@
 import { $app, catById, itemById, state, toast } from './core.js';
 import { saveItem } from './data.js';
 import { saveCatOrder } from './folders.js';
+import { closeMenu, openMenuFor } from './menu.js';
 import { applyNoteOrder, flatOrder } from './groups.js';
 import { render } from './render.js';
 
 export function initCategorySort() {
   // ---------- Ordner in der Übersicht umsortieren: lange drücken und an eine andere Stelle ziehen ----------
+  // Am Touchscreen öffnet langes Drücken erst das Menü (wie Rechtsklick); wer dann weiterzieht, sortiert um.
   const HOLD = 380, SLOP = 8;
   let press = null, g = null, swallow = false;
   const begin = () => {
@@ -58,14 +60,22 @@ export function initCategorySort() {
     if (e.button > 0) return;
     const el = e.target.closest('[data-cgrid] [data-cdrag]');
     if (!el || e.target.closest('input, textarea, .tcheck, .pin-x')) return;   // Bedienelemente in Karten nicht als Ziehen werten
-    press = { el, x: e.clientX, y: e.clientY, t: setTimeout(() => { if (press) begin(); }, HOLD) };
+    const touch = e.pointerType !== 'mouse';
+    press = { el, x: e.clientX, y: e.clientY, menu: false, t: setTimeout(() => {
+      if (!press) return;
+      if (touch && openMenuFor(press.el, press.x, press.y)) { press.menu = true; press.el.classList.remove('pressing'); navigator.vibrate?.(10); }
+      else begin();
+    }, HOLD) };
     el.classList.add('pressing');
   });
   document.addEventListener('pointermove', (e) => {
     if (g) { e.preventDefault(); return move(e.clientX, e.clientY); }
+    // Menü offen und Finger zieht weiter: Menü zu, Umsortieren beginnt
+    if (press?.menu) { if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > SLOP * 2) { closeMenu(); begin(); press = null; } return; }
     if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > SLOP) { clearTimeout(press.t); press.el.classList.remove('pressing'); press = null; }
   }, { passive: false });
   const up = (cancel) => () => {
+    if (press?.menu) { swallow = true; setTimeout(() => (swallow = false), 400); }   // Loslassen öffnet den Ordner nicht
     if (press) { clearTimeout(press.t); press.el.classList.remove('pressing'); press = null; }
     if (g) { swallow = true; setTimeout(() => (swallow = false), 60); finish(cancel); }
   };

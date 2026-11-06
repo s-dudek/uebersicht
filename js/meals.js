@@ -1,5 +1,4 @@
 // Bereich Gerichte: Wochenplan, Einkaufsliste, Übernahme aus einem Code
-import { isTile, toggleTile } from './categories.js';
 import { canDeleteItem, debounce, esc, itemById, sb, state, toast } from './core.js';
 import { deleteItem, insertCategory, loadAll, saveItem } from './data.js';
 import { addDays, dayName, isoWeek, parseYmd, ymd } from './dates.js';
@@ -133,17 +132,16 @@ export async function importPlan(plan) {
   const gerichte = (plan.gerichte || []).filter((g) => g && g.datum && g.titel);
   const einkauf = (plan.einkauf || []).filter((e) => e && e.name);
 
-  // 1. Kategorie "Wocheneinkauf" sicherstellen (Liste, als Kachel)
+  // 1. Kategorie "Wocheneinkauf" sicherstellen (als Todo-Liste)
   let cat = shopCat();
   if (!cat) {
     const { data, error } = await insertCategory({ name: SHOP_NAME, color: '#7FA08A', todo_list: true });
     if (error) throw error;
     state.categories.push(data); cat = data;
-    toast('Kategorie „Wocheneinkauf“ angelegt. Teile sie unter Kategorien mit deiner Freundin.', 5000);
+    toast('Liste „Wocheneinkauf“ angelegt. Teilen kannst du sie in den Todos über „Bearbeiten“.', 5000);
   } else if (!cat.todo_list && cat.owner_id === state.me) {
     await sb.from('categories').update({ todo_list: true }).eq('id', cat.id); cat.todo_list = true;
   }
-  if (!isTile('todos', cat.id)) toggleTile('todos', cat.id);
 
   // 2. Abgehakte Einkäufe löschen
   for (const i of state.items.filter((x) => x.type === 'todo' && x.category_id === cat.id && x.done)) {

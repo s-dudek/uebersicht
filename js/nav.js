@@ -13,7 +13,6 @@ export const NAV = [
   { key: 'calendar', label: 'Kalender', icon: 'calendar' },
   { key: 'training', label: 'Training', icon: 'dumbbell' },
   { key: 'quick', label: 'Neue Notiz', icon: 'notePlus' },
-  { key: 'categories', label: 'Kategorien', icon: 'tag' },
 ];
 
 // transition: Funktion, die den Seitenwechsel animiert ausführt (Steuerknopf), sonst sofort

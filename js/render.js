@@ -1,6 +1,5 @@
 // Hauptansicht zeichnen: Smartphone mit Kopfleiste und Leiste unten, Desktop mit Seitenleiste
 import { calDay, calTitle, renderCalendar } from './calendar.js';
-import { renderCategoryPage } from './categories.js';
 import { ctl } from './control.js';
 import { $app, catById, esc, isDesktop, state } from './core.js';
 import { addDays, isoWeek, ymd } from './dates.js';
@@ -18,7 +17,7 @@ import { renderTodos, todosIn } from './todos.js';
 // Dudek-Zeichen als Wasserzeichen hinter allem
 const WATERMARK = `<div class="watermark" aria-hidden="true">${LOGO_MARK}</div>`;
 
-const PAGES = { home: renderHome, todos: renderTodos, notes: renderNotes, categories: renderCategoryPage, meals: renderMeals, training: renderTraining, calendar: renderCalendar };
+const PAGES = { home: renderHome, todos: renderTodos, notes: renderNotes, meals: renderMeals, training: renderTraining, calendar: renderCalendar };
 
 export function render() {
   if (!state.me || !state.loaded) return;
@@ -115,17 +114,15 @@ function actionsFor(tab) {
   if (tab === 'training') {
     return `${actBtn('week-prev', 'chevL', 'Vorige Woche', { text: false })}<button class="dk wk-now" data-act="week-today"><span>KW ${isoWeek(state.weekStart)}</span></button>${actBtn('week-next', 'chevR', 'Nächste Woche', { text: false })}${actBtn('import-plan', 'plus', 'Code', { primary: true })}`;
   }
-  if (tab === 'categories') return actBtn('new-cat', 'plus', 'Neue Kategorie', { primary: true });
   return '';
 }
 
 // ---------- Kopfleiste (hängt am oberen Rand) ----------
-const TITLES = { todos: 'Todos', notes: 'Notizen', categories: 'Kategorien', meals: 'Gerichte', training: 'Training', calendar: 'Kalender' };
+const TITLES = { todos: 'Todos', notes: 'Notizen', meals: 'Gerichte', training: 'Training', calendar: 'Kalender' };
 
 function pageCount(tab) {
   if (tab === 'todos') return state.items.filter((i) => i.type === 'todo' && !i.done).length;
   if (tab === 'notes') return state.items.filter((i) => i.type === 'note').length;
-  if (tab === 'categories') return state.categories.length;
   if (tab === 'meals') return state.items.filter((i) => i.type === 'meal' && i.due_date >= state.weekStart && i.due_date <= addDays(state.weekStart, 6)).length;
   if (tab === 'training') return state.items.filter((i) => i.type === 'training' && i.due_date >= state.weekStart && i.due_date <= addDays(state.weekStart, 6)).length;
   return 0;
@@ -161,5 +158,5 @@ function pageHead(tab, desk) {
   } else {
     left = `<b>${TITLES[tab]}</b>${cnt(pageCount(tab))}`;
   }
-  return `<header class="pagehead"><div class="ph-in ${tab === 'calendar' ? 'wide' : ''}">${left}${tools}</div></header>`;
+  return `<header class="pagehead ${isInkView() ? 'is-ink' : ''}"><div class="ph-in ${tab === 'calendar' ? 'wide' : ''}">${left}${tools}</div></header>`;
 }

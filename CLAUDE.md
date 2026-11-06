@@ -25,7 +25,10 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
 - `style.css` ist nach Bereichen gegliedert (Grundlagen, Anmeldung, Startseite, …, Handschrift, Desktop, Animationen). Farben als Variablen in `:root`.
 - Layout: unter 1024 px Smartphone/Tablet (Steuerknopf unten rechts auf Unterseiten: tippen = Startseite; Leiste unten), ab 1024 px Desktop mit Seitenleiste (`isDesktop()`).
 - Startseite (`home.js`): Desktop Übersicht (Datum, Tag im Kalender, Essen heute, Pinnwand); schmal dunkelgrüne Leiste (`homeBar`: Logo, runder Knopf Neue Notiz,
-  Einstellungen, Abmelden) und Kacheln: Kalender groß mit Datum (führt zum Kalender), Todos, Notizen, Gerichte, Training, Kategorien; darunter Pinnwand.
+  Einstellungen, Abmelden) und Kacheln: Kalender groß mit Datum (führt zum Kalender), Todos, Notizen, Gerichte, Training; darunter Pinnwand.
+  Kopfleisten der Bereiche schmal im selben Dunkelgrün (außer Canvas). Einen eigenen Bereich „Kategorien“ gibt es nicht mehr (Ordner in Todos/Notizen).
+- Menü (`menu.js`): Rechtsklick (Maus) bzw. langes Drücken auf Ordner/Karten am Touchscreen (drag.js; weiterziehen = umsortieren),
+  mit „Verschieben“ (Reihenfolge) und „Zu Home hinzufügen“.
 - Startbild (`splash.js`): nur das Zeichen klappt wie ein altes Fernsehbild zu Strich und Punkt zusammen; beim Aufleuchten blendet der dunkle Grund schon aus.
 - `render()` baut die Ansicht neu auf; während Gesten `render.hold = true` setzen, danach `render.pending` abarbeiten.
 - Canvas (früher „Handschrift“, Code `js/ink*.js`): je Notiz-Ordner eine Startseite in `ink_pages`, Titel führen zu Unterseiten, A4-Bereiche auf dem 25er-Raster.
