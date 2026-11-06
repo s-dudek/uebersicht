@@ -1,7 +1,6 @@
-// Startbild: Dudek-Zeichen hell auf dunkel.
-// Zum Schluss schaltet es sich ab wie ein alter Fernseher: das Bild fällt auf dunklem Grund zu einem hellen Strich
-// zusammen, der Strich zieht sich zu einem leuchtenden Punkt, der verlischt; dann gibt der Grund die App frei.
-// Läuft einmal pro App-Start.
+// Startbild: Dudek-Zeichen hell auf dunkel. Zum Schluss klappt nur das Zeichen zusammen wie das Bild eines alten
+// Fernsehers: es wird zu einem leuchtenden Strich (dabei verschwindet schon der dunkle Grund und die App ist zu sehen),
+// der Strich zieht sich zu einem Punkt, der verlischt. Läuft einmal pro App-Start.
 import { LOGO_MARK } from './icons.js';
 
 const el = document.getElementById('splash');
@@ -11,8 +10,8 @@ let done = false;
 
 export function initSplash() {
   if (!el) return;
-  el.innerHTML = `<div class="splash-screen">${LOGO_MARK}<i class="splash-glow"></i></div>`;
-  el.querySelector('.logo-mark').animate(
+  el.innerHTML = LOGO_MARK;
+  el.firstElementChild.animate(
     [{ opacity: 0, transform: 'scale(.85)' }, { opacity: 1, transform: 'scale(1)' }],
     { duration: 260, easing: 'ease-out', fill: 'both' });
 }
@@ -24,39 +23,37 @@ export function splashReady() {
   setTimeout(play, Math.max(0, MIN_SHOW - (performance.now() - started)));
 }
 
-function finish() {
-  el.remove();
-}
-
 async function play() {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
     await el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, fill: 'both' }).finished;
-    return finish();
+    return el.remove();
   }
-  const screen = el.querySelector('.splash-screen'), glow = el.querySelector('.splash-glow');
-  const add = (cls) => { const x = document.createElement('i'); x.className = cls; el.appendChild(x); return x; };
+  const logo = el.firstElementChild;
+  // hell leuchtend, mit dunklem Saum, damit Strich und Punkt auch vor der hellen App sichtbar bleiben
+  const glow = 'brightness(3) drop-shadow(0 0 2px rgba(12,55,65,.9)) drop-shadow(0 0 10px #A8BEA7) drop-shadow(0 0 22px rgba(12,55,65,.45))';
+  const bg = getComputedStyle(el).backgroundColor;
 
-  // 1. das Bild fällt senkrecht zu einem Strich zusammen und wird dabei hell
-  const collapse = { duration: 260, easing: 'cubic-bezier(.7,0,.9,.45)', fill: 'both' };
-  glow.animate([{ opacity: 0 }, { opacity: .2, offset: .4 }, { opacity: 1 }], collapse);
-  await screen.animate([{ transform: 'scale(1, 1)' }, { transform: 'scale(1, .006)' }], collapse).finished;
+  // 1. Zeichen klappt senkrecht zu einem Strich zusammen und leuchtet hell auf;
+  //    ab dem Aufleuchten blendet der dunkle Grund aus und gibt die App frei
+  const collapse = { duration: 280, easing: 'cubic-bezier(.7,0,.9,.45)', fill: 'both' };
+  setTimeout(() => el.animate([{ backgroundColor: bg }, { backgroundColor: 'rgba(0,0,0,0)' }],
+    { duration: 320, easing: 'ease-out', fill: 'both' }), 170);
+  await logo.animate([
+    { transform: 'scale(1, 1)', filter: 'brightness(1)' },
+    { transform: 'scale(1.6, .04)', filter: glow },
+  ], collapse).finished;
 
-  // 2. der helle Strich zieht sich waagrecht zu einem Punkt zusammen
-  const line = add('crt-line');
-  screen.remove();
-  await line.animate([{ transform: 'scaleX(1)' }, { transform: 'scaleX(.004)' }],
-    { duration: 220, easing: 'cubic-bezier(.6,0,.85,.4)', fill: 'both' }).finished;
+  // 2. der Strich zieht sich zu einem Punkt zusammen
+  await logo.animate([
+    { transform: 'scale(1.6, .04)', filter: glow },
+    { transform: 'scale(.05, .04)', filter: glow },
+  ], { duration: 220, easing: 'cubic-bezier(.6,0,.85,.4)', fill: 'both' }).finished;
 
   // 3. der Punkt glüht kurz nach und verlischt
-  const dot = add('crt-dot');
-  line.remove();
-  await dot.animate([
-    { transform: 'scale(.6)', opacity: 1 },
-    { transform: 'scale(1)', opacity: 1, offset: .3 },
-    { transform: 'scale(0)', opacity: 0 },
-  ], { duration: 320, easing: 'ease-out', fill: 'both' }).finished;
-
-  // 4. dunkler Grund blendet aus, darunter die fertige App
-  await el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 220, easing: 'ease-out', fill: 'both' }).finished;
-  finish();
+  await logo.animate([
+    { transform: 'scale(.05, .04)', opacity: 1, filter: glow },
+    { transform: 'scale(.08, .065)', opacity: 1, filter: glow, offset: .3 },
+    { transform: 'scale(0, 0)', opacity: 0, filter: glow },
+  ], { duration: 300, easing: 'ease-out', fill: 'both' }).finished;
+  el.remove();
 }

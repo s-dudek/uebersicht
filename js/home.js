@@ -4,15 +4,14 @@ import { allChip, dayContent, hm, openAttr } from './calendar.js';
 import { askConfirm, esc, isDesktop, isTodoList, safeColor, sb, state } from './core.js';
 import { addDays, parseYmd, ymd } from './dates.js';
 import { catSym } from './folders.js';
-import { ICON } from './icons.js';
+import { ICON, LOGO_MARK, LOGO_WORD } from './icons.js';
 import { SLOTS, cookOn, mealRow, mealsOn } from './meals.js';
-import { NAV } from './nav.js';
 import { openSettings } from './panels.js';
 import { pinned } from './pins.js';
 import { dueTag } from './todos.js';
 
-// Startseite – auf allen Geräten als Übersicht: Datum, Kalender-Kachel, Essen heute, eigene Pinnwand.
-// Am Smartphone/Tablet zusätzlich oben Einstellungen/Abmelden und die Bereiche als Kacheln (dort gibt es keine Seitenleiste).
+// Startseite – Desktop: Übersicht (Datum, Tag im Kalender, Essen heute, Pinnwand);
+// Smartphone/Tablet: Leiste oben (homeBar) und Kacheln für Kalender und Bereiche, darunter die Pinnwand.
 export function renderHome() {
   ensureExternal();
   return renderDashboard();
@@ -23,7 +22,7 @@ export async function homeAction(k) {
   if (k === 'logout' && (await askConfirm('Abmelden?', 'Abmelden'))) sb.auth.signOut();
 }
 
-// ---------- Kachel „Tag im Kalender“: Desktop als Zeitleiste, schmal als Liste ----------
+// ---------- Desktop: Kachel „Tag im Kalender“ als Zeitleiste ----------
 const DAY_FROM = 6 * 60, DAY_TO = 24 * 60;   // sichtbarer Zeitraum der Tagesleiste
 
 // Name des gezeigten Tags: Heute, Morgen, Gestern oder Wochentag mit Datum
@@ -53,15 +52,15 @@ function dayStrip(today) {
       <button class="lgear ds-nav" data-act="home-day" data-id="1" aria-label="Tag vor">${ICON.chevR}</button>
       ${isToday ? '' : '<button class="chip ds-today" data-act="home-day" data-id="0">Heute</button>'}
       <span class="th-sp"></span>
-      <button class="link-more" data-act="new-event" data-id="${day}" aria-label="Neuer Termin">${ICON.plus}<span>Termin</span></button>
+      <button class="link-more" data-act="new-event" data-id="${day}">${ICON.plus} Termin</button>
       <button class="lgear" data-act="cal-sources" data-id="home" aria-label="Was die Startseite zeigt" title="Auswahl">${ICON.eye}</button></div>
-    ${!isDesktop() ? dayList(timed, allday, isToday) : `<div class="allday">${allday.map(allChip).join('')}</div>
+    <div class="allday">${allday.map(allChip).join('')}</div>
     <div class="ds">
       <div class="ds-grid">${hours.join('')}</div>
       <div class="ds-track">${timed.map(block).join('')}
         ${isToday && nowMin >= DAY_FROM ? `<i class="ds-now" style="left:${pct(nowMin)}%"></i>` : ''}
         ${!timed.length && !allday.length ? `<p class="kempty ds-empty">${isToday ? 'Heute ist' : 'An diesem Tag ist'} nichts eingetragen.</p>` : ''}</div>
-    </div>`}
+    </div>
   </section>`;
 }
 
@@ -115,34 +114,51 @@ function pinCard({ key, type, obj }) {
     <button class="pin-more" data-act="open" data-id="${i.id}">Öffnen</button></article>`;
 }
 
-// schmal: die Termine des Tages als Liste (feste Höhe, scrollt in sich)
-function dayList(timed, allday, isToday) {
-  const row = (a, time) => `<button class="dl-r k-${a.kind}" ${openAttr(a)}><span class="dl-t">${time}</span><span class="dl-l">${esc(a.label)}</span></button>`;
-  const rows = [...allday.map((a) => row(a, 'ganzt.')), ...timed.map((t) => row(t, hm(t.start)))];
-  return `<div class="dl">${rows.join('') || `<p class="kempty">${isToday ? 'Heute ist' : 'An diesem Tag ist'} nichts eingetragen.</p>`}</div>`;
-}
-
-// Bereiche als Kacheln (nur ohne Seitenleiste)
-function navTiles() {
-  const count = { todos: state.items.filter((i) => i.type === 'todo' && !i.done).length, notes: state.items.filter((i) => i.type === 'note').length };
-  return `<nav class="dash-nav" aria-label="Bereiche">${NAV.filter((n) => n.key !== 'home').map((n) => `<button class="dn" data-act="nav" data-id="${n.key}">
-    ${ICON[n.icon]}<span>${n.label}</span>${count[n.key] ? `<i>${count[n.key]}</i>` : ''}</button>`).join('')}</nav>`;
-}
-
-function renderDashboard() {
-  const today = ymd(new Date()), d = new Date(), desk = isDesktop();
+// Pinnwand („Meine Übersicht“); anheften geht per Rechtsklick am Computer
+function pinBoard(desk) {
   const pins = pinned();
-  return `<div class="dash-wrap">
-    <header class="dash-head"><div class="dh-date"><b>${d.toLocaleDateString('de-AT', { weekday: 'long' })}</b><span>${d.toLocaleDateString('de-AT', { day: 'numeric', month: 'long', year: 'numeric' })}</span></div>
-      ${desk ? '' : `<button class="dh-btn" data-home="settings" aria-label="Einstellungen" title="Einstellungen">${ICON.gear}</button>
-      <button class="dh-btn out" data-home="logout" aria-label="Abmelden" title="Abmelden">${ICON.power}</button>`}</header>
-    ${desk ? '' : navTiles()}
-    ${dayStrip(today)}
-    ${mealsToday(today)}
-    <section class="dash-pins">
+  return `<section class="dash-pins">
       <div class="dp-h"><b>Meine Übersicht</b><span>${desk ? 'Rechtsklick auf eine Notiz, ein Todo oder eine Liste → „Zu Home hinzufügen“. Karten lange drücken zum Verschieben.' : 'Am Computer per Rechtsklick „Zu Home hinzufügen“ – erscheint auch hier.'}</span></div>
       ${pins.length ? `<div class="pins" data-cgrid="home">${pins.map(pinCard).join('')}</div>`
         : `<div class="pins-empty">Noch leer. ${desk ? 'Füge in Todos oder Notizen per Rechtsklick „Zu Home hinzufügen“ hinzu.' : 'Am Computer in Todos oder Notizen per Rechtsklick „Zu Home hinzufügen“.'}</div>`}
-    </section>
+    </section>`;
+}
+
+// Desktop: Datum, Tag im Kalender, Essen heute, Pinnwand
+function renderDashboard() {
+  const today = ymd(new Date()), d = new Date();
+  if (!isDesktop()) return renderTiles(today, d);
+  return `<div class="dash-wrap">
+    <header class="dash-head"><b>${d.toLocaleDateString('de-AT', { weekday: 'long' })}</b><span>${d.toLocaleDateString('de-AT', { day: 'numeric', month: 'long', year: 'numeric' })}</span></header>
+    ${dayStrip(today)}
+    ${mealsToday(today)}
+    ${pinBoard(true)}
   </div>`;
+}
+
+// Smartphone/Tablet: Kacheln – groß der Kalender mit dem heutigen Datum, daneben und darunter die Bereiche
+function renderTiles(today, d) {
+  const count = { todos: state.items.filter((i) => i.type === 'todo' && !i.done).length, notes: state.items.filter((i) => i.type === 'note').length };
+  const tile = (key, icon, label) => `<button class="mt mt-${key}" data-act="nav" data-id="${key}">
+      ${count[key] ? `<i>${count[key]}</i>` : ''}${ICON[icon]}<span>${label}</span></button>`;
+  return `<div class="dash-wrap">
+    <div class="mtiles">
+      <button class="mt mt-cal" data-act="home-cal" data-id="${today}" aria-label="Kalender">
+        <small>${d.toLocaleDateString('de-AT', { weekday: 'long' })}</small><b>${d.getDate()}</b><span>${d.toLocaleDateString('de-AT', { month: 'long', year: 'numeric' })}</span></button>
+      ${tile('todos', 'todos', 'Todos')}${tile('notes', 'notes', 'Notizen')}
+      ${tile('meals', 'pot', 'Gerichte')}${tile('training', 'dumbbell', 'Training')}${tile('categories', 'tag', 'Kategorien')}
+    </div>
+    ${pinBoard(false)}
+  </div>`;
+}
+
+// Smartphone/Tablet: Leiste oben auf der Startseite – Logo, Neue Notiz (rund), Einstellungen, Abmelden
+export function homeBar() {
+  return `<header class="homebar"><div class="hbar-in">
+    <span class="hbar-logo">${LOGO_MARK}${LOGO_WORD}</span>
+    <button class="hbar-new" data-act="nav" data-id="quick" aria-label="Neue Notiz" title="Neue Notiz">${ICON.plus}</button>
+    <span class="th-sp"></span>
+    <button class="hbar-ic" data-home="settings" aria-label="Einstellungen" title="Einstellungen">${ICON.gear}</button>
+    <button class="hbar-ic" data-home="logout" aria-label="Abmelden" title="Abmelden">${ICON.power}</button>
+  </div></header>`;
 }

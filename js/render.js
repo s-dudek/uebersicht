@@ -5,7 +5,7 @@ import { ctl } from './control.js';
 import { $app, catById, esc, isDesktop, state } from './core.js';
 import { addDays, isoWeek, ymd } from './dates.js';
 import { folderIc } from './folders.js';
-import { renderHome } from './home.js';
+import { homeBar, renderHome } from './home.js';
 import { inkHead, inkHeadTools, leaveInk, mountInk } from './ink.js';
 import { ICON, LOGO_MARK, LOGO_WORD } from './icons.js';
 import { renderMeals } from './meals.js';
@@ -50,7 +50,7 @@ export function render() {
       </div>`
     : `<div class="app">
         ${WATERMARK}
-        ${home ? '' : pageHead(tab, false)}
+        ${home ? homeBar() : pageHead(tab, false)}
         <main class="main ${home ? 'is-home' : inkOn ? '' : 'has-dock'} ${ink}">${content}</main>
         ${home || inkOn ? '' : `<nav class="dock" aria-label="Aktionen">${actionsFor(tab)}</nav>`}
       </div>`;

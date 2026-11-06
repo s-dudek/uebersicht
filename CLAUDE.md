@@ -24,8 +24,9 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
 - `js/vendor/supabase.js`: supabase-js lokal gebündelt (`npm run supabase`), kein CDN.
 - `style.css` ist nach Bereichen gegliedert (Grundlagen, Anmeldung, Startseite, …, Handschrift, Desktop, Animationen). Farben als Variablen in `:root`.
 - Layout: unter 1024 px Smartphone/Tablet (Steuerknopf unten rechts auf Unterseiten: tippen = Startseite; Leiste unten), ab 1024 px Desktop mit Seitenleiste (`isDesktop()`).
-- Startseite (`home.js`) auf allen Geräten als Übersicht: Datum, Kalender-Kachel, Essen heute, Pinnwand; schmal zusätzlich Einstellungen/Abmelden oben und die Bereiche als Kacheln, Tag als Liste.
-- Startbild (`splash.js`): klappt beim Start wie ein alter Röhrenfernseher zusammen (Strich, Punkt).
+- Startseite (`home.js`): Desktop Übersicht (Datum, Tag im Kalender, Essen heute, Pinnwand); schmal dunkelgrüne Leiste (`homeBar`: Logo, runder Knopf Neue Notiz,
+  Einstellungen, Abmelden) und Kacheln: Kalender groß mit Datum (führt zum Kalender), Todos, Notizen, Gerichte, Training, Kategorien; darunter Pinnwand.
+- Startbild (`splash.js`): nur das Zeichen klappt wie ein altes Fernsehbild zu Strich und Punkt zusammen; beim Aufleuchten blendet der dunkle Grund schon aus.
 - `render()` baut die Ansicht neu auf; während Gesten `render.hold = true` setzen, danach `render.pending` abarbeiten.
 - Canvas (früher „Handschrift“, Code `js/ink*.js`): je Notiz-Ordner eine Startseite in `ink_pages`, Titel führen zu Unterseiten, A4-Bereiche auf dem 25er-Raster.
   Notizen-Bereich (Element `n`, nur Lage) zeigt die Notizen des Ordners als Liste (HTML); jede Notiz hat eine Unterseite mit gleicher ID
