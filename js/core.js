@@ -101,7 +101,8 @@ export const state = {
   folded: new Set(),    // zugeklappte Ordner in der Listenansicht
   calView: store('calView') || 'week',   // 'day' | 'week' | 'month'
   inkSideOff: store('inkSideOff') === '1',   // Canvas am Desktop: Seitenleiste eingefahren
-  homeDay: null,                         // Startseite: gezeigter Tag (null = heute)
+  homeDay: null,
+  homeEdit: false,                       // Startseite (schmal): Kacheln bearbeiten (wackeln)                         // Startseite: gezeigter Tag (null = heute)
   calAllOpen: false,                     // Ganztägiges: alle Zeilen zeigen
   calDate: null,        // gezeigter Tag im Kalender (YYYY-MM-DD)
   list: null,           // geöffnete Todo-Liste (null = Übersicht, '' = Allgemein)

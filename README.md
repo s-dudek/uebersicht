@@ -29,6 +29,7 @@ js/
   drag.js           Ziehen und Ablegen
   auth.js           Anmeldung
   home.js           Startseite
+  home-tiles.js     Startseite schmal: Kacheln (Größe, Reihenfolge, Bearbeiten)
   todos.js          Todos
   notes.js          Notizen
   folders.js        Ordner (Kategorien) in Todos/Notizen

@@ -34,6 +34,7 @@ export function render() {
   state.keepList = false;
 
   const tab = state.tab, home = tab === 'home', desk = isDesktop();
+  if (!home) state.homeEdit = false;
   const content = (PAGES[tab] || renderHome)();
   const inkOn = isInkView();
   if (!inkOn) leaveInk();

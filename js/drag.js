@@ -59,13 +59,14 @@ export function initCategorySort() {
   $app.addEventListener('pointerdown', (e) => {
     if (e.button > 0) return;
     const el = e.target.closest('[data-cgrid] [data-cdrag]');
-    if (!el || e.target.closest('input, textarea, .tcheck, .pin-x')) return;   // Bedienelemente in Karten nicht als Ziehen werten
+    if (!el || e.target.closest('input, textarea, .tcheck, .pin-x, .mt-size')) return;   // Bedienelemente in Karten nicht als Ziehen werten
     const touch = e.pointerType !== 'mouse';
+    const hold = el.closest('.editing') ? 120 : HOLD;   // Kacheln im Bearbeiten-Modus: fast sofort ziehen
     press = { el, x: e.clientX, y: e.clientY, menu: false, t: setTimeout(() => {
       if (!press) return;
       if (touch && openMenuFor(press.el, press.x, press.y)) { press.menu = true; press.el.classList.remove('pressing'); navigator.vibrate?.(10); }
       else begin();
-    }, HOLD) };
+    }, hold) };
     el.classList.add('pressing');
   });
   document.addEventListener('pointermove', (e) => {

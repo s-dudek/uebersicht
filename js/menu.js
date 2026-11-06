@@ -5,6 +5,7 @@ import { deleteItem, saveItem, toggleTodo } from './data.js';
 import { noteFolders, saveCatOrder, todoLists } from './folders.js';
 import { ICON } from './icons.js';
 import { openItem } from './items.js';
+import { SIZES, setHomeEdit, setTileSize, tileSize } from './home-tiles.js';
 import { isPinned, pinKey, togglePin } from './pins.js';
 import { render } from './render.js';
 
@@ -56,6 +57,18 @@ function orderEntry(el) {
 
 // Menü zu einem Element (Eintrag, Ordner-Karte oder Karte der Pinnwand) – Rechtsklick oder langes Drücken
 export function openMenuFor(target, x, y) {
+  // Kachel der Startseite (wie Widget am iPhone): Größe und Bearbeiten; im Bearbeiten-Modus gleich ziehen
+  const tileEl = target.closest('[data-tile]');
+  if (tileEl) {
+    if (tileEl.closest('.editing')) return false;
+    const key = tileEl.dataset.tile, cur = tileSize(key);
+    const entries = [...SIZES.map(([k, label, icon]) => [icon, label, () => setTileSize(key, k), { on: k === cur }]), 'sep',
+      ['pen', 'Home-Bildschirm bearbeiten', () => setHomeEdit(true)]];
+    const order = orderEntry(tileEl);
+    if (order) entries.splice(entries.indexOf('sep'), 0, order);
+    showMenu(x, y, entries, null);
+    return true;
+  }
   const itemEl = target.closest('[data-drag], [data-act="open"][data-id]');
   const folderEl = target.closest('.fcard[data-cdrag], .fcol-i[data-id]');
   const pinEl = target.closest('[data-pin]');
@@ -94,7 +107,7 @@ function showMenu(x, y, entries, item) {
     }
     const [icon, label, fn, opt = {}] = e;
     actions.push(fn);
-    return `<button class="cm-i ${opt.danger ? 'danger' : ''}" data-i="${actions.length - 1}">${ICON[icon]}<span>${esc(label)}</span></button>`;
+    return `<button class="cm-i ${opt.danger ? 'danger' : ''} ${opt.on ? 'on' : ''}" data-i="${actions.length - 1}">${ICON[icon]}<span>${esc(label)}</span>${opt.on ? ICON.check : ''}</button>`;
   }).join('');
 
   menuEl = document.createElement('div');

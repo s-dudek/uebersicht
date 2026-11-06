@@ -25,8 +25,9 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
 - `style.css` ist nach Bereichen gegliedert (Grundlagen, Anmeldung, Startseite, …, Handschrift, Desktop, Animationen). Farben als Variablen in `:root`.
 - Layout: unter 1024 px Smartphone/Tablet (Steuerknopf unten rechts auf Unterseiten: tippen = Startseite; Leiste unten), ab 1024 px Desktop mit Seitenleiste (`isDesktop()`).
 - Startseite (`home.js`): Desktop Übersicht (Datum, Tag im Kalender, Essen heute, Pinnwand); schmal dunkelgrüne Leiste (`homeBar`: Logo, runder Knopf Neue Notiz,
-  Einstellungen, Abmelden) und Kacheln: Kalender groß mit Datum (führt zum Kalender), Todos, Notizen, Gerichte, Training; darunter Pinnwand.
-  Kopfleisten der Bereiche schmal im selben Dunkelgrün (außer Canvas). Einen eigenen Bereich „Kategorien“ gibt es nicht mehr (Ordner in Todos/Notizen).
+  Einstellungen, Abmelden) und Kacheln (`home-tiles.js`, wie Widgets am iPhone: Größe Klein/Mittel/Groß und Reihenfolge je Person in
+  cat_order 'tiles'/'tilesz'; langes Drücken = Menü, weiterziehen = verschieben, „Home-Bildschirm bearbeiten“ = wackeln mit Größen-Knopf, „Fertig“); darunter Pinnwand.
+  Kopfleisten der Bereiche schmal im selben Dunkelgrün, gleiche Höhe (44 px) und Schrift in Salbei (außer Canvas). Einen eigenen Bereich „Kategorien“ gibt es nicht mehr (Ordner in Todos/Notizen).
 - Menü (`menu.js`): Rechtsklick (Maus) bzw. langes Drücken auf Ordner/Karten am Touchscreen (drag.js; weiterziehen = umsortieren),
   mit „Verschieben“ (Reihenfolge) und „Zu Home hinzufügen“.
 - Startbild (`splash.js`): nur das Zeichen klappt wie ein altes Fernsehbild zu Strich und Punkt zusammen; beim Aufleuchten blendet der dunkle Grund schon aus.

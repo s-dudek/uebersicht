@@ -4,6 +4,7 @@ import { allChip, dayContent, hm, openAttr } from './calendar.js';
 import { askConfirm, esc, isDesktop, isTodoList, safeColor, sb, state } from './core.js';
 import { addDays, parseYmd, ymd } from './dates.js';
 import { catSym } from './folders.js';
+import { renderTiles } from './home-tiles.js';
 import { ICON, LOGO_MARK, LOGO_WORD } from './icons.js';
 import { SLOTS, cookOn, mealRow, mealsOn } from './meals.js';
 import { openSettings } from './panels.js';
@@ -127,28 +128,12 @@ function pinBoard(desk) {
 // Desktop: Datum, Tag im Kalender, Essen heute, Pinnwand
 function renderDashboard() {
   const today = ymd(new Date()), d = new Date();
-  if (!isDesktop()) return renderTiles(today, d);
+  if (!isDesktop()) return `<div class="dash-wrap">${renderTiles(today, d)}${state.homeEdit ? '' : pinBoard(false)}</div>`;
   return `<div class="dash-wrap">
     <header class="dash-head"><b>${d.toLocaleDateString('de-AT', { weekday: 'long' })}</b><span>${d.toLocaleDateString('de-AT', { day: 'numeric', month: 'long', year: 'numeric' })}</span></header>
     ${dayStrip(today)}
     ${mealsToday(today)}
     ${pinBoard(true)}
-  </div>`;
-}
-
-// Smartphone/Tablet: Kacheln – groß der Kalender mit dem heutigen Datum, daneben Todos und Notizen, darunter Gerichte und Training
-function renderTiles(today, d) {
-  const count = { todos: state.items.filter((i) => i.type === 'todo' && !i.done).length, notes: state.items.filter((i) => i.type === 'note').length };
-  const tile = (key, icon, label) => `<button class="mt mt-${key}" data-act="nav" data-id="${key}">
-      ${count[key] ? `<i>${count[key]}</i>` : ''}${ICON[icon]}<span>${label}</span></button>`;
-  return `<div class="dash-wrap">
-    <div class="mtiles">
-      <button class="mt mt-cal" data-act="home-cal" data-id="${today}" aria-label="Kalender">
-        <small>${d.toLocaleDateString('de-AT', { weekday: 'long' })}</small><b>${d.getDate()}</b><span>${d.toLocaleDateString('de-AT', { month: 'long', year: 'numeric' })}</span></button>
-      ${tile('todos', 'todos', 'Todos')}${tile('notes', 'notes', 'Notizen')}
-      ${tile('meals', 'pot', 'Gerichte')}${tile('training', 'dumbbell', 'Training')}
-    </div>
-    ${pinBoard(false)}
   </div>`;
 }
 
@@ -158,7 +143,8 @@ export function homeBar() {
     <span class="hbar-logo">${LOGO_MARK}${LOGO_WORD}</span>
     <button class="hbar-new" data-act="nav" data-id="quick" aria-label="Neue Notiz" title="Neue Notiz">${ICON.plus}</button>
     <span class="th-sp"></span>
+    ${state.homeEdit ? '<button class="hbar-done" data-act="home-edit">Fertig</button>' : `
     <button class="hbar-ic" data-home="settings" aria-label="Einstellungen" title="Einstellungen">${ICON.gear}</button>
-    <button class="hbar-ic" data-home="logout" aria-label="Abmelden" title="Abmelden">${ICON.power}</button>
+    <button class="hbar-ic" data-home="logout" aria-label="Abmelden" title="Abmelden">${ICON.power}</button>`}
   </div></header>`;
 }
