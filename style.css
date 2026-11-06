@@ -86,16 +86,11 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 .splash-screen { position: absolute; inset: 0; display: grid; place-items: center; background: var(--ink); transform-origin: center; }
 .splash-screen > * { grid-area: 1 / 1; }
 .splash .logo-mark { width: min(34vmin, 170px); height: auto; fill: var(--green-l); }
-/* feine Bildzeilen wie auf einer Röhre */
-.splash-screen::after { content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: repeating-linear-gradient(0deg, rgba(0,0,0,.18) 0 1px, transparent 1px 3px); }
 .splash-glow { position: absolute; inset: 0; background: #fff; opacity: 0; }
 /* heller Strich und Punkt beim Abschalten */
 .crt-line, .crt-dot { position: absolute; background: #fff; pointer-events: none; }
 .crt-line { left: 0; right: 0; top: 50%; height: 3px; margin-top: -1.5px; box-shadow: 0 0 10px 2px var(--green-l), 0 0 36px 8px rgba(168, 190, 167, .55); }
 .crt-dot { left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; box-shadow: 0 0 14px 5px var(--green-l), 0 0 40px 12px rgba(168, 190, 167, .5); }
-/* Lesezeichen erst fallen lassen, wenn das Startbild weg ist */
-body.splashing .bookmark { animation-play-state: paused; }
 
 /* Wasserzeichen: das Dudek-Zeichen groß im Hintergrund, stark verschwommen (kaum sichtbar) */
 .watermark { position: fixed; inset: 0; z-index: -1; display: grid; place-items: center; pointer-events: none; overflow: hidden; }
@@ -166,63 +161,123 @@ body.splashing .bookmark { animation-play-state: paused; }
   .lg-mark .logo-mark { height: 38px; }
   .lg-mark .logo-word { height: 28px; }
 }
-.logo-portrait { display: block; width: 100%; height: auto; }
 
 /* ==========================================================================
-   Startseite – Datum, Lesezeichen-Logo, Termine heute/morgen, Knöpfe unten
+   Startseite – Übersicht auf allen Geräten: Datum, (schmal) Bereiche, Kalender-Kachel, Essen, Pinnwand
    ========================================================================== */
-.home { flex: 1; position: relative; display: flex; flex-direction: column; justify-content: space-between; min-height: 100%; width: 100%; max-width: 560px; margin: 0 auto; }
-.home-head .logo-word { height: 30px; flex: none; margin-bottom: 4px; }
-.home-plate { position: fixed; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; z-index: 0; }
-.home-plate i { position: absolute; left: 50%; top: 50%; border-radius: 50%; translate: -50% -50%; }
-.home-plate i:first-child { width: 180px; height: 180px; background: radial-gradient(circle, rgba(168,190,167,.35), rgba(168,190,167,0) 70%); }
-.home-plate i:last-child { width: 290px; height: 290px; border: 1.5px dashed var(--soft); }
-.hb { position: relative; display: grid; place-items: center; color: var(--ink); }
-.hb-c { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--white); box-shadow: 0 0 0 1.5px var(--ink); transition: background .2s, color .2s, transform .15s; }
-.hb-c svg { width: 18px; height: 18px; }
-.hb-l { position: absolute; top: 50%; right: calc(100% + 8px); margin-top: -13px; line-height: 18px; white-space: nowrap; padding: 4px 12px; border-radius: 999px; background: var(--ink); color: var(--white);
-  font-size: 13px; font-weight: 500; opacity: 0; translate: 4px 0; pointer-events: none; transition: opacity .18s, translate .18s; z-index: 2; }
-.hb:hover .hb-l, .hb:focus-visible .hb-l, .hb:active .hb-l { opacity: 1; translate: 0 0; }
-.hb:active .hb-c { transform: scale(.93); background: var(--ink); color: var(--white); }
-.hb.out { color: var(--danger); }
-.hb.out .hb-c { box-shadow: 0 0 0 1.5px var(--danger); }
-.hb.out .hb-l { background: var(--danger); }
-@media (hover: hover) {
-  .hb:hover .hb-c { background: var(--ink); color: var(--white); }
-  .hb.out:hover .hb-c { background: var(--danger); }
+/* Startseite als Übersicht */
+.dash-wrap { max-width: 1240px; margin: 0 auto; }
+.dash-head { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 4px 0 22px; text-align: center; }
+.dh-date { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.dash-head b { font-family: var(--font-head); font-size: 46px; line-height: 1; }
+.dash-head span { font-size: 19px; color: var(--grey); }
+.dash-wrap > .tile + .tile, .dash-wrap > .tile + .dash-pins { margin-top: 18px; }
+.dash-day .th svg, .dash-meals .th svg { width: 20px; height: 20px; }
+.link-more { display: inline-flex; align-items: center; gap: 4px; }
+.link-more svg { width: 14px; height: 14px; }
+/* Tageskachel immer gleich hoch: eine Zeile Ganztägiges (seitlich scrollbar), Leiste mit fester Höhe */
+.dash-day .allday { height: 44px; padding: 8px 0 0; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.dash-day .allday .cchip { flex: none; max-width: 260px; }
+.dash-day .allday .cchip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; }
+
+/* Tagesleiste: Stunden 6–24 nebeneinander */
+.ds { position: relative; margin-top: 10px; }
+.ds-grid { position: relative; height: 20px; border-bottom: 1px solid var(--soft); }
+.ds-h { position: absolute; top: 0; translate: -50% 0; font-size: 11px; color: var(--grey); font-variant-numeric: tabular-nums; }
+.ds-h:first-child { translate: 0 0; }
+.ds-h:last-child { translate: -100% 0; }
+.ds-track { position: relative; height: 104px; margin-top: 6px;
+  background-image: repeating-linear-gradient(90deg, var(--pale) 0 1px, transparent 1px calc(100% / 9)); border-radius: 10px; }
+.ds-b { min-width: 120px; position: absolute; display: flex; flex-direction: column; justify-content: center; padding: 4px 8px; border-radius: 10px; overflow: hidden; text-align: left;
+  background: var(--ink); color: var(--white); font-size: 13px; line-height: 1.2; box-shadow: 0 0 0 1.5px var(--white); }
+.ds-b b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-b small { font-size: 11px; opacity: .75; }
+.ds-b.k-meal { background: var(--green-l); color: var(--ink); }
+.ds-b.k-x { background: var(--xc); color: var(--white); }
+.ds-b.k-rem { background: var(--pale); color: var(--ink); box-shadow: 0 0 0 1.5px var(--white), inset 3px 0 0 var(--mid); }
+.ds-now { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--danger); border-radius: 1px; pointer-events: none; }
+
+/* Essen heute: drei Spalten */
+.dm { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 10px; }
+.dm-h { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--grey); margin: 0 2px 6px; }
+.dash-meals .cook { margin-top: 12px; }
+.dm .m-slot { display: none; }   /* Spaltenkopf nennt die Mahlzeit schon */
+
+/* Pinnwand */
+.dash-pins { margin-top: 26px; }
+.dp-h { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin: 0 4px 12px; }
+.dp-h b { font-family: var(--font-head); font-size: 24px; }
+.dp-h span { font-size: 13px; color: var(--grey); }
+.pins { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; align-items: start; }
+.pins-empty { padding: 34px; text-align: center; color: var(--grey); border: 1.5px dashed var(--soft); border-radius: 22px; }
+.pin { position: relative; display: flex; flex-direction: column; padding: 12px 14px 12px; border-radius: 22px; background: var(--glass); border: 1px solid var(--glass-line); box-shadow: var(--tile-shadow); }
+.pin.tinted { background: color-mix(in srgb, var(--ic) 12%, #fff); box-shadow: inset 4px 0 0 var(--ic), var(--tile-shadow); }
+.pin-h { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 1.5px solid var(--soft); }
+.pin-h b { flex: 1; min-width: 0; font-family: var(--font-head); font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pin-ic { flex: none; width: 22px; height: 22px; display: grid; place-items: center; color: var(--fc, var(--ink)); }
+.pin-ic svg { width: 19px; height: 19px; }
+.pin-x { flex: none; width: 26px; height: 26px; border-radius: 50%; font-size: 18px; line-height: 1; color: var(--grey); opacity: 0; transition: opacity .15s, background .15s; }
+.pin:hover .pin-x, .pin-x:focus-visible { opacity: 1; }
+.pin-x:hover { background: var(--pale); color: var(--ink); }
+.pin-b { display: flex; flex-direction: column; margin-top: 6px; }
+.pin-r { display: flex; align-items: center; gap: 10px; min-height: 40px; border-top: 1px solid var(--soft); text-align: left; }
+.pin-b > .pin-r:first-child { border-top: 0; }
+.pin-r .tcheck { width: 22px; height: 22px; }
+.pin-t { flex: 1; min-width: 0; text-align: left; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 8px 0; }
+.pin-r.done .pin-t { color: var(--grey); text-decoration: line-through; }
+button.pin-r:hover, .pin-t:hover { color: var(--mid); }
+.pin-text { text-align: left; font-size: 15px; font-weight: 400; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; }
+.pin-add { margin: 6px 0 0; min-height: 38px; padding: 0 4px; border: 0; background: transparent; box-shadow: none; border-top: 1px solid var(--soft); border-radius: 0; }
+.pin-add input { font-size: 15px; }
+.pin-more { align-self: flex-start; margin-top: 8px; font-size: 13px; font-weight: 600; padding: 4px 12px; border-radius: 999px; box-shadow: inset 0 0 0 1.5px var(--soft); }
+.pin-more:hover { background: var(--pale); }
+.pin.fdragging { opacity: .3; }
+.pin.ins-l, .pin.ins-r { position: relative; }
+.pin.ins-l::before, .pin.ins-r::before { content: ''; position: absolute; top: 10px; bottom: 10px; width: 4px; border-radius: 2px; background: var(--ink); }
+.pin.ins-l::before { left: -10px; }
+.pin.ins-r::before { right: -10px; }
+.pin.fghost { position: fixed; }
+.link-more { font-size: 14px; font-weight: 600; padding: 4px 12px; border-radius: 999px; box-shadow: inset 0 0 0 1.5px var(--soft); }
+.link-more:hover { background: var(--pale); }
+
+/* Smartphone/Tablet: Datum links mit Einstellungen/Abmelden, Bereiche als Kacheln, Tag als Liste */
+@media (max-width: 1023px) {
+  .dash-head { flex-direction: row; align-items: center; text-align: left; gap: 8px; margin: 0 0 16px; }
+  .dh-date { flex: 1; min-width: 0; align-items: flex-start; gap: 2px; }
+  .dash-head b { font-size: 34px; }
+  .dash-head span { font-size: 15px; }
+  .dh-btn { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; background: var(--white); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--soft); }
+  .dh-btn svg { width: 19px; height: 19px; }
+  .dh-btn.out { color: var(--danger); }
+  .dash-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }
+  .dn { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 4px 10px; border-radius: 18px;
+    background: var(--glass); border: 1px solid var(--glass-line); box-shadow: var(--tile-shadow); font-size: 12px; font-weight: 600; color: var(--ink); }
+  .dn svg { width: 24px; height: 24px; }
+  .dn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dn i { position: absolute; top: 6px; right: 8px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--ink); color: var(--white); font-size: 11px; font-style: normal; line-height: 18px; }
+  .dn:active { background: var(--ink); color: var(--white); }
 }
-.bookmark { position: fixed; top: 0; right: max(20px, env(safe-area-inset-right, 0px)); z-index: 5; width: 84px; padding-top: var(--safe-top); background: var(--ink);
-  box-shadow: 0 10px 22px rgba(12,55,65,.28); animation: drop .7s cubic-bezier(.2,.9,.25,1.15) .15s both; }
-@media (prefers-reduced-motion: reduce) {
-  .bookmark { animation: none; }
+@media (min-width: 600px) and (max-width: 1023px) {
+  .dash-nav { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .dash-day .ds-t { width: 118px; font-size: 18px; }
+  .dash-day .link-more span { display: none; }
+  .dash-day .link-more { padding: 4px 8px; }
+  /* Tag als Liste: feste Höhe, scrollt in sich */
+  .dl { height: 168px; overflow-y: auto; margin-top: 8px; overscroll-behavior: contain; }
+  .dl .kempty { height: 100%; display: grid; place-items: center; margin: 0; }
+  .dl-r { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 40px; border-top: 1px solid var(--soft); text-align: left; }
+  .dl-r:first-child { border-top: 0; }
+  .dl-t { flex: none; width: 48px; font-size: 13px; font-weight: 600; color: var(--grey); font-variant-numeric: tabular-nums; }
+  .dl-l { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; padding-left: 10px; border-left: 3px solid var(--ink); }
+  .dl-r.k-x .dl-l { border-left-color: var(--xc); }
+  .dl-r.k-meal .dl-l { border-left-color: var(--green-l); }
+  .dl-r.k-bday .dl-l, .dl-r.k-rem .dl-l { border-left-color: var(--mid); }
+  .dl-r.k-todo .dl-l { border-left-color: #3E7CA8; }
+  .dl-r.k-train .dl-l { border-left-color: #D9873E; }
+  .dm { grid-template-columns: 1fr; gap: 10px; }
+  .dash-pins { margin-top: 22px; }
 }
-.home-head { align-items: flex-end; gap: 12px; border-bottom: 2px solid var(--ink); color: var(--ink); position: fixed; left: 0; right: 0; bottom: calc(50% + 162px); z-index: 2; display: flex; justify-content: center; border: 0; padding: 0 var(--gutter-r) 0 var(--gutter-l); pointer-events: none; }
-.home-day { display: flex; flex-direction: column; line-height: 1.12; min-width: 0; align-items: center; text-align: center; }
-.home-day b { font-family: var(--font-head); font-weight: 700; font-size: clamp(40px, 11vw, 56px); line-height: 1.05; }
-.home-day span { color: var(--grey); font-size: 19px; margin-top: 4px; }
-.home-foot { display: flex; justify-content: flex-end; gap: 10px; padding-top: 12px; margin-top: auto; }
-.bookmark.settled { animation: none; }
-.bookmark::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 200px; background: var(--ink); }
-/* Smartphone: Lesezeichen-Logo und die Knöpfe unten mittig; Beschriftung über dem Knopf */
-@media (max-width: 600px) {
-  .bookmark { right: auto; left: 50%; margin-left: -42px; }
-  .home-foot { justify-content: center; gap: 16px; }
-  .hb-l { top: auto; bottom: calc(100% + 8px); right: auto; left: 50%; margin-top: 0; translate: -50% 4px; }
-  .hb:hover .hb-l, .hb:focus-visible .hb-l, .hb:active .hb-l { translate: -50% 0; }
-}
-.home-ev { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 12px; pointer-events: auto; }
-.hev { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 6px 14px 6px 10px; border-radius: 999px; background: var(--white); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--soft), 0 4px 12px rgba(12,55,65,.08); font-size: 15px; }
-.hev svg { width: 17px; height: 17px; flex: none; }
-.hev span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hev em { font-style: normal; font-weight: 600; }
-.hev.bday { background: var(--ink); color: var(--white); box-shadow: 0 4px 12px rgba(12,55,65,.2); }
-.hev.bday svg { color: var(--green-l); }
-.home-day .hev span { color: inherit; font-size: 15px; margin: 0; }
-.home-day { pointer-events: auto; cursor: pointer; position: relative; }
-.hev[style] svg { color: var(--xc); }
-.home-flt { width: 36px; height: 36px; margin-top: 8px; display: grid; place-items: center; border-radius: 50%; color: var(--grey); }
-.home-flt svg { width: 18px; height: 18px; }
-.home-flt:active { background: var(--pale); color: var(--ink); }
 .dash-day[data-act] { cursor: pointer; }
 .dash-day .lgear { margin-left: 0; }
 .dash-day .ds-t { flex: none; width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* fest, damit die Pfeile nicht springen */
@@ -266,24 +321,7 @@ body.splashing .bookmark { animation-play-state: paused; }
 .ctl.open .ctl-btn .logo-mark { transform: rotate(120deg) scale(.9); }
 .ctl-burst i { position: absolute; left: 50%; top: 50%; width: 7px; height: 7px; margin: -3.5px; border-radius: 50%; opacity: 0; background: var(--green-l); }
 .wi.soon { box-shadow: 0 0 0 2px var(--soft), 0 6px 16px rgba(12,55,65,.18); color: var(--green-l); }
-.ctl.big { width: 112px; height: 112px; }
-.ctl.big .ctl-btn { box-shadow: 0 0 0 7px var(--white), 0 0 0 8.5px var(--soft), 0 18px 40px rgba(12,55,65,.35), 0 4px 10px rgba(12,55,65,.2); }
-.ctl.big .ctl-btn .logo-mark { height: 50px; }
-.ctl.big:not(.open) .ctl-btn { animation: float 4s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) {
-  .ctl.big .ctl-btn { animation: none; }
-}
 .wi[hidden] { display: none; }
-.ctl.pinned .ctl-veil { opacity: 0; pointer-events: none; }
-.ctl.pinned .ctl-label { opacity: 0; }
-.ctl.pinned.has-hot .ctl-label { opacity: 1; transform: none; transition-delay: 0s; }
-.ctl.pinned .wi { box-shadow: 0 0 0 2px var(--ink), 0 6px 14px rgba(12,55,65,.14); }
-.ctl.pinned .wi.soon { box-shadow: 0 0 0 2px var(--soft), 0 4px 10px rgba(12,55,65,.08); }
-@media (hover: hover) {
-  .ctl.pinned .wi:hover { background: var(--ink); color: var(--white); }
-  .ctl.pinned .wi.soon:hover { background: var(--grey); color: var(--white); }
-}
-.ctl.pulse .ctl-btn { animation: pulse .45s ease; }
 .ctl.revealing { opacity: 0; }
 .ctl { transition: opacity .25s; }
 body.is-dragging .ctl { opacity: 0; pointer-events: none; }
@@ -317,7 +355,7 @@ body.is-dragging .ctl { opacity: 0; pointer-events: none; }
 }
 .main { padding-bottom: calc(var(--safe-bottom) + 24px); }
 .main { padding-bottom: calc(var(--safe-bottom) + 110px); }
-.main.is-home { padding-top: calc(var(--safe-top) + 16px); display: flex; padding-bottom: calc(var(--safe-bottom) + 20px); overflow: hidden; }
+.main.is-home { padding-top: calc(var(--safe-top) + 16px); padding-bottom: calc(var(--safe-bottom) + 24px); }
 .seg-view { display: flex; padding: 3px; border-radius: 999px; background: var(--pale); }
 .seg-view button { display: flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: 14px; font-weight: 500; color: var(--grey); }
 .seg-view svg { width: 16px; height: 16px; }
@@ -1474,81 +1512,6 @@ li.closed > ul { display: none; }
   /* Kalender: ganze Höhe unter der Kopfleiste */
   .gw { height: max(480px, calc(100dvh - 140px)); }
 
-  /* Startseite als Übersicht */
-  .dash-wrap { max-width: 1240px; margin: 0 auto; }
-  .dash-head { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 4px 0 22px; text-align: center; }
-  .dash-head b { font-family: var(--font-head); font-size: 46px; line-height: 1; }
-  .dash-head span { font-size: 19px; color: var(--grey); }
-  .dash-wrap > .tile + .tile, .dash-wrap > .tile + .dash-pins { margin-top: 18px; }
-  .dash-day .th svg, .dash-meals .th svg { width: 20px; height: 20px; }
-  .link-more { display: inline-flex; align-items: center; gap: 4px; }
-  .link-more svg { width: 14px; height: 14px; }
-  /* Tageskachel immer gleich hoch: eine Zeile Ganztägiges (seitlich scrollbar), Leiste mit fester Höhe */
-  .dash-day .allday { height: 44px; padding: 8px 0 0; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
-  .dash-day .allday .cchip { flex: none; max-width: 260px; }
-  .dash-day .allday .cchip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ds-empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; }
-
-  /* Tagesleiste: Stunden 6–24 nebeneinander */
-  .ds { position: relative; margin-top: 10px; }
-  .ds-grid { position: relative; height: 20px; border-bottom: 1px solid var(--soft); }
-  .ds-h { position: absolute; top: 0; translate: -50% 0; font-size: 11px; color: var(--grey); font-variant-numeric: tabular-nums; }
-  .ds-h:first-child { translate: 0 0; }
-  .ds-h:last-child { translate: -100% 0; }
-  .ds-track { position: relative; height: 104px; margin-top: 6px;
-    background-image: repeating-linear-gradient(90deg, var(--pale) 0 1px, transparent 1px calc(100% / 9)); border-radius: 10px; }
-  .ds-b { min-width: 120px; position: absolute; display: flex; flex-direction: column; justify-content: center; padding: 4px 8px; border-radius: 10px; overflow: hidden; text-align: left;
-    background: var(--ink); color: var(--white); font-size: 13px; line-height: 1.2; box-shadow: 0 0 0 1.5px var(--white); }
-  .ds-b b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ds-b small { font-size: 11px; opacity: .75; }
-  .ds-b.k-meal { background: var(--green-l); color: var(--ink); }
-  .ds-b.k-x { background: var(--xc); color: var(--white); }
-  .ds-b.k-rem { background: var(--pale); color: var(--ink); box-shadow: 0 0 0 1.5px var(--white), inset 3px 0 0 var(--mid); }
-  .ds-now { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--danger); border-radius: 1px; pointer-events: none; }
-
-  /* Essen heute: drei Spalten */
-  .dm { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 10px; }
-  .dm-h { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--grey); margin: 0 2px 6px; }
-  .dash-meals .cook { margin-top: 12px; }
-  .dm .m-slot { display: none; }   /* Spaltenkopf nennt die Mahlzeit schon */
-
-  /* Pinnwand */
-  .dash-pins { margin-top: 26px; }
-  .dp-h { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin: 0 4px 12px; }
-  .dp-h b { font-family: var(--font-head); font-size: 24px; }
-  .dp-h span { font-size: 13px; color: var(--grey); }
-  .pins { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; align-items: start; }
-  .pins-empty { padding: 34px; text-align: center; color: var(--grey); border: 1.5px dashed var(--soft); border-radius: 22px; }
-  .pin { position: relative; display: flex; flex-direction: column; padding: 12px 14px 12px; border-radius: 22px; background: var(--glass); border: 1px solid var(--glass-line); box-shadow: var(--tile-shadow); }
-  .pin.tinted { background: color-mix(in srgb, var(--ic) 12%, #fff); box-shadow: inset 4px 0 0 var(--ic), var(--tile-shadow); }
-  .pin-h { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 1.5px solid var(--soft); }
-  .pin-h b { flex: 1; min-width: 0; font-family: var(--font-head); font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pin-ic { flex: none; width: 22px; height: 22px; display: grid; place-items: center; color: var(--fc, var(--ink)); }
-  .pin-ic svg { width: 19px; height: 19px; }
-  .pin-x { flex: none; width: 26px; height: 26px; border-radius: 50%; font-size: 18px; line-height: 1; color: var(--grey); opacity: 0; transition: opacity .15s, background .15s; }
-  .pin:hover .pin-x, .pin-x:focus-visible { opacity: 1; }
-  .pin-x:hover { background: var(--pale); color: var(--ink); }
-  .pin-b { display: flex; flex-direction: column; margin-top: 6px; }
-  .pin-r { display: flex; align-items: center; gap: 10px; min-height: 40px; border-top: 1px solid var(--soft); text-align: left; }
-  .pin-b > .pin-r:first-child { border-top: 0; }
-  .pin-r .tcheck { width: 22px; height: 22px; }
-  .pin-t { flex: 1; min-width: 0; text-align: left; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 8px 0; }
-  .pin-r.done .pin-t { color: var(--grey); text-decoration: line-through; }
-  button.pin-r:hover, .pin-t:hover { color: var(--mid); }
-  .pin-text { text-align: left; font-size: 15px; font-weight: 400; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; }
-  .pin-add { margin: 6px 0 0; min-height: 38px; padding: 0 4px; border: 0; background: transparent; box-shadow: none; border-top: 1px solid var(--soft); border-radius: 0; }
-  .pin-add input { font-size: 15px; }
-  .pin-more { align-self: flex-start; margin-top: 8px; font-size: 13px; font-weight: 600; padding: 4px 12px; border-radius: 999px; box-shadow: inset 0 0 0 1.5px var(--soft); }
-  .pin-more:hover { background: var(--pale); }
-  .pin.fdragging { opacity: .3; }
-  .pin.ins-l, .pin.ins-r { position: relative; }
-  .pin.ins-l::before, .pin.ins-r::before { content: ''; position: absolute; top: 10px; bottom: 10px; width: 4px; border-radius: 2px; background: var(--ink); }
-  .pin.ins-l::before { left: -10px; }
-  .pin.ins-r::before { right: -10px; }
-  .pin.fghost { position: fixed; }
-  .link-more { font-size: 14px; font-weight: 600; padding: 4px 12px; border-radius: 999px; box-shadow: inset 0 0 0 1.5px var(--soft); }
-  .link-more:hover { background: var(--pale); }
-
   /* Fenster etwas breiter */
   .sheet { max-width: 760px; }
   .sheet.full { height: min(820px, calc(100% - 64px)); }
@@ -1571,8 +1534,5 @@ li.closed > ul { display: none; }
   0% { opacity: 1; transform: rotate(var(--a)) translateX(18px) scale(1); }
   100% { opacity: 0; transform: rotate(var(--a)) translateX(46px) scale(.3); }
 }
-@keyframes float { 0%, 100% { translate: 0 0; } 50% { translate: 0 -4px; } }
-@keyframes drop { from { transform: translateY(-100%); } to { transform: none; } }
-@keyframes pulse { 0% { scale: 1; } 40% { scale: 1.07; } 100% { scale: 1; } }
 @keyframes landed { 0% { background: var(--pale); } 100% { background: transparent; } }
 @keyframes rbIn { from { translate: -50% -30px; opacity: 0; } to { translate: -50% 0; opacity: 1; } }

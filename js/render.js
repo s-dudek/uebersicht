@@ -5,7 +5,7 @@ import { ctl } from './control.js';
 import { $app, catById, esc, isDesktop, state } from './core.js';
 import { addDays, isoWeek, ymd } from './dates.js';
 import { folderIc } from './folders.js';
-import { renderHome, resetHomeIntro } from './home.js';
+import { renderHome } from './home.js';
 import { inkHead, inkHeadTools, leaveInk, mountInk } from './ink.js';
 import { ICON, LOGO_MARK, LOGO_WORD } from './icons.js';
 import { renderMeals } from './meals.js';
@@ -32,7 +32,6 @@ export function render() {
   const sameTab = render.lastTab === state.tab;
   render.lastTab = state.tab;
   if (!sameTab && !state.keepList) state.list = null;
-  if (!sameTab) resetHomeIntro();
   state.keepList = false;
 
   const tab = state.tab, home = tab === 'home', desk = isDesktop();
@@ -55,7 +54,7 @@ export function render() {
         <main class="main ${home ? 'is-home' : inkOn ? '' : 'has-dock'} ${ink}">${content}</main>
         ${home || inkOn ? '' : `<nav class="dock" aria-label="Aktionen">${actionsFor(tab)}</nav>`}
       </div>`;
-  ctl.show(!desk, home ? 'center' : null);
+  ctl.show(!desk && !home);   // Startseite hat die Bereiche als Kacheln, sonst Steuerknopf unten rechts
   if (inkOn) mountInk();
 
   if (sameTab) {

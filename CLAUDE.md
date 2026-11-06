@@ -23,7 +23,9 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
 - Kein Build für die App: `index.html`, `style.css`, `js/*.js` (ES-Module) werden direkt ausgeliefert. Übersicht der Module in `README.md`.
 - `js/vendor/supabase.js`: supabase-js lokal gebündelt (`npm run supabase`), kein CDN.
 - `style.css` ist nach Bereichen gegliedert (Grundlagen, Anmeldung, Startseite, …, Handschrift, Desktop, Animationen). Farben als Variablen in `:root`.
-- Layout: unter 1024 px Smartphone/Tablet (Steuerknopf unten rechts, Leiste unten), ab 1024 px Desktop mit Seitenleiste (`isDesktop()`).
+- Layout: unter 1024 px Smartphone/Tablet (Steuerknopf unten rechts auf Unterseiten: tippen = Startseite; Leiste unten), ab 1024 px Desktop mit Seitenleiste (`isDesktop()`).
+- Startseite (`home.js`) auf allen Geräten als Übersicht: Datum, Kalender-Kachel, Essen heute, Pinnwand; schmal zusätzlich Einstellungen/Abmelden oben und die Bereiche als Kacheln, Tag als Liste.
+- Startbild (`splash.js`): klappt beim Start wie ein alter Röhrenfernseher zusammen (Strich, Punkt).
 - `render()` baut die Ansicht neu auf; während Gesten `render.hold = true` setzen, danach `render.pending` abarbeiten.
 - Canvas (früher „Handschrift“, Code `js/ink*.js`): je Notiz-Ordner eine Startseite in `ink_pages`, Titel führen zu Unterseiten, A4-Bereiche auf dem 25er-Raster.
   Notizen-Bereich (Element `n`, nur Lage) zeigt die Notizen des Ordners als Liste (HTML); jede Notiz hat eine Unterseite mit gleicher ID
@@ -98,5 +100,4 @@ In der App zeigt Training → „Übungen“ die ganze Datenbank.
   Supabase ist als Connector verbunden: Claude kann SQL selbst ausführen (`apply_migration`), Änderungen trotzdem in `supabase-setup.sql` nachtragen.
 - Google-Kalender: eingerichtet und verbunden (5.11.2026); Google-App „Übersicht“ im Projekt „My Project 87146“.
 - Push-Erinnerungen: App-Teil fertig; Edge Function deployen, Secrets setzen und Zeitplan (`supabase/push-zeitplan.sql`) einrichten ist noch offen.
-- Ideen, die Simon angeboten wurden: Pinnwand der Startseite auch am Smartphone.
 - Handschrift am iPad mit Apple Pencil noch von Simon zu testen (Handballen, langes Drücken, Export über das Teilen-Menü).

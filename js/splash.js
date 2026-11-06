@@ -1,4 +1,4 @@
-// Startbild: Dudek-Zeichen hell auf dunkel (mit leichten Bildzeilen wie auf einer Röhre).
+// Startbild: Dudek-Zeichen hell auf dunkel.
 // Zum Schluss schaltet es sich ab wie ein alter Fernseher: das Bild fällt auf dunklem Grund zu einem hellen Strich
 // zusammen, der Strich zieht sich zu einem leuchtenden Punkt, der verlischt; dann gibt der Grund die App frei.
 // Läuft einmal pro App-Start.
@@ -12,7 +12,6 @@ let done = false;
 export function initSplash() {
   if (!el) return;
   el.innerHTML = `<div class="splash-screen">${LOGO_MARK}<i class="splash-glow"></i></div>`;
-  document.body.classList.add('splashing');
   el.querySelector('.logo-mark').animate(
     [{ opacity: 0, transform: 'scale(.85)' }, { opacity: 1, transform: 'scale(1)' }],
     { duration: 260, easing: 'ease-out', fill: 'both' });
@@ -27,7 +26,6 @@ export function splashReady() {
 
 function finish() {
   el.remove();
-  document.body.classList.remove('splashing');
 }
 
 async function play() {
@@ -38,10 +36,7 @@ async function play() {
   const screen = el.querySelector('.splash-screen'), glow = el.querySelector('.splash-glow');
   const add = (cls) => { const x = document.createElement('i'); x.className = cls; el.appendChild(x); return x; };
 
-  // 1. kurzes Flackern, dann fällt das Bild senkrecht zu einem Strich zusammen und wird dabei hell
-  await el.querySelector('.logo-mark').animate(
-    [{ opacity: 1 }, { opacity: .55 }, { opacity: 1 }, { opacity: .8 }, { opacity: 1 }],
-    { duration: 160, easing: 'steps(5)' }).finished;
+  // 1. das Bild fällt senkrecht zu einem Strich zusammen und wird dabei hell
   const collapse = { duration: 260, easing: 'cubic-bezier(.7,0,.9,.45)', fill: 'both' };
   glow.animate([{ opacity: 0 }, { opacity: .2, offset: .4 }, { opacity: 1 }], collapse);
   await screen.animate([{ transform: 'scale(1, 1)' }, { transform: 'scale(1, .006)' }], collapse).finished;

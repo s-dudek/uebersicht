@@ -1,4 +1,5 @@
-// Steuerknopf (Smartphone/Tablet): auf der Startseite groß mit den Bereichen, sonst unten rechts (tippen = zurück)
+// Steuerknopf (Smartphone/Tablet) auf den Unterseiten unten rechts: tippen = zurück zur Startseite;
+// das Rad mit den Bereichen öffnet sich über die Tastatur (Leertaste/Pfeil hoch)
 import { $app } from './core.js';
 import { ICON, LOGO_MARK } from './icons.js';
 import { NAV, navigate } from './nav.js';
@@ -7,7 +8,6 @@ import { NAV, navigate } from './nav.js';
 export let ctl = null;
 
 function createControl() {
-  const R = 160;          // Radius des Rads
   const MOVE = 24;        // px Bewegung: kein Tippen, sondern Wischen -> nichts tun
   const SIZE = 64, EDGE = 16;
 
@@ -27,19 +27,12 @@ function createControl() {
   const items = [...el.querySelectorAll('.wi')];
   let pos = [];
   let mode = 'idle', hovered = null, start = null;
-  let anchorEl = null;   // 'center' auf der Home-Seite: Knopf groß in der Bildschirmmitte
   let active = NAV;    // aktuell sichtbare Ziele
 
-  // ---- Position: Startseite mittig, sonst fest unten rechts ----
+  // ---- Position: fest unten rechts ----
   const vw = () => document.documentElement.clientWidth;
   const vh = () => document.documentElement.clientHeight;
   const applyPos = () => {
-    el.classList.toggle('big', !!anchorEl);
-    if (anchorEl) {
-      el.style.left = (vw() / 2 - el.offsetWidth / 2) + 'px';
-      el.style.top = (vh() / 2 - el.offsetHeight / 2) + 'px';
-      return;
-    }
     const insetB = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--safe-bottom')) || 0;
     // Unterseiten: fest unten rechts im Eck, neben der Leiste
     const x = vw() - SIZE - EDGE, y = vh() - SIZE - 14 - insetB;
@@ -52,12 +45,11 @@ function createControl() {
   const layout = () => {
     const r = btn.getBoundingClientRect();
     const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-    const base = anchorEl ? 90 : 225;
-    const span = anchorEl ? 170 : 92;
-    active = anchorEl ? NAV.filter((w) => w.key !== 'home') : NAV;
+    const base = 225, span = 92;
+    active = NAV;
     items.forEach((b) => { b.hidden = !active.some((w) => w.key === b.dataset.go); });
     // Unterseiten: Viertelkreis vom Eck unten rechts nach links oben
-    const rr = anchorEl ? Math.min(R, vw() / 2 - 44) : Math.min(250, cx - 40, cy - 60);
+    const rr = Math.min(250, cx - 40, cy - 60);
     const arc = (d) => active.map((w, i) => {
       const a = (d - span / 2 + i * span / (active.length - 1)) * Math.PI / 180;
       return { x: Math.round(rr * Math.cos(a)), y: Math.round(rr * Math.sin(a)) };
@@ -71,8 +63,6 @@ function createControl() {
     }
     pos = arc(dir);
     active.forEach((w, i) => { const b = items.find((x) => x.dataset.go === w.key); b.style.setProperty('--x', pos[i].x + 'px'); b.style.setProperty('--y', pos[i].y + 'px'); });
-    // Hinweis: auf Home unter dem Knopf, sonst oben in der Bildschirmmitte
-    label.style.top = anchorEl ? Math.round(r.top - 62) + 'px' : '';
   };
 
   const setHover = (k) => {
@@ -80,7 +70,7 @@ function createControl() {
     hovered = k;
     items.forEach((b) => b.classList.toggle('hot', b.dataset.go === k));
     const w = NAV.find((x) => x.key === k);
-    label.textContent = w ? (w.soon ? `${w.label} (bald)` : w.label) : (anchorEl ? '' : 'Bereich antippen');
+    label.textContent = w ? (w.soon ? `${w.label} (bald)` : w.label) : 'Bereich antippen';
     el.classList.toggle('has-hot', !!w);
     if (k) navigator.vibrate?.(8);
   };
@@ -94,21 +84,11 @@ function createControl() {
     navigator.vibrate?.(14);
   };
   const close = () => {
-    el.classList.remove('burst', 'pulse');
-    if (anchorEl) { mode = 'pinned'; setHover(null); return; }   // Home: Bereiche bleiben stehen
+    el.classList.remove('burst');
     mode = 'idle';
-    el.classList.remove('open', 'pinned');
+    el.classList.remove('open');
     setHover(null);
   };
-  const pin = (first) => {
-    mode = 'pinned';
-    layout();
-    el.classList.add('open', 'pinned');
-    if (first) { el.classList.add('burst'); setTimeout(() => el.classList.remove('burst'), 520); }
-    hovered = undefined;
-    setHover(null);
-  };
-
   // Kreis wird größer und deckt die neue Seite auf
   const reveal = (fn) => {
     const r = btn.getBoundingClientRect();
@@ -148,36 +128,28 @@ function createControl() {
     if (mode === 'open') return;
     try { btn.setPointerCapture(e.pointerId); } catch {}
     start = { x: e.clientX, y: e.clientY };
-    mode = 'press';   // Startseite: Ziel beim Loslassen; Unterseiten: kurz tippen = zurück zum Menü
+    mode = 'press';   // kurz tippen = zurück zur Startseite
   });
   btn.addEventListener('pointermove', (e) => {
-    if (mode === 'open' || (anchorEl && mode === 'press')) return setHover(nearest(e));
-    if (mode === 'press' && !anchorEl && Math.hypot(e.clientX - start.x, e.clientY - start.y) > MOVE) {
+    if (mode === 'open') return setHover(nearest(e));
+    if (mode === 'press' && Math.hypot(e.clientX - start.x, e.clientY - start.y) > MOVE) {
       mode = 'idle';                   // weggezogen -> abbrechen
     }
   });
   btn.addEventListener('pointerup', (e) => {
-    if (mode === 'press' && anchorEl) {
-      const k = nearest(e);
-      if (k) return go(k);
-      mode = 'pinned';
-      el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse');
-      return;
-    }
     if (mode === 'press') { mode = 'idle'; navigator.vibrate?.(10); return go('home'); }
     if (mode === 'open') { const k = nearest(e); if (k) go(k); else label.textContent = 'Ziel antippen'; }
   });
   btn.addEventListener('pointercancel', () => { if (mode !== 'open') close(); });
   btn.addEventListener('contextmenu', (e) => e.preventDefault());
   btn.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); if (!anchorEl) go('home'); }
-    if (e.key === 'Escape' && !anchorEl) { e.preventDefault(); go('home'); }
+    if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); go('home'); }
     if (e.key === ' ' || e.key === 'ArrowUp') { e.preventDefault(); open(); items[0].focus(); }
   });
   btn.addEventListener('click', (e) => e.preventDefault());
   items.forEach((b) => {
     b.addEventListener('click', () => go(b.dataset.go));
-    const on = () => mode === 'open' || mode === 'pinned';
+    const on = () => mode === 'open';
     b.addEventListener('pointerenter', () => { if (on()) setHover(b.dataset.go); });
     b.addEventListener('pointerleave', () => { if (on()) setHover(null); });
     b.addEventListener('focus', () => { if (on()) setHover(b.dataset.go); });
@@ -187,15 +159,12 @@ function createControl() {
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && mode === 'open') close(); });
 
   document.fonts?.ready.then(() => { if (!el.hidden) applyPos(); });
-  document.addEventListener('scroll', () => { if (anchorEl && !el.hidden) applyPos(); }, true);
   return {
-    show: (v, anchor = null) => {
-      const wasPinned = el.classList.contains('pinned');
-      anchorEl = v ? anchor : null;
+    show: (v) => {
       el.hidden = !v;
       if (!v) return close();
       applyPos();
-      if (anchorEl) pin(!wasPinned); else close();
+      close();
     },
   };
 }
