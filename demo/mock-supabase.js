@@ -117,10 +117,11 @@
       delete() { op = 'delete'; return api; },
       eq(k, v) { filters.push([k, v]); return api; },
       is(k, v) { filters.push([k, v]); return api; },
+      in(k, v) { filters.push([k, v, 'in']); return api; },
       single() { return run().then((r) => (r.error ? r : { data: r.data[0] ?? null, error: null })); },
       then(res, rej) { return run().then(res, rej); },
     };
-    const match = (r) => filters.every(([k, v]) => (r[k] ?? null) === v);
+    const match = (r) => filters.every(([k, v, op]) => (op === 'in' ? v.includes(r[k]) : (r[k] ?? null) === v));
 
     async function run() {
       await new Promise((r) => setTimeout(r, 60)); // wie eine kurze Netzwerkanfrage

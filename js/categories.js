@@ -22,19 +22,20 @@ import { personPicker, shareMessage } from './items.js';
 import { render } from './render.js';
 import { closeSheet, openSheet } from './sheet.js';
 
-// Neue Todo-Liste (neue oder vorhandene Kategorie)
-export function openNewList() {
+// Neue Todo-Liste (neue oder vorhandene Kategorie) bzw. neuer Notiz-Ordner (folder)
+export function openNewList({ folder = false } = {}) {
+  const isList = !folder;
   const available = state.categories.filter((c) => !isTodoList(c));
   let color = COLORS[1];
   const sheet = openSheet(`
-    <div class="sheet-head"><h2>Neue Liste</h2><button class="link-btn" data-close>Fertig</button></div>
+    <div class="sheet-head"><h2>${isList ? 'Neue Liste' : 'Neuer Ordner'}</h2><button class="link-btn" data-close>Fertig</button></div>
     <form id="nl-form">
       <div class="field"><label>Name</label>
-        <div class="row-inline"><input class="input" id="nl-name" name="name" placeholder="z. B. Einkaufen" required><button class="btn">Anlegen</button></div>
+        <div class="row-inline"><input class="input" id="nl-name" name="name" placeholder="${isList ? 'z. B. Einkaufen' : 'z. B. Urlaub'}" required><button class="btn">Anlegen</button></div>
       </div>
       <div class="field"><label>Farbe</label><div class="colors">${COLORS.map((col) => `<button type="button" class="color ${col === color ? 'on' : ''}" data-color="${col}" style="background:${col}"></button>`).join('')}</div></div>
     </form>
-    ${available.length ? `<div class="divider"></div>
+    ${isList && available.length ? `<div class="divider"></div>
       <div class="field"><label>Oder vorhandene Kategorie als Liste nehmen</label>
         <div class="pick">${available.map((c) => `<button class="pick-item" data-pick="${c.id}"><i class="ldot" style="background:${safeColor(c.color)}"></i>${esc(c.name)}${isCatShared(c) ? `<small>gemeinsam</small>` : ''}</button>`).join('')}</div>
       </div>` : ''}`);
@@ -55,13 +56,13 @@ export function openNewList() {
     e.preventDefault();
     const name = sheet.querySelector('#nl-name').value.trim();
     if (!name) return;
-    const { data, error } = await insertCategory({ name, color, todo_list: true });
+    const { data, error } = await insertCategory({ name, color, todo_list: isList });
     if (error) return toast('Fehler: ' + error.message);
     state.categories.push(data);
     state.categories.sort((a, b) => a.name.localeCompare(b.name, 'de'));
     closeSheet(); render();
-    toast(`Liste „${name}“ angelegt`);
-    document.querySelector(`.addrow[data-list="${data.id}"] input`)?.focus();
+    toast(`${isList ? 'Liste' : 'Ordner'} „${name}“ angelegt`);
+    if (isList) document.querySelector(`.addrow[data-list="${data.id}"] input`)?.focus();
   });
   sheet.querySelectorAll('[data-pick]').forEach((b) => b.addEventListener('click', async () => {
     const c = catById(b.dataset.pick);

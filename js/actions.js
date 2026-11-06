@@ -8,6 +8,7 @@ import { createEvent, openNewEventMenu } from './events.js';
 import { openGroupEdit } from './groups.js';
 import { homeAction } from './home.js';
 import { tileAction } from './home-tiles.js';
+import { noteSelAction } from './note-select.js';
 import { openItem } from './items.js';
 import { navigate } from './nav.js';
 import { togglePin } from './pins.js';
@@ -42,6 +43,7 @@ export function initActions() {
       case 'home-cal': state.calDate = id; navigate('calendar'); break;
       case 'ink-side': state.inkSideOff = !state.inkSideOff; store('inkSideOff', state.inkSideOff ? '1' : ''); render(); break;
       case 'tile-size': case 'home-edit': tileAction(t.dataset.act, id); break;
+      case 'note-sel': case 'note-pick': case 'note-sel-all': case 'note-sel-done': case 'note-sel-move': case 'note-sel-del': noteSelAction(t.dataset.act, id); break;
       case 'cal-allday': state.calAllOpen = !state.calAllOpen; render(); break;
       case 'new-event-menu': openNewEventMenu(); break;
       case 'cal-sources': case 'cal-toggle': case 'cal-link': case 'cal-unlink': case 'ext-ev': case 'g-connect': case 'g-disconnect': case 'cal-sync': calAction(t.dataset.act, id, t); break;
@@ -50,6 +52,7 @@ export function initActions() {
       case 'open': openItem(id); break;
       case 'toggle-done': state.doneOpen.has(id || '') ? state.doneOpen.delete(id || '') : state.doneOpen.add(id || ''); render(); break;
       case 'new-list': openNewList(); break;
+      case 'new-cat': openNewList({ folder: true }); break;
       case 'import-plan': openPlanImport(); break;
       case 'training-catalog': openCatalog(); break;
       case 'week-prev': state.weekStart = addDays(state.weekStart, -7); render(); break;

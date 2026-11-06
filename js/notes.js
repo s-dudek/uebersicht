@@ -4,6 +4,7 @@ import { folderIc, itemTint, listLayout, noteFolders } from './folders.js';
 import { blocksHtml, noteKey } from './groups.js';
 import { ICON } from './icons.js';
 import { renderInk } from './ink.js';
+import { isPicked, pickMark, selectInfo, selecting } from './note-select.js';
 
 export const notesIn = (fid) => state.items.filter((i) => i.type === 'note' && (fid ? i.category_id === fid : !i.category_id || !catById(i.category_id)))
   .sort((a, b) => noteKey(a) - noteKey(b) || b.updated_at.localeCompare(a.updated_at));
@@ -29,8 +30,13 @@ export function renderNotes() {
 
 function renderNoteList(fid) {
   if (state.noteMode === 'ink') return renderInk(fid);   // ganze Breite, Ordner über die Kopfleiste
-  const has = notesIn(fid).length > 0;
-  const row = (n) => `
+  const has = notesIn(fid).length > 0, sel = selecting();
+  // Auswahl: Zeile antippen markiert (kein Öffnen, kein Ziehen)
+  const pickRow = (n) => `
+    <div class="trow picking ${isPicked(n.id) ? 'picked' : ''}" data-act="note-pick" data-id="${n.id}" data-gid="${esc(n.meta?.group || '')}">
+      ${pickMark(n.id)}<span class="tname"><span>${esc(n.title) || '<span class="muted">Ohne Titel</span>'}</span></span>
+    </div>`;
+  const row = (n) => sel ? pickRow(n) : `
     <div class="trow ${n.meta?.color ? 'tinted' : ''}" data-drag="${n.id}" data-gid="${esc(n.meta?.group || '')}"${itemTint(n)}>
       <button class="tname" data-act="open" data-id="${n.id}"><span>${esc(n.title) || '<span class="muted">Ohne Titel</span>'}</span></button>
       ${n.remind_at && !n.reminded ? `<span class="tbell" title="Erinnerung">${ICON.bell}</span>` : ''}
@@ -38,8 +44,8 @@ function renderNoteList(fid) {
     </div>`;
   const body = `<button class="ink-open" data-act="note-mode" data-id="ink">${ICON.ink}<span><b>Canvas</b><small>Diese Notizen, dazu Stift, Text, Formen und Bereiche</small></span>${ICON.chevR}</button>
   <section class="tbig" data-drop="${fid}">
-    <button class="addrow tadd tnew" data-act="new-note-in" data-id="${fid}"><span class="xic">${ICON.plus}</span><span>Neue Notiz …</span></button>
+    ${sel ? selectInfo() : `<button class="addrow tadd tnew" data-act="new-note-in" data-id="${fid}"><span class="xic">${ICON.plus}</span><span>Neue Notiz …</span></button>`}
     ${has ? blocksHtml(fid, 'note', row) : '<p class="kempty">Noch keine Notizen.</p>'}
   </section>`;
-  return listLayout(noteFolders(), fid, body, has ? 'Lange drücken und ziehen: nach oben oder unten verschieben, auf eine andere Notiz halten für eine Gruppe, unten in einen anderen Ordner.' : '', '', false);
+  return listLayout(noteFolders(), fid, body, has && !sel ? 'Lange drücken und ziehen: nach oben oder unten verschieben, auf eine andere Notiz halten für eine Gruppe, unten in einen anderen Ordner.' : '', '', false);
 }

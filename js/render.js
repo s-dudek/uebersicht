@@ -10,6 +10,7 @@ import { ICON, LOGO_MARK, LOGO_WORD } from './icons.js';
 import { renderMeals } from './meals.js';
 import { renderTraining } from './training.js';
 import { NAV } from './nav.js';
+import { selectBar, selecting } from './note-select.js';
 import { notesIn, renderNotes } from './notes.js';
 import { splashReady } from './splash.js';
 import { renderTodos, todosIn } from './todos.js';
@@ -35,6 +36,7 @@ export function render() {
 
   const tab = state.tab, home = tab === 'home', desk = isDesktop();
   if (!home) state.homeEdit = false;
+  if (tab !== 'notes' || !selecting()) state.noteSel = null;   // Auswahl endet beim Verlassen des Ordners
   const content = (PAGES[tab] || renderHome)();
   const inkOn = isInkView();
   if (!inkOn) leaveInk();
@@ -107,7 +109,8 @@ function actionsFor(tab) {
   if (tab === 'notes') {
     if (state.list === null) return actBtn('new-note', 'plus', 'Neue Notiz', { primary: true });
     if (isInkView()) return '';   // Werkzeuge stehen in der eigenen Leiste des Canvas
-    return `${actBtn('close-list', 'chevL', 'Ordner')}${actBtn('new-note-in', 'plus', 'Notiz', { id: state.list, primary: true })}${state.list ? actBtn('list-edit', 'dots', 'Ordner bearbeiten', { id: state.list, text: false }) : ''}`;
+    if (selecting()) return selectBar();
+    return `${actBtn('close-list', 'chevL', 'Ordner')}${actBtn('new-note-in', 'plus', 'Notiz', { id: state.list, primary: true })}${notesIn(state.list).length ? actBtn('note-sel', 'check', 'Auswählen', { text: false }) : ''}${state.list ? actBtn('list-edit', 'dots', 'Ordner bearbeiten', { id: state.list, text: false }) : ''}`;
   }
   if (tab === 'meals') {
     return `${actBtn('week-prev', 'chevL', 'Vorige Woche', { text: false })}<button class="dk wk-now" data-act="week-today"><span>KW ${isoWeek(state.weekStart)}</span></button>${actBtn('week-next', 'chevR', 'Nächste Woche', { text: false })}${actBtn('import-plan', 'plus', 'Code', { primary: true })}`;

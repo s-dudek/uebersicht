@@ -32,6 +32,7 @@ js/
   home-tiles.js     Startseite schmal: Kacheln (Größe, Reihenfolge, Bearbeiten)
   todos.js          Todos
   notes.js          Notizen
+  note-select.js    Notizen mehrfach auswählen: verschieben, löschen
   folders.js        Ordner (Kategorien) in Todos/Notizen
   ink.js            Canvas je Notiz-Ordner: Seiten, Werkzeuge, Export, Speichern
   ink-board.js      Canvas: unendliche Zeichenfläche mit Zoom (Stift, Radierer, Auswahl, Formen, Bemaßung, Titel)

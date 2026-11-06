@@ -28,6 +28,7 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   Einstellungen, Abmelden) und Kacheln (`home-tiles.js`, wie Widgets am iPhone: Größe Klein/Mittel/Groß und Reihenfolge je Person in
   cat_order 'tiles'/'tilesz'; langes Drücken = Menü, weiterziehen = verschieben, „Home-Bildschirm bearbeiten“ = wackeln mit Größen-Knopf, „Fertig“); darunter Pinnwand.
   Kopfleisten der Bereiche schmal im selben Dunkelgrün, gleiche Höhe (44 px) und Schrift in Salbei (außer Canvas). Einen eigenen Bereich „Kategorien“ gibt es nicht mehr (Ordner in Todos/Notizen).
+- Notizen: Mehrfachauswahl (`note-select.js`, Knopf „Auswählen“ im Ordner): antippen markiert, dann Verschieben (Ordner wählen) oder Löschen (mit Canvas-Seiten).
 - Menü (`menu.js`): Rechtsklick (Maus) bzw. langes Drücken auf Ordner/Karten am Touchscreen (drag.js; weiterziehen = umsortieren),
   mit „Verschieben“ (Reihenfolge) und „Zu Home hinzufügen“.
 - Startbild (`splash.js`): nur das Zeichen klappt wie ein altes Fernsehbild zu Strich und Punkt zusammen; beim Aufleuchten blendet der dunkle Grund schon aus.

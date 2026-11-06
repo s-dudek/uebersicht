@@ -106,6 +106,23 @@ export async function deleteItem(id) {
   return true;
 }
 
+// mehrere Einträge auf einmal: verschieben bzw. löschen (Mehrfachauswahl in den Notizen)
+export async function moveItems(ids, categoryId) {
+  const now = new Date().toISOString();
+  state.items.forEach((i) => { if (ids.includes(i.id)) Object.assign(i, { category_id: categoryId, updated_at: now }); });
+  render();
+  const { error } = await sb.from('items').update({ category_id: categoryId }).in('id', ids);
+  if (error) toast('Verschieben fehlgeschlagen: ' + error.message, 4000);
+}
+export async function deleteItems(ids) {
+  const { error } = await sb.from('items').delete().in('id', ids);
+  if (error) { toast('Fehler: ' + error.message); return false; }
+  const notes = state.items.filter((i) => ids.includes(i.id) && i.type === 'note').map((i) => i.id);
+  state.items = state.items.filter((i) => !ids.includes(i.id));
+  notes.forEach((id) => deletePageTree(id).catch(() => {}));   // Unterseiten im Canvas mit löschen
+  render();
+  return true;
+}
 export async function silentDelete(id) {
   state.items = state.items.filter((x) => x.id !== id);
   render();
