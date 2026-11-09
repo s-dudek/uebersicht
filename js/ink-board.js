@@ -22,9 +22,9 @@ const SEL_PX = 4096;     // größte Kantenlänge der Auswahl-Vorschau in Pixel
 const LONG = 480;        // lange drücken (ms)
 const TOOLS = ['pen', 'eraser', 'lasso'];   // Reihenfolge für die Taste am Stift
 const PALM = 70;         // Berührung ab dieser Breite (Punkte) ist ein Handballen, kein Finger
-const PEN_REST = 1500;   // so lange nach dem Stift gilt ein einzelner neuer Finger als aufgelegte Hand (ms)
-const UNDO_PAN = 900;    // setzt der Stift so kurz nach einem Verschieben auf, war es die Hand: zurück (ms)
-const NEAR = [280, 6000];   // Berührung so nah (Punkte) an der letzten Stiftstelle und so bald danach (ms): Hand
+const UNDO_PAN = 500;    // setzt der Stift so kurz nach einem Verschieben auf, war es die Hand: zurück (ms)
+const PALM_GRACE = [160, 250];   // gleich nach dem Absetzen des Stifts (ms) dicht an seiner Spitze (Punkte): noch Hand
+const PEN_LOST = 1500;   // meldet der aufgesetzte Stift so lange nichts, gilt er als abgehoben (verlorenes Loslassen)
 
 // ====================================================================
 // opts: { items, colors, onCommit(items, h, w), onOpenTitle(titleItem), onDeleteTitles(titles) -> Promise<bool>,
@@ -986,10 +986,13 @@ export function createBoard(opts) {
     e.preventDefault();
   }
 
-  // Handballen: die Hand liegt oft schon auf, bevor der Stift aufsetzt. Wurde dadurch verschoben, wird das zurückgenommen.
-  let lastPen = 0, penUsed = false, handPan = null;   // handPan: { from, end } des letzten Verschiebens mit dem Finger
+  // Handballen (wie bei GoodNotes je Berührung, nicht nach Zeit): eine Berührung ist Hand, wenn sie aufsetzt, während der
+  // Stift schreibt, wenn sie groß ist, oder ganz knapp nach dem Stift an seiner Spitze. Sie bleibt Hand, bis sie endet;
+  // jeder neue Finger danach verschiebt sofort. Hat die Hand vor dem Stift verschoben, wird das zurückgenommen.
+  let lastPen = 0, penSeen = 0, penUsed = false, handPan = null;   // handPan: { from, end } des letzten Verschiebens mit dem Finger
   const penAt = [0, 0];                               // letzte Stelle des Stifts am Bildschirm
-  const notePen = (e) => { penUsed = true; lastPen = performance.now(); penAt[0] = e.clientX; penAt[1] = e.clientY; };
+  const palms = new Set();                            // Berührungen, die als Hand gelten (bis sie enden)
+  const notePen = (e) => { penUsed = true; penSeen = lastPen = performance.now(); penAt[0] = e.clientX; penAt[1] = e.clientY; };
   function undoHandPan(a) {
     const from = a?.from || (handPan && performance.now() - handPan.end < UNDO_PAN ? handPan.from : null);
     handPan = null;
@@ -998,14 +1001,10 @@ export function createBoard(opts) {
     moveView();
     settle();
   }
-  // Hand statt Finger: große Auflage, ein einzelner Finger kurz nach dem Stift, oder eine Berührung rund um die Stelle,
-  // an der gerade geschrieben wurde (dort liegt beim Schreiben der Handballen)
   function isPalm(e) {
-    if (!penUsed) return false;
-    const since = performance.now() - lastPen;
-    return Math.max(e.width || 0, e.height || 0) > PALM
-      || (!fingers.size && since < PEN_REST)
-      || (since < NEAR[1] && Math.hypot(e.clientX - penAt[0], e.clientY - penAt[1]) < NEAR[0]);
+    if (penDown && performance.now() - penSeen > PEN_LOST) penDown = false;   // Loslassen des Stifts ging verloren
+    if (penDown || Math.max(e.width || 0, e.height || 0) > PALM) return true;
+    return penUsed && performance.now() - lastPen < PALM_GRACE[1] && Math.hypot(e.clientX - penAt[0], e.clientY - penAt[1]) < PALM_GRACE[0];
   }
 
   sc.addEventListener('pointerdown', (e) => {
@@ -1062,7 +1061,7 @@ export function createBoard(opts) {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const onSel = sel && e.target.closest('.ink-sel');
     if (e.pointerType === 'touch') {
-      if (penDown || isPalm(e)) return;             // Handballen beim oder kurz nach dem Schreiben
+      if (isPalm(e)) { palms.add(e.pointerId); return; }   // Hand: bleibt es, bis diese Berührung endet
       fingers.set(e.pointerId, [e.clientX, e.clientY]);
       capture(sc, e.pointerId);
       if (fingers.size === 2) { cancelLp(); cancelAct(); startPinch(); return; }
@@ -1075,6 +1074,7 @@ export function createBoard(opts) {
         cancelLp(); cancelAct();
         if (a.kind === 'pan' || a.kind === 'pinch') undoHandPan(a);
       } else undoHandPan();
+      fingers.forEach((_, id) => palms.add(id));   // was jetzt aufliegt, ist die Hand
       fingers.clear();
     }
     if (act) return;                                 // nur eine Geste gleichzeitig
@@ -1119,7 +1119,14 @@ export function createBoard(opts) {
   });
 
   sc.addEventListener('pointermove', (e) => {
-    if (e.pointerType === 'pen') notePen(e);   // auch schwebender Stift (neuere iPads)
+    if (e.pointerType === 'pen' && e.buttons) notePen(e);   // nur der aufgesetzte Stift (schwebend zählt nicht)
+    if (palms.has(e.pointerId)) return;
+    // Finger wird beim Liegen breit: war doch die Hand – Verschieben zurücknehmen
+    if (fingers.has(e.pointerId) && Math.max(e.width || 0, e.height || 0) > PALM) {
+      fingers.delete(e.pointerId); palms.add(e.pointerId);
+      if (act?.kind === 'pan' && act.id === e.pointerId) { const a = act; cancelAct(); undoHandPan(a); }
+      return;
+    }
     if (lp && e.pointerId === lp.id && Math.hypot(e.clientX - lp.cx, e.clientY - lp.cy) > 8) cancelLp();
     if (fingers.has(e.pointerId)) fingers.set(e.pointerId, [e.clientX, e.clientY]);
     if (act?.kind === 'pinch') { if (fingers.has(e.pointerId)) pinchMove(); return; }
@@ -1233,7 +1240,8 @@ export function createBoard(opts) {
 
   function end(e) {
     if (lp?.id === e.pointerId) cancelLp();
-    if (e.pointerType === 'pen') penDown = false;
+    if (e.pointerType === 'pen') { penDown = false; lastPen = performance.now(); }
+    palms.delete(e.pointerId);
     const wasFinger = fingers.delete(e.pointerId);
     if (act?.kind === 'pinch') {
       if (!wasFinger) return;
@@ -1326,8 +1334,9 @@ export function createBoard(opts) {
     else editText(null, x, y - textStyle.fs * .65);
   }
 
-  sc.addEventListener('pointerup', end);
-  sc.addEventListener('pointercancel', end);
+  // Loslassen am ganzen Dokument hören: geht es der Fläche verloren (z. B. neu gezeichnet), bleibt sonst eine Geste hängen
+  document.addEventListener('pointerup', end);
+  document.addEventListener('pointercancel', end);
 
   // ---------- Mausrad und Trackpad: verschieben; mit Strg (oder Trackpad-Zwicken) zoomen ----------
   sc.addEventListener('wheel', (e) => {
@@ -1435,6 +1444,8 @@ export function createBoard(opts) {
     destroy() {
       ro.disconnect(); stopAnim(); closeMenu();
       document.removeEventListener('pointerdown', onDocDown, true);
+      document.removeEventListener('pointerup', end);
+      document.removeEventListener('pointercancel', end);
       document.removeEventListener('keydown', onDocKey);
       fontListeners.delete(fontReady);
       sc.remove();

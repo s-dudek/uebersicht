@@ -47,8 +47,9 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   Kopfleiste links (Desktop): Knopf ☰ fährt die Seitenleiste ein/aus (`state.inkSideOff`, gemerkt); rechts: Bereich, Speichern | Raster aus/ein (Bereiche bleiben kariert), Finger, Gliederung | Rückgängig, Wiederholen.
   Speichern-Fenster: links Bereiche, Vorlage samt Angaben (nachträglich), Format, Hintergrund; rechts große Vorschau.
   Text mit Schriftart `ff` (FONTS in ink-draw.js, Google Fonts in index.html), Schnitt `fw`, kursiv `i`; Ursprungsansicht = erster Bereich,
-  Titel aus Strichen und Texten (`tx`). Handballen: großer Kontakt, Finger kurz nach dem Stift oder nahe der letzten Stiftstelle,
-  Verschieben direkt vor dem Stift werden ignoriert bzw. zurückgenommen. Bildschirmtastatur: `#app` auf `visualViewport` begrenzt (ink.js).
+  Titel aus Strichen und Texten (`tx`). Handballen je Berührung (wie GoodNotes): Hand ist, was aufsetzt, während der Stift schreibt, große
+  Auflagen und Berührungen ganz knapp nach dem Stift an seiner Spitze – bis diese Berührung endet; keine Sperre nach Zeit. Verschieben direkt vor dem Stift
+  wird zurückgenommen; Loslassen wird am ganzen Dokument gehört (kein Hängenbleiben). Bildschirmtastatur: `#app` auf `visualViewport` begrenzt (ink.js).
   Einstieg über den Knopf „Canvas“ in den Notizen; Ordnerwahl in Notizen und Canvas oben über den Titel (dort auch Name, Farbe, Symbol),
   Stifttaste wechselt Werkzeug (nur wo der Browser sie meldet – Apple-Pencil-Doppeltippen/Drücken erreicht Webseiten nicht),
   Export als PDF/PNG/JPEG (eigener PDF-Schreiber in `ink-export.js`). Bilder im privaten Storage-Bucket `ink` (`c/<ordner-id>/…`, `u/<user-id>/…`).
