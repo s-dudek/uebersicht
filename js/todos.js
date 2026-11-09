@@ -32,8 +32,7 @@ export function renderTodos() {
   };
   return `<div class="fgrid" data-cgrid="todos">${todoLists().map(card).join('')}
     <button class="fcard fnew" data-act="new-list"><span class="fc-ic">${ICON.plus}</span><span class="fc-n">Neue Liste</span></button>
-  </div>
-  <p class="hint xhint">Liste lange drücken, um sie an eine andere Stelle zu ziehen.</p>`;
+  </div>`;
 }
 
 function renderTodoList(lid) {
@@ -57,7 +56,7 @@ function renderTodoList(lid) {
       <span class="chev ${showDone ? 'open' : ''}">${ICON.chevron}</span>${done.length} erledigt</button>
       ${showDone ? rows(done) : ''}` : ''}
   </section>`;
-  return listLayout(todoLists(), lid, body, 'Lange drücken und ziehen: nach oben oder unten verschieben, auf ein anderes Todo halten für eine Gruppe, unten in eine andere Liste.');
+  return listLayout(todoLists(), lid, body);
 }
 
 // Kompakte Zeile in Kacheln: etwas luftiger als die Liste, aber gleiche Infos

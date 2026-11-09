@@ -2,7 +2,7 @@
 import { deleteCategory, leaveCategory, openCategory } from './categories.js';
 import { $app, COLORS, canDeleteItem, catById, esc, itemById, safeColor, state } from './core.js';
 import { deleteItem, saveItem, toggleTodo } from './data.js';
-import { noteFolders, saveCatOrder, todoLists } from './folders.js';
+import { folderIc, noteFolders, saveCatOrder, todoLists } from './folders.js';
 import { ICON } from './icons.js';
 import { openItem } from './items.js';
 import { defaultSize, isPinTile, SIZES, setHomeEdit, setTileSize, tileSize } from './home-tiles.js';
@@ -73,7 +73,7 @@ export function openMenuFor(target, x, y) {
     return true;
   }
   const itemEl = target.closest('[data-drag], [data-act="open"][data-id]');
-  const folderEl = target.closest('.fcard[data-cdrag], .fcol-i[data-id]');
+  const folderEl = target.closest('.fcard[data-cdrag]');
   const i = itemEl && itemById(itemEl.dataset.drag || itemEl.dataset.id);
   const c = !i && folderEl && catById(folderEl.dataset.cdrag || folderEl.dataset.id);
   if (!c && !i) return false;
@@ -150,5 +150,48 @@ export function initContextMenu() {
   // innerster Treffer zählt: Eintrag vor Ordner vor Karte auf der Startseite
   $app.addEventListener('contextmenu', (e) => {
     if (pointer === 'mouse' && openMenuFor(e.target, e.clientX, e.clientY)) e.preventDefault();
+  });
+}
+
+// kleines Menü an einem Knopf (darunter, wenn Platz ist, sonst darüber)
+export function dropMenu(btn, html, onPick) {
+  document.querySelector('.cmenu.drop')?.remove();
+  const r = btn.getBoundingClientRect();
+  const el = document.createElement('div');
+  el.className = 'cmenu drop';
+  el.setAttribute('role', 'menu');
+  el.innerHTML = html;
+  document.body.appendChild(el);
+  const m = el.getBoundingClientRect();
+  el.style.left = Math.max(8, Math.min(r.left, window.innerWidth - m.width - 8)) + 'px';
+  el.style.top = (r.bottom + 8 + m.height < window.innerHeight - 8 ? r.bottom + 8 : Math.max(8, r.top - m.height - 8)) + 'px';
+  const close = () => { el.remove(); document.removeEventListener('pointerdown', outside, true); };
+  const outside = (e) => { if (!el.contains(e.target) && !btn.contains(e.target)) close(); };
+  document.addEventListener('pointerdown', outside, true);
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    close();
+    onPick(b);
+  });
+  return close;
+}
+
+// Ordner wechseln oben über den Titel (Todos, Notizen, Canvas)
+let closeFolders = null;
+export function openFolderDrop(btn) {
+  if (closeFolders && document.querySelector('.cmenu.drop')) { closeFolders(); closeFolders = null; return; }
+  const item = (f) => {
+    const on = f.id === state.list;
+    return `<button class="cm-i ${on ? 'on' : ''}" data-id="${esc(f.id)}">${folderIc(f, 'cm-fic')}<span>${esc(f.name)}</span>${on ? ICON.check : ''}</button>`;
+  };
+  const c = state.list && catById(state.list);
+  const folders = state.tab === 'todos' ? todoLists() : noteFolders();
+  closeFolders = dropMenu(btn, `${folders.map(item).join('')}<hr>
+    ${c && c.owner_id === state.me ? `<button class="cm-i" data-edit>${ICON.pen}<span>Name, Farbe, Symbol …</span></button>` : ''}
+    <button class="cm-i" data-all>${ICON.chevL}<span>Alle ${state.tab === 'todos' ? 'Listen' : 'Ordner'}</span></button>`, (b) => {
+    if ('edit' in b.dataset) return openCategory(c.id);
+    state.list = 'all' in b.dataset ? null : b.dataset.id;
+    render();
   });
 }

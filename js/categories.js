@@ -25,7 +25,7 @@ import { closeSheet, openSheet } from './sheet.js';
 export function openNewList({ folder = false } = {}) {
   const isList = !folder;
   const available = state.categories.filter((c) => !isTodoList(c));
-  let color = COLORS[1];
+  let color = COLORS[1], canvas = false;   // Ordner: mit Notizen-Liste oder nur Canvas
   const sheet = openSheet(`
     <div class="sheet-head"><h2>${isList ? 'Neue Liste' : 'Neuer Ordner'}</h2><button class="link-btn" data-close>Fertig</button></div>
     <form id="nl-form">
@@ -33,6 +33,9 @@ export function openNewList({ folder = false } = {}) {
         <div class="row-inline"><input class="input" id="nl-name" name="name" placeholder="${isList ? 'z. B. Einkaufen' : 'z. B. Urlaub'}" required><button class="btn">Anlegen</button></div>
       </div>
       <div class="field"><label>Farbe</label><div class="colors">${COLORS.map((col) => `<button type="button" class="color ${col === color ? 'on' : ''}" data-color="${col}" style="background:${col}"></button>`).join('')}</div></div>
+      ${isList ? '' : `<div class="field"><label>Art</label><div class="seg-view nl-kind">
+        <button type="button" class="on" data-kind="">${ICON.notes}<span>Notizen und Canvas</span></button>
+        <button type="button" data-kind="canvas">${ICON.ink}<span>Nur Canvas</span></button></div></div>`}
     </form>
     ${isList && available.length ? `<div class="divider"></div>
       <div class="field"><label>Oder vorhandene Kategorie als Liste nehmen</label>
@@ -43,6 +46,10 @@ export function openNewList({ folder = false } = {}) {
   sheet.querySelectorAll('[data-color]').forEach((b) => b.addEventListener('click', () => {
     color = b.dataset.color;
     sheet.querySelectorAll('[data-color]').forEach((x) => x.classList.toggle('on', x === b));
+  }));
+  sheet.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => {
+    canvas = !!b.dataset.kind;
+    sheet.querySelectorAll('[data-kind]').forEach((x) => x.classList.toggle('on', x === b));
   }));
   const asList = async (c) => {
     if (c.owner_id === state.me) {
@@ -55,7 +62,7 @@ export function openNewList({ folder = false } = {}) {
     e.preventDefault();
     const name = sheet.querySelector('#nl-name').value.trim();
     if (!name) return;
-    const { data, error } = await insertCategory({ name, color, todo_list: isList });
+    const { data, error } = await insertCategory({ name, color, todo_list: isList, ...(canvas ? { canvas_only: true } : {}) });
     if (error) return toast('Fehler: ' + error.message);
     state.categories.push(data);
     state.categories.sort((a, b) => a.name.localeCompare(b.name, 'de'));
@@ -92,6 +99,9 @@ export function openCategory(cid) {
     <div class="field"><label>Todo-Liste</label>
       <button class="menu-item" id="c-list" type="button">${listOn ? 'Als Todo-Liste anzeigen: an' : 'Als Todo-Liste anzeigen: aus'}<span class="sw ${listOn ? 'on' : ''}"></span></button>
       ${listOn && state.items.some((i) => i.type === 'todo' && i.category_id === cid) ? '<div class="hint">Solange Todos darin sind, bleibt sie in den Todos sichtbar.</div>' : ''}
+    </div>
+    <div class="field"><label>Notizen</label>
+      <button class="menu-item" id="c-canvas" type="button">Nur Canvas (ohne Notizen-Liste): ${c.canvas_only ? 'an' : 'aus'}<span class="sw ${c.canvas_only ? 'on' : ''}"></span></button>
     </div>
     <div class="divider"></div>
     <button class="btn danger block" id="c-delete">Kategorie löschen</button>
@@ -154,6 +164,13 @@ export function openCategory(cid) {
       if (error) return toast('Fehler: ' + error.message);
       c.todo_list = next;
       if (!next) setLocalLists(localLists().filter((x) => x !== cid));
+      render(); openCategory(cid);
+    });
+    sheet.querySelector('#c-canvas').addEventListener('click', async () => {
+      const next = !c.canvas_only;
+      const { error } = await sb.from('categories').update({ canvas_only: next }).eq('id', cid);
+      if (error) return toast('Fehler: ' + error.message);
+      c.canvas_only = next;
       render(); openCategory(cid);
     });
     sheet.querySelector('#c-delete').addEventListener('click', () => deleteCategory(cid));

@@ -112,6 +112,10 @@ export const state = {
 };
 
 export const catById = (id) => state.categories.find((c) => c.id === id);
+// Reiner Canvas-Ordner: zeigt nur den Canvas, keine Notizen-Liste
+export const isCanvasOnly = (id) => !!(id && catById(id)?.canvas_only);
+// Notiz-Ordner im Canvas (Knopf „Canvas“ oder reiner Canvas-Ordner)
+export const inkMode = (id) => state.noteMode === 'ink' || isCanvasOnly(id);
 
 // Todo-Listen: Kategorien mit Markierung "todo_list", mit Todos, oder lokal hinzugefügt (bei fremden Kategorien)
 const LOCAL_LISTS = 'uebersicht-lists';

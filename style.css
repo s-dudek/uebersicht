@@ -256,7 +256,6 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 .mt.ins-l::before, .mt.ins-r::before { content: ''; position: absolute; top: 10px; bottom: 10px; width: 4px; border-radius: 2px; background: var(--ink); }
 .mt.ins-l::before { left: 2px; }
 .mt.ins-r::before { right: 2px; }
-.mt-hint { text-align: center; margin-top: 12px; }
 /* Todos in Kacheln: direkt abhaken */
 .mt-todo { display: flex; align-items: center; gap: 8px; }
 .mt-todo .tcheck { flex: none; width: 20px; height: 20px; }
@@ -364,8 +363,9 @@ body.is-dragging .ctl { opacity: 0; pointer-events: none; }
 .seg-view button { display: flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: 14px; font-weight: 500; color: var(--grey); }
 .seg-view svg { width: 16px; height: 16px; }
 .seg-view button.on { background: var(--ink); color: var(--white); }
+.nl-kind button { flex: 1; justify-content: center; padding: 9px 11px; }
 @media (max-width: 380px) {
-  .seg-view span { display: none; }
+  .seg-view:not(.nl-kind) span { display: none; }
   .seg-view button { padding: 6px 10px; }
 }
 .main > .tgrid { max-width: 980px; }
@@ -516,7 +516,6 @@ body.is-dragging .ctl { opacity: 0; pointer-events: none; }
 .fcard.ins-l::before, .fcard.ins-r::before { content: ''; position: absolute; top: 8px; bottom: 8px; width: 4px; border-radius: 2px; background: var(--ink); }
 .fcard.ins-l::before { left: -8px; }
 .fcard.ins-r::before { right: -8px; }
-.fgrid + .xhint { text-align: center; margin-top: 14px; }
 
 /* ==========================================================================
    Listen – geöffnete Todo-Liste bzw. Notiz-Ordner, Gruppen, Ziehen
@@ -591,6 +590,10 @@ body.is-dragging .ctl { opacity: 0; pointer-events: none; }
 .tname > span:last-child { overflow-wrap: anywhere; }
 .tname .tic-in svg { width: 18px; height: 18px; }
 .trow.done .tname { color: var(--grey); text-decoration: line-through; text-decoration-color: var(--soft); }
+/* gerade abgehakt: kurz hervorgehoben, bevor es zu „erledigt“ wandert */
+.just-done { background: var(--pale); border-radius: 12px; animation: just-done .9s ease; }
+.just-done .tname, .mt-todo.just-done > span { color: var(--grey); text-decoration: line-through; }
+@keyframes just-done { 0% { background: var(--green-l); } 100% { background: var(--pale); } }
 .tbell { flex: none; color: var(--mid); }
 .tbell svg { width: 16px; height: 16px; }
 .tbig .sec-h { padding: 14px 6px 2px; }
@@ -613,7 +616,6 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .dt-ic { flex: none; width: 24px; height: 24px; }
 .dt-ic svg { width: 24px; height: 24px; }
 .dt.over { background: var(--ink); color: var(--white); transform: scale(1.04); }
-.tbig + .droptray + .xhint, .tbig + .xhint { margin-top: 10px; text-align: center; }
 .drag-ghost.trow { background: var(--white); padding: 0 14px; border-top: 0; border-radius: 16px; }
 /* Notizen: Mehrfachauswahl */
 .trow.picking { cursor: pointer; }
@@ -695,7 +697,6 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 @media (hover: hover) {
   .xtoggle:hover { background: var(--pale); color: var(--ink); }
 }
-.xhint { text-align: center; margin: 10px 0 0; }
 
 
 
@@ -1171,7 +1172,6 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .ctx-v { min-width: 30px; font-size: 13px; font-weight: 600; color: var(--grey); text-align: center; font-variant-numeric: tabular-nums; }
 .ctx-t { font-size: 13px; padding: 0 10px; }
 .ctx-i { font-style: italic; font-family: Georgia, serif; font-size: 15px; }
-.ctx-hint { flex: none; font-size: 13px; color: var(--grey); padding: 0 4px; }
 .ctx-a { display: flex; gap: 6px; padding: 0 12px 0 10px; font-weight: 600; }
 .ctx-a.danger { color: var(--danger); }
 .ctx-origin { position: sticky; right: 0; background: var(--ink); color: var(--white); box-shadow: 0 0 0 6px #fff, -10px 0 0 6px #fff; }   /* bleibt sichtbar, auch wenn die Leiste wischt */
@@ -1219,7 +1219,6 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .ink-sel { position: absolute; border: 1.5px dashed #3E7CA8; border-radius: 8px; background: rgba(62, 124, 168, .05); cursor: move; touch-action: none; }
 .ink-sel canvas { display: block; transform-origin: 0 0; pointer-events: none; }
 .ink-sel-h { position: absolute; right: -12px; bottom: -12px; width: 24px; height: 24px; border-radius: 50%; background: var(--white); border: 2px solid #3E7CA8; cursor: nwse-resize; }
-.ink-hint { position: absolute; z-index: 1; left: 50%; top: 48px; translate: -50% 0; width: min(440px, 86%); margin: 0; text-align: center; color: var(--grey); font-size: 16px; pointer-events: none; }
 .ink-ttl { height: 38px; width: auto; max-width: min(60vw, 520px); flex: none; }
 /* Werkzeugleiste unter der Kopfleiste; eingefahren bleibt nur der kleine Reiter */
 .ink-bar { position: relative; z-index: 4; flex: none; width: 100%; max-width: none; margin: 0; display: grid; grid-template-rows: 1fr; transition: grid-template-rows .25s ease;
@@ -1457,19 +1456,6 @@ li.closed > ul { display: none; }
 
   /* Ordner-Übersicht: mehr Spalten */
   .fgrid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
-
-  /* Geöffnete Liste: Ordner links, Inhalt rechts */
-  .split { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 20px; align-items: start; }
-  .fcol { position: sticky; top: 0; display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 20px; background: var(--glass); box-shadow: var(--tile-shadow); }
-  .fcol-i { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 12px; text-align: left; font-size: 15px; font-weight: 500; transition: background .15s; }
-  .fcol-i > span:last-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .fcol-ic { flex: none; width: 22px; height: 22px; display: grid; place-items: center; color: var(--fc); }
-  .fcol-ic svg { width: 20px; height: 20px; }
-  .fcol-i:hover { background: var(--pale); }
-  .fcol-i.on { background: var(--ink); color: var(--white); }
-  .fcol-i.on .fcol-ic { color: var(--green-l); }
-  .fcol-i.over { box-shadow: inset 0 0 0 2px var(--ink); background: var(--pale); }
-  .split-main .xhint { text-align: left; }
 
   /* Kalender: ganze Höhe unter der Kopfleiste */
   .gw { height: max(480px, calc(100dvh - 140px)); }

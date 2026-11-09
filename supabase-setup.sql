@@ -454,3 +454,6 @@ revoke all on public.google_links from anon, authenticated;
 -- ==========================================================================
 alter table public.items add column if not exists deleted_at timestamptz;
 alter table public.categories add column if not exists deleted_at timestamptz;
+
+-- Reine Canvas-Ordner: Notiz-Ordner öffnet direkt den Canvas (ohne Liste)
+alter table public.categories add column if not exists canvas_only boolean not null default false;

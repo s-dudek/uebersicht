@@ -1,10 +1,8 @@
 // Canvas der Notiz-Ordner: jede Kategorie hat eine eigene Startseite mit Titeln, jeder Titel öffnet eine eigene Seite
 // (beliebig tief). Auf der Startseite steht der Notizen-Bereich mit den Notizen des Ordners; jede Notiz hat eine
 // Unterseite mit ihrer Beschreibung. Bereiche (A4) lassen sich speichern (PDF, PNG, JPEG).
-import { openCategory } from './categories.js';
-import { $app, askConfirm, catById, esc, itemById, safeColor, state, store, toast } from './core.js';
+import { $app, askConfirm, catById, esc, isCanvasOnly, itemById, safeColor, state, store, toast } from './core.js';
 import { createNote, deleteItem } from './data.js';
-import { folderIc, noteFolders } from './folders.js';
 import { ICON } from './icons.js';
 import { createBoard } from './ink-board.js';
 import { FONTS, GRID, NOTES_W, SHAPES, union, WEIGHTS } from './ink-draw.js';
@@ -14,6 +12,7 @@ import { clampSize, cleanText, KINDS, openPenPanel, PALETTE } from './ink-pen.js
 import { deletePageTree, deserialize, loadChild, loadRoot, removeImages, savePage, serialize, titleIn, uploadImage } from './ink-store.js';
 import { openTree, titleSvg } from './ink-tree.js';
 import { openItem } from './items.js';
+import { dropMenu } from './menu.js';
 import { notesIn } from './notes.js';
 import { render } from './render.js';
 import { closeSheet, openSheet } from './sheet.js';
@@ -48,8 +47,14 @@ const top = () => stack[stack.length - 1];
 // ---------- Notizen des Ordners im Canvas ----------
 const noteList = () => notesIn(cat).map((n) => ({ id: n.id, title: n.title || '' }));
 
-// Notizen-Bereich der Startseite: fehlt er, kommt er neben den vorhandenen Inhalt (leere Seite: an den Anfang)
+// Notizen-Bereich der Startseite: fehlt er, kommt er neben den vorhandenen Inhalt (leere Seite: an den Anfang);
+// reiner Canvas-Ordner: ohne Notizen-Bereich
 function withNotesArea(items) {
+  if (isCanvasOnly(cat)) {
+    const i = items.findIndex((it) => it.t === 'n');
+    if (i >= 0) items.splice(i, 1);
+    return i >= 0;
+  }
   if (items.some((it) => it.t === 'n')) return false;
   const b = items.length ? union(items) : null;
   const snap = (v) => Math.round(v / GRID) * GRID;
@@ -88,7 +93,7 @@ function openPage(row, note = null) {
   });
   page.board.imagePaths().forEach((p) => page.atOpen.add(p));
   stack.push(page);
-  if (added) { page.pending = { list: items, hh: 0, ww: 0 }; scheduleSave(page); }   // neuer Notizen-Bereich gleich speichern
+  if (added) { page.pending = { list: items, hh: 0, ww: 0 }; scheduleSave(page); }   // Notizen-Bereich ergänzt bzw. entfernt: gleich speichern
   applyUi();
 }
 
@@ -279,7 +284,6 @@ function updateTools() {
   const b = top()?.board;
   document.querySelectorAll('[data-act="ink-undo"]').forEach((x) => { x.disabled = !b?.canUndo; });
   document.querySelectorAll('[data-act="ink-redo"]').forEach((x) => { x.disabled = !b?.canRedo; });
-  $app.querySelector('.ink-hint')?.toggleAttribute('hidden', !(stack.length === 1 && b?.isEmpty));
 }
 
 // Foto oder Bild hinzufügen (iPad: Kamera oder Fotos)
@@ -299,30 +303,6 @@ picker.addEventListener('change', async () => {
     toast('Bild konnte nicht hinzugefügt werden: ' + (e.message || e), 4000);
   }
 });
-
-// kleines Menü an einem Knopf (darunter, wenn Platz ist, sonst darüber)
-function dropMenu(btn, html, onPick) {
-  document.querySelector('.cmenu.drop')?.remove();
-  const r = btn.getBoundingClientRect();
-  const el = document.createElement('div');
-  el.className = 'cmenu drop';
-  el.setAttribute('role', 'menu');
-  el.innerHTML = html;
-  document.body.appendChild(el);
-  const m = el.getBoundingClientRect();
-  el.style.left = Math.max(8, Math.min(r.left, window.innerWidth - m.width - 8)) + 'px';
-  el.style.top = (r.bottom + 8 + m.height < window.innerHeight - 8 ? r.bottom + 8 : Math.max(8, r.top - m.height - 8)) + 'px';
-  const close = () => { el.remove(); document.removeEventListener('pointerdown', outside, true); };
-  const outside = (e) => { if (!el.contains(e.target) && !btn.contains(e.target)) close(); };
-  document.addEventListener('pointerdown', outside, true);
-  el.addEventListener('click', (e) => {
-    const b = e.target.closest('button');
-    if (!b) return;
-    close();
-    onPick(b);
-  });
-  return close;
-}
 
 // Bereich anlegen: A4 hoch oder quer
 // Bereich anlegen: leer (A4 hoch/quer) oder gleich mit einem Layout im Dudek-CI
@@ -363,24 +343,6 @@ function openPen(btn) {
 }
 const remember = (c) => { ui.recent = [c, ...ui.recent.filter((x) => x !== c)].slice(0, 3); };
 
-// Kategorien (Notiz-Ordner) aus der Kopfleiste wählen (Canvas und Notizen); nochmal tippen schließt
-let closeCats = null;
-function openCats(btn) {
-  if (closeCats && document.querySelector('.cmenu.drop')) { closeCats(); closeCats = null; return; }
-  const item = (f) => {
-    const on = f.id === state.list;
-    return `<button class="cm-i ${on ? 'on' : ''}" data-id="${esc(f.id)}">${folderIc(f, 'cm-fic')}<span>${esc(f.name)}</span>${on ? ICON.check : ''}</button>`;
-  };
-  const c = state.list && catById(state.list);
-  closeCats = dropMenu(btn, `${noteFolders().map(item).join('')}<hr>
-    ${c && c.owner_id === state.me ? `<button class="cm-i" data-edit>${ICON.pen}<span>Name, Farbe, Symbol …</span></button>` : ''}
-    <button class="cm-i" data-all>${ICON.chevL}<span>Alle Ordner</span></button>`, (b) => {
-    if ('edit' in b.dataset) return openCategory(c.id);
-    state.list = 'all' in b.dataset ? null : b.dataset.id;
-    render();
-  });
-}
-
 // ---------- Eigenschaften-Leiste unten (wie in Illustrator): zeigt, was zum Werkzeug bzw. zur Auswahl passt ----------
 const TOOL_LABEL = { pen: 'Stift', marker: 'Textmarker', text: 'Text', shape: 'Form', dim: 'Bemaßung', eraser: 'Radierer', lasso: 'Auswahl' };
 const ACTION = { title: ['chevR', 'Als Titel'], edit: ['pen', 'Bearbeiten'], crop: ['crop', 'Zuschneiden'], unerase: ['undo', 'Radiertes zurück'],
@@ -418,7 +380,6 @@ function contextHtml() {
     }
   }
   if (!selecting && ui.tool === 'eraser') out.push(`<div class="ctx-g">${ERASERS.map(([r, l]) => btn('er:' + r, l, { on: ui.eraser === r, cls: 'ctx-t' })).join('')}</div>`);
-  if (!selecting && ui.tool === 'lasso') out.push('<span class="ctx-hint">Antippen oder umkreisen</span>');
   if (selecting) out.push(`<div class="ctx-g">${b.selectionActions().map((a) => btn('act:' + a, `${ICON[ACTION[a][0]]}<span>${ACTION[a][1]}</span>`, { cls: `ctx-a ${a === 'delete' ? 'danger' : ''}` })).join('')}</div>`);
   out.push(btn('origin', ICON.target, { cls: `ctx-origin ${ui.atOrigin ? 'at' : ''}`, label: 'Ursprungsansicht' }));
   return out.join('<i class="ctx-sep"></i>');
@@ -473,13 +434,12 @@ export async function inkAction(act, id, btn) {
     case 'ink-pen': openPen(btn); return;
     case 'ink-tree': openOutlineTree(); return;
     case 'ink-more': openMore(btn); return;
-    case 'ink-notes': state.noteMode = 'text'; render(); return;
+    case 'ink-notes': if (isCanvasOnly(state.list)) state.list = null; state.noteMode = 'text'; render(); return;   // reiner Canvas: zurück zu den Ordnern
     case 'ink-finger': ui.finger = !ui.finger; store('inkFinger', ui.finger ? '1' : '0'); toast(ui.finger ? 'Mit dem Finger schreiben, mit zwei Fingern verschieben und zoomen' : 'Stift und Maus schreiben, der Finger verschiebt'); break;
     case 'ink-undo': b?.undo(); return;
     case 'ink-redo': b?.redo(); return;
     case 'ink-img': picker.click(); return;
     case 'ink-frame': openFrameChoice(btn); return;
-    case 'ink-cats': openCats(btn); return;
     case 'ink-fold': toggleBar(); return;
     case 'ink-export': flushAll(); openExport(); return;
     case 'ink-back': if (stack.length > 1) closePage(stack.pop()); break;
@@ -662,7 +622,6 @@ export function renderInk(fid) {
   if (!top()) return '<div class="ink-slot"><p class="center muted ink-msg">Lädt …</p></div>';
   return `${inkBar()}<div class="ink-slot">
     <div class="ink-ctx" role="toolbar" aria-label="Eigenschaften">${contextHtml()}</div>
-    <p class="ink-hint" ${stack.length === 1 && top().board.isEmpty ? '' : 'hidden'}>Mit dem Stift schreiben, mit dem Finger verschieben, mit zwei Fingern zoomen. Etwas mit der Auswahl umkreisen und „Als Titel“ wählen: der Titel öffnet eine eigene Seite und lässt sich ziehen (mit dem Finger: lange drücken). Oben rechts mit „Bereich“ ein A4-Blatt markieren und später speichern.</p>
   </div>`;
 }
 

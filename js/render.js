@@ -1,7 +1,7 @@
 // Hauptansicht zeichnen: Smartphone mit Kopfleiste und Leiste unten, Desktop mit Seitenleiste
 import { calDay, calTitle, renderCalendar } from './calendar.js';
 import { ctl } from './control.js';
-import { $app, catById, esc, isDesktop, state, store } from './core.js';
+import { $app, catById, esc, inkMode, isDesktop, state, store } from './core.js';
 import { addDays, isoWeek, ymd } from './dates.js';
 import { folderIc } from './folders.js';
 import { homeBar, renderHome } from './home.js';
@@ -72,7 +72,7 @@ export function render() {
 }
 
 // Notiz-Ordner geöffnet und im Canvas
-const isInkView = () => state.tab === 'notes' && state.list !== null && state.noteMode === 'ink';
+const isInkView = () => state.tab === 'notes' && state.list !== null && inkMode(state.list);
 
 // ---------- Desktop: Seitenleiste mit allen Bereichen ----------
 function sidebar(tab) {
@@ -151,16 +151,16 @@ function pageHead(tab, desk) {
     const c = catById(state.list);
     const n = tab === 'todos' ? todosIn(state.list).filter((i) => !i.done).length : notesIn(state.list).length;
     const title = `${c ? folderIc(c, 'ph-ic') : ''}<b class="ph-t">${esc(c ? c.name : tab === 'todos' ? 'Allgemein' : 'Ohne Kategorie')}</b>`;
+    // Ordnername als Knopf: Auswahl der Ordner zum Wechseln (Todos, Notizen, Canvas)
+    const drop = `<button class="ph-drop" data-act="folder-drop" aria-haspopup="menu" aria-label="Ordner wechseln" title="Ordner wechseln">${title}${ICON.chevD}</button>`;
     // Canvas: zurück zu den Notizen; Titel als Knopf, der die Kategorien zum Wechseln zeigt
     if (isInkView()) {
       // Desktop: Seitenleiste ein-/ausfahren (mehr Platz zum Zeichnen)
       const side = desk ? `<button class="ph-side ${state.inkSideOff ? '' : 'on'}" data-act="ink-side" aria-label="Seitenleiste ${state.inkSideOff ? 'einblenden' : 'ausblenden'}" title="Seitenleiste ${state.inkSideOff ? 'einblenden' : 'ausblenden'}">${ICON.menu}</button>` : '';
       left = side + (inkHead() || `<button class="ph-back" data-act="ink-notes" aria-label="Zurück zu den Notizen" title="Zurück zu den Notizen">${ICON.chevL}</button>
-        <button class="ph-drop" data-act="ink-cats" aria-haspopup="menu" aria-label="Kategorie wechseln" title="Kategorie wechseln">${title}${ICON.chevD}</button>`);
+        ${drop}`);
     } else {
-      // Notizen: Ordnername ebenfalls als Auswahl der Kategorien (wie im Canvas)
-      const head = tab === 'notes' ? `<button class="ph-drop" data-act="ink-cats" aria-haspopup="menu" aria-label="Kategorie wechseln" title="Kategorie wechseln">${title}${ICON.chevD}</button>` : title;
-      left = `${desk ? '' : `<button class="ph-back" data-act="close-list" aria-label="Zurück zu den Listen">${ICON.chevL}</button>`}${head}${cnt(n)}`;
+      left = `${desk ? '' : `<button class="ph-back" data-act="close-list" aria-label="Zurück zu den Listen">${ICON.chevL}</button>`}${drop}${cnt(n)}`;
     }
   } else {
     left = `<b>${TITLES[tab]}</b>${cnt(pageCount(tab))}`;

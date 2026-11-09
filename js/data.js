@@ -1,5 +1,6 @@
 // Daten laden, Live-Updates und Speichern
 import { askConfirm, debounce, itemById, sb, state, toast } from './core.js';
+import { ICON } from './icons.js';
 import { openItem } from './items.js';
 import { deletePageTree } from './ink-store.js';
 import { checkReminders } from './reminders.js';
@@ -97,14 +98,34 @@ export function subscribe() {
 // ====================================================================
 // Aktionen
 // ====================================================================
+// Abhaken: das Todo bleibt kurz markiert sichtbar, erst dann wandert es zu „erledigt“;
+// nochmal tippen in dieser Zeit nimmt es zurück
+const DONE_DELAY = 900;
+const pendingDone = new Map();
+function markDone(id, on) {
+  document.querySelectorAll('.tcheck').forEach((b) => {
+    if (b.dataset.id !== id) return;
+    b.classList.toggle('on', on);
+    b.innerHTML = on ? ICON.check : '';
+    b.closest('.trow, .mt-todo')?.classList.toggle('just-done', on);
+  });
+}
 export async function toggleTodo(id) {
   const i = itemById(id);
   if (!i) return;
-  i.done = !i.done;
+  if (pendingDone.has(id)) { clearTimeout(pendingDone.get(id)); pendingDone.delete(id); return markDone(id, false); }
+  if (!i.done) {
+    markDone(id, true);
+    return pendingDone.set(id, setTimeout(() => { pendingDone.delete(id); setDone(i, true); }, DONE_DELAY));
+  }
+  setDone(i, false);
+}
+async function setDone(i, done) {
+  i.done = done;
   i.updated_at = new Date().toISOString();
   render();
-  const { error } = await sb.from('items').update({ done: i.done }).eq('id', id);
-  if (error) { i.done = !i.done; render(); toast('Fehler: ' + error.message); }
+  const { error } = await sb.from('items').update({ done }).eq('id', i.id);
+  if (error) { i.done = !done; render(); toast('Fehler: ' + error.message); }
 }
 
 // Kategorie anlegen ohne Rückgabe aus der Datenbank (die Zugriffsregel würde die neue Zeile sonst ablehnen):

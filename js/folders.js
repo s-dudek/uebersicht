@@ -3,7 +3,6 @@ import {
   catById,
   esc,
   isCatShared,
-  isDesktop,
   isTodoList,
   safeColor,
   sb,
@@ -45,17 +44,10 @@ export const todoLists = () => [
   { id: '', name: 'Allgemein', color: null, shared: false },
 ];
 
-// Beim Ziehen erscheinen die anderen Ordner als Ablageziele
-// Geöffnete Liste: am Desktop links die Ordner als Spalte (auch Ablageziel), am Smartphone die Ablage beim Ziehen
-// column: false = auch am Desktop ohne Ordner-Spalte (Ordner wählt man oben im Titel, Ablage beim Ziehen unten)
-export function listLayout(folders, current, body, hint, cls = '', column = true) {
-  if (!isDesktop() || !column) return `${body}${dropTray(folders, current)}${hint ? `<p class="hint xhint">${hint}</p>` : ''}`;
-  const btn = (f) => `<button class="fcol-i ${f.id === current ? 'on' : ''}" data-act="open-list" data-id="${f.id}" data-drop="${f.id}">
-      ${folderIc(f, 'fcol-ic')}<span>${esc(f.name)}</span></button>`;
-  return `<div class="split ${cls}">
-    <nav class="fcol" aria-label="Ordner">${folders.map(btn).join('')}</nav>
-    <div class="split-main">${body}${hint ? `<p class="hint xhint">${hint.replace('unten in', 'links in')} Rechtsklick für weitere Funktionen.</p>` : ''}</div>
-  </div>`;
+// Geöffneter Ordner: Inhalt, beim Ziehen erscheinen unten die anderen Ordner als Ablageziele
+// (den Ordner wechselt man oben über den Titel, folderDrop)
+export function listLayout(folders, current, body) {
+  return `${body}${dropTray(folders, current)}`;
 }
 
 function dropTray(folders, current) {

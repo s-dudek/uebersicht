@@ -61,14 +61,12 @@ export function calDayBody(today) {
     </div>`;
 }
 
-// Desktop: Knopf Bearbeiten/Fertig, darunter dieselben Kacheln wie am Smartphone, dem Platz angepasst (Datum ist eine eigene Kachel)
+// Kacheln wie am Smartphone, am Desktop dem Platz angepasst (Datum ist eine eigene Kachel).
+// Bearbeiten über langes Drücken bzw. Rechtsklick; am Desktop solange oben der Knopf „Fertig“
 function renderDashboard() {
   const today = ymd(new Date()), d = new Date();
-  if (!isDesktop()) return `<div class="dash-wrap">${renderTiles(today, d)}</div>`;
-  return `<div class="dash-wrap">
-    <div class="dash-bar"><button class="chip ${state.homeEdit ? 'on' : ''}" data-act="home-edit">${state.homeEdit ? 'Fertig' : 'Bearbeiten'}</button></div>
-    ${renderTiles(today, d)}
-  </div>`;
+  const done = isDesktop() && state.homeEdit ? '<div class="dash-bar"><button class="chip on" data-act="home-edit">Fertig</button></div>' : '';
+  return `<div class="dash-wrap">${done}${renderTiles(today, d)}</div>`;
 }
 
 // Smartphone/Tablet: Leiste oben auf der Startseite – Logo, Neue Notiz (rund), Einstellungen, Abmelden

@@ -16,6 +16,7 @@ import { importPlan, shopCat } from './meals.js';
 import { openPlanImport } from './plan-import.js';
 import { openCatalog } from './training.js';
 import { inkAction } from './ink.js';
+import { openFolderDrop } from './menu.js';
 import { render } from './render.js';
 
 export function initActions() {
@@ -47,6 +48,7 @@ export function initActions() {
       case 'cal-allday': state.calAllOpen = !state.calAllOpen; render(); break;
       case 'new-event-menu': openNewEventMenu(); break;
       case 'cal-sources': case 'cal-toggle': case 'cal-link': case 'cal-unlink': case 'ext-ev': case 'g-connect': case 'g-disconnect': case 'cal-sync': calAction(t.dataset.act, id, t); break;
+      case 'folder-drop': openFolderDrop(t); break;
       case 'open-list': state.list = id || ''; state.noteMode = 'text'; render(); document.querySelector('.main')?.scrollTo({ top: 0 }); break;
       case 'close-list': state.list = null; render(); break;
       case 'open': openItem(id); break;

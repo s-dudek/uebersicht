@@ -1,5 +1,5 @@
 // Bereich Notizen: Übersicht und geöffneter Ordner
-import { catById, esc, nameOf, state } from './core.js';
+import { catById, esc, inkMode, isCanvasOnly, nameOf, state } from './core.js';
 import { folderIc, itemTint, listLayout, noteFolders } from './folders.js';
 import { blocksHtml, noteKey } from './groups.js';
 import { ICON } from './icons.js';
@@ -17,19 +17,18 @@ export function renderNotes() {
     return `<button class="fcard" data-act="open-list" data-id="${f.id}" ${f.id ? `data-cdrag="${f.id}"` : ''}>
       ${folderIc(f)}
       <span class="fc-n">${esc(f.name)}</span>
-      <span class="fc-s">${list.length ? `${list.length} ${list.length === 1 ? 'Notiz' : 'Notizen'}` : 'leer'}</span>
+      <span class="fc-s">${isCanvasOnly(f.id) ? 'Canvas' : list.length ? `${list.length} ${list.length === 1 ? 'Notiz' : 'Notizen'}` : 'leer'}</span>
       ${f.shared ? `<span class="fc-sh" title="gemeinsam">${ICON.share}</span>` : ''}
-      <span class="fc-c ${list.length ? '' : 'zero'}">${list.length}</span>
+      ${isCanvasOnly(f.id) ? '' : `<span class="fc-c ${list.length ? '' : 'zero'}">${list.length}</span>`}
     </button>`;
   };
   return `<div class="fgrid" data-cgrid="notes">${noteFolders().map(card).join('')}
     <button class="fcard fnew" data-act="new-cat"><span class="fc-ic">${ICON.plus}</span><span class="fc-n">Neuer Ordner</span></button>
-  </div>
-  <p class="hint xhint">Ordner lange drücken, um ihn an eine andere Stelle zu ziehen.</p>`;
+  </div>`;
 }
 
 function renderNoteList(fid) {
-  if (state.noteMode === 'ink') return renderInk(fid);   // ganze Breite, Ordner über die Kopfleiste
+  if (inkMode(fid)) return renderInk(fid);   // ganze Breite, Ordner über die Kopfleiste
   const has = notesIn(fid).length > 0, sel = selecting();
   // Auswahl: Zeile antippen markiert (kein Öffnen, kein Ziehen)
   const pickRow = (n) => `
@@ -42,10 +41,10 @@ function renderNoteList(fid) {
       ${n.remind_at && !n.reminded ? `<span class="tbell" title="Erinnerung">${ICON.bell}</span>` : ''}
       ${n.owner_id !== state.me ? `<span class="tby">${esc(nameOf(n.owner_id))}</span>` : ''}
     </div>`;
-  const body = `<button class="ink-open" data-act="note-mode" data-id="ink">${ICON.ink}<span><b>Canvas</b><small>Diese Notizen, dazu Stift, Text, Formen und Bereiche</small></span>${ICON.chevR}</button>
+  const body = `<button class="ink-open" data-act="note-mode" data-id="ink">${ICON.ink}<span><b>Canvas</b></span>${ICON.chevR}</button>
   <section class="tbig" data-drop="${fid}">
     ${sel ? selectInfo() : `<button class="addrow tadd tnew" data-act="new-note-in" data-id="${fid}"><span class="xic">${ICON.plus}</span><span>Neue Notiz …</span></button>`}
     ${has ? blocksHtml(fid, 'note', row) : '<p class="kempty">Noch keine Notizen.</p>'}
   </section>`;
-  return listLayout(noteFolders(), fid, body, has && !sel ? 'Lange drücken und ziehen: nach oben oder unten verschieben, auf eine andere Notiz halten für eine Gruppe, unten in einen anderen Ordner.' : '', '', false);
+  return listLayout(noteFolders(), fid, body);
 }

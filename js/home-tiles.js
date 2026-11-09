@@ -39,8 +39,8 @@ function allTiles(today) {
     if (type === 'cat') {
       const list = isTodoList(obj);
       const inside = state.items.filter((i) => i.category_id === obj.id && (list ? i.type === 'todo' && !i.done : i.type === 'note'));
-      return { key, label: obj.name, icon: catSym(obj), color: obj.color, size: 'm', act: `data-act="pin-open" data-id="${obj.id}"`,
-        lines: () => (list ? checks : titles)(inside.sort(byNewest)), empty: list ? 'Alles erledigt' : 'Leer', badge: true, ink: list ? null : obj.id };
+      return { key, label: obj.name, icon: catSym(obj), color: obj.color, size: 'm', act: obj.canvas_only ? `data-act="home-canvas" data-id="${obj.id}"` : `data-act="pin-open" data-id="${obj.id}"`,
+        lines: () => (list ? checks : titles)(inside.sort(byNewest)), empty: list ? 'Alles erledigt' : 'Leer', badge: !obj.canvas_only, ink: list || obj.canvas_only ? null : obj.id };
     }
     const i = obj;
     return { key, label: i.type === 'note' ? i.title || 'Notiz' : 'Todo', icon: i.type === 'note' ? ICON.notes : ICON.todos, size: 's', act: `data-act="open" data-id="${i.id}"`,
@@ -106,10 +106,7 @@ export function renderTiles(today, d) {
       ${body(t, size, today, d)}${ink}
       ${edit ? `<button class="mt-size" data-act="tile-size" data-id="${esc(t.key)}" aria-label="Größe ändern">${ICON[SIZES.find(([k]) => k === size)[2]]}</button>` : ''}</div>`;
   };
-  return `<div class="mtiles ${edit ? 'editing' : ''}" data-cgrid="${kind('tiles')}">${ordered(allTiles(today)).map(tile).join('')}</div>
-    ${edit ? '<p class="hint mt-hint">Kacheln ziehen zum Verschieben, Knopf in der Ecke tippen für die Größe.</p>'
-      : `<p class="hint mt-hint">${isDesktop() ? 'Rechtsklick auf eine Kachel: Größe und Verschieben. Weitere Kacheln: in Todos oder Notizen per Rechtsklick „Zu Home hinzufügen“.'
-        : 'Kachel lange drücken: Größe, Verschieben, Bearbeiten. Weitere Kacheln: Kategorie lange drücken → „Zu Home hinzufügen“.'}</p>`}`;
+  return `<div class="mtiles ${edit ? 'editing' : ''}" data-cgrid="${kind('tiles')}">${ordered(allTiles(today)).map(tile).join('')}</div>`;
 }
 
 // Canvas eines Notiz-Ordners öffnen ('last' = zuletzt benutzter)
