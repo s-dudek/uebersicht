@@ -162,8 +162,9 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 .dash-head { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 4px 0 22px; text-align: center; }
 .dash-head b { font-family: var(--font-head); font-size: 46px; line-height: 1; }
 .dash-head span { font-size: 19px; color: var(--grey); }
-.dash-wrap > .tile + .tile, .dash-wrap > .tile + .dash-pins { margin-top: 18px; }
-.dash-day .th svg, .dash-meals .th svg { width: 20px; height: 20px; }
+.dash-head { position: relative; }
+.dash-edit { position: absolute; right: 0; top: 8px; }
+.dash-day .th svg { width: 20px; height: 20px; }
 .link-more { display: inline-flex; align-items: center; gap: 4px; }
 .link-more svg { width: 14px; height: 14px; }
 /* Tageskachel immer gleich hoch: eine Zeile Ganztägiges (seitlich scrollbar), Leiste mit fester Höhe */
@@ -189,46 +190,7 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 .ds-b.k-rem { background: var(--pale); color: var(--ink); box-shadow: 0 0 0 1.5px var(--white), inset 3px 0 0 var(--mid); }
 .ds-now { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--danger); border-radius: 1px; pointer-events: none; }
 
-/* Essen heute: drei Spalten */
-.dm { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 10px; }
-.dm-h { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--grey); margin: 0 2px 6px; }
-.dash-meals .cook { margin-top: 12px; }
-.dm .m-slot { display: none; }   /* Spaltenkopf nennt die Mahlzeit schon */
 
-/* Pinnwand */
-.dash-pins { margin-top: 26px; }
-.dp-h { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin: 0 4px 12px; }
-.dp-h b { font-family: var(--font-head); font-size: 24px; }
-.dp-h span { font-size: 13px; color: var(--grey); }
-.pins { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; align-items: start; }
-.pins-empty { padding: 34px; text-align: center; color: var(--grey); border: 1.5px dashed var(--soft); border-radius: 22px; }
-.pin { position: relative; display: flex; flex-direction: column; padding: 12px 14px 12px; border-radius: 22px; background: var(--glass); border: 1px solid var(--glass-line); box-shadow: var(--tile-shadow); }
-.pin.tinted { background: color-mix(in srgb, var(--ic) 12%, #fff); box-shadow: inset 4px 0 0 var(--ic), var(--tile-shadow); }
-.pin-h { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 1.5px solid var(--soft); }
-.pin-h b { flex: 1; min-width: 0; font-family: var(--font-head); font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pin-ic { flex: none; width: 22px; height: 22px; display: grid; place-items: center; color: var(--fc, var(--ink)); }
-.pin-ic svg { width: 19px; height: 19px; }
-.pin-x { flex: none; width: 26px; height: 26px; border-radius: 50%; font-size: 18px; line-height: 1; color: var(--grey); opacity: 0; transition: opacity .15s, background .15s; }
-.pin:hover .pin-x, .pin-x:focus-visible { opacity: 1; }
-.pin-x:hover { background: var(--pale); color: var(--ink); }
-.pin-b { display: flex; flex-direction: column; margin-top: 6px; }
-.pin-r { display: flex; align-items: center; gap: 10px; min-height: 40px; border-top: 1px solid var(--soft); text-align: left; }
-.pin-b > .pin-r:first-child { border-top: 0; }
-.pin-r .tcheck { width: 22px; height: 22px; }
-.pin-t { flex: 1; min-width: 0; text-align: left; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 8px 0; }
-.pin-r.done .pin-t { color: var(--grey); text-decoration: line-through; }
-button.pin-r:hover, .pin-t:hover { color: var(--mid); }
-.pin-text { text-align: left; font-size: 15px; font-weight: 400; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; }
-.pin-add { margin: 6px 0 0; min-height: 38px; padding: 0 4px; border: 0; background: transparent; box-shadow: none; border-top: 1px solid var(--soft); border-radius: 0; }
-.pin-add input { font-size: 15px; }
-.pin-more { align-self: flex-start; margin-top: 8px; font-size: 13px; font-weight: 600; padding: 4px 12px; border-radius: 999px; box-shadow: inset 0 0 0 1.5px var(--soft); }
-.pin-more:hover { background: var(--pale); }
-.pin.fdragging { opacity: .3; }
-.pin.ins-l, .pin.ins-r { position: relative; }
-.pin.ins-l::before, .pin.ins-r::before { content: ''; position: absolute; top: 10px; bottom: 10px; width: 4px; border-radius: 2px; background: var(--ink); }
-.pin.ins-l::before { left: -10px; }
-.pin.ins-r::before { right: -10px; }
-.pin.fghost { position: fixed; }
 .link-more { font-size: 14px; font-weight: 600; padding: 4px 12px; border-radius: 999px; box-shadow: inset 0 0 0 1.5px var(--soft); }
 .link-more:hover { background: var(--pale); }
 
@@ -275,18 +237,18 @@ button.pin-r:hover, .pin-t:hover { color: var(--mid); }
 .mt-list li:first-child { border-top: 0; }
 .mt.sz-l { justify-content: flex-start; }
 .mt.sz-l .mt-list { margin-top: 6px; }
-.mt:active { transform: scale(.97); }
+.mt.sz-s:active { transform: scale(.97); }   /* nur kleine: bei großen rutschten Knöpfe darin unter dem Finger weg */
 /* Kalender: dunkel mit großem Datum */
 .mt-cal { justify-content: space-between; gap: 0; background: var(--ink); color: var(--green-l); border: 0; box-shadow: 0 10px 28px rgba(12,55,65,.22); }
 .mt-cal.sz-l { justify-content: space-between; }
-.mt-cal small { font-size: 17px; font-weight: 600; letter-spacing: .02em; }
-.mt-cal b { font-family: var(--font-head); font-size: 78px; line-height: .9; color: var(--white); }
-.mt-cal span { font-size: 16px; font-weight: 500; }
-.mt-cal.sz-s small { font-size: 14px; }
-.mt-cal.sz-s b { font-size: 44px; }
+.mt-cal > small, .mt-date > small { font-size: 17px; font-weight: 600; letter-spacing: .02em; }
+.mt-cal > b, .mt-date > b { font-family: var(--font-head); font-size: 78px; line-height: .9; color: var(--white); }
+.mt-cal > span, .mt-date > span { font-size: 16px; font-weight: 500; }
+.mt-cal.sz-s > small { font-size: 14px; }
+.mt-cal.sz-s > b { font-size: 44px; }
 .mt-cal.sz-m { flex-direction: row; align-items: center; justify-content: flex-start; gap: 14px; }
-.mt-cal.sz-m b { font-size: 60px; order: -1; }
-.mt-cal.sz-m small, .mt-cal.sz-m span { display: block; }
+.mt-cal.sz-m > b { font-size: 60px; order: -1; }
+.mt-cal.sz-m > small, .mt-cal.sz-m > span { display: block; }
 /* Bearbeiten: Kacheln wackeln, Knopf für die Größe in der Ecke */
 .mtiles.editing .mt { animation: jiggle .28s ease-in-out infinite alternate; cursor: grab; }
 .mtiles.editing .mt:nth-child(even) { animation-delay: -.14s; }
@@ -300,11 +262,35 @@ button.pin-r:hover, .pin-t:hover { color: var(--mid); }
 .mt.ins-l::before { left: 2px; }
 .mt.ins-r::before { right: 2px; }
 .mt-hint { text-align: center; margin-top: 12px; }
+/* Todos in Kacheln: direkt abhaken */
+.mt-todo { display: flex; align-items: center; gap: 8px; }
+.mt-todo .tcheck { flex: none; width: 20px; height: 20px; }
+.mt-todo span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Desktop: 12 Spalten – Klein ein Viertel, Mittel die Hälfte und doppelt hoch, Groß volle Breite; mit mehr Inhalt */
+@media (min-width: 1024px) {
+  .mtiles { grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: 118px; gap: 16px; }
+  .mt { padding: 16px 18px; }
+  .mt.sz-s { grid-column: span 3; }
+  .mt.sz-m { grid-column: span 6; grid-row: span 2; justify-content: flex-start; }
+  .mt.sz-l { grid-column: span 12; grid-row: span 2; }
+  .mt.sz-m .mt-list, .mt.sz-l .mt-list { margin-top: 8px; font-size: 15px; }
+  .mt.sz-l .mt-list { column-count: 2; column-gap: 32px; }
+  .mt.sz-l .mt-list li { break-inside: avoid; }
+  .mt-list li { padding: 5px 0; }
+  /* Kalender Mittel: Datum links, Termine rechts */
+  .mt-cal.sz-m { flex-direction: row; align-items: stretch; justify-content: flex-start; gap: 22px; }
+  .mt-cal .mt-date { flex: none; display: flex; flex-direction: column; justify-content: space-between; }
+  .mt-cal.sz-m .mt-date > b { font-size: 96px; }
+  .mt-cal .mt-events { flex: 1; min-width: 0; margin: 0; color: var(--green-l); }
+  .mt-cal .mt-events li { border-color: rgba(168, 190, 167, .25); }
+  /* Kalender Groß: der Tag als Zeitleiste (hell wie vorher) */
+  .mt-cal.mt-day { display: block; background: var(--glass); color: var(--ink); border: 1px solid var(--glass-line); box-shadow: var(--tile-shadow); }
+  .mt-day .ds-track { height: 104px; }
+}
 @media (min-width: 600px) {
   .mtiles { grid-auto-rows: 140px; gap: 14px; }
-  .mt-cal.sz-l b { font-size: 110px; }
+  .mt-cal.sz-l > b { font-size: 110px; }
 }
-.mtiles + .dash-pins { margin-top: 22px; }
 
 .dash-day[data-act] { cursor: pointer; }
 .dash-day .lgear { margin-left: 0; }

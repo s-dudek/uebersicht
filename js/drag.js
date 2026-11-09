@@ -59,7 +59,7 @@ export function initCategorySort() {
   $app.addEventListener('pointerdown', (e) => {
     if (e.button > 0) return;
     const el = e.target.closest('[data-cgrid] [data-cdrag]');
-    if (!el || e.target.closest('input, textarea, .tcheck, .pin-x, .mt-size')) return;   // Bedienelemente in Karten nicht als Ziehen werten
+    if (!el || e.target.closest('input, textarea, .tcheck, .mt-size, .mt-ink')) return;   // Bedienelemente in Karten nicht als Ziehen werten
     const touch = e.pointerType !== 'mouse';
     const hold = el.closest('.editing') ? 120 : HOLD;   // Kacheln im Bearbeiten-Modus: fast sofort ziehen
     press = { el, x: e.clientX, y: e.clientY, menu: false, t: setTimeout(() => {

@@ -1,4 +1,4 @@
-// Startseite (Desktop): selbst gewählte Einträge und Listen ("Zu Home hinzufügen")
+// Startseite: selbst gewählte Einträge und Listen ("Zu Home hinzufügen"), dort als Kacheln (home-tiles.js)
 // Gespeichert pro Person wie die Ordner-Reihenfolge (profiles.cat_order, Schlüssel "home").
 import { catById, itemById, toast } from './core.js';
 import { catOrder, saveCatOrder } from './folders.js';

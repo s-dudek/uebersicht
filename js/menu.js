@@ -55,7 +55,7 @@ function orderEntry(el) {
   return order.length ? { order } : null;
 }
 
-// Menü zu einem Element (Eintrag, Ordner-Karte oder Karte der Pinnwand) – Rechtsklick oder langes Drücken
+// Menü zu einem Element (Kachel der Startseite, Eintrag oder Ordner-Karte) – Rechtsklick oder langes Drücken
 export function openMenuFor(target, x, y) {
   // Kachel der Startseite (wie Widget am iPhone): Größe und Bearbeiten; im Bearbeiten-Modus gleich ziehen
   const tileEl = target.closest('[data-tile]');
@@ -72,13 +72,8 @@ export function openMenuFor(target, x, y) {
   }
   const itemEl = target.closest('[data-drag], [data-act="open"][data-id]');
   const folderEl = target.closest('.fcard[data-cdrag], .fcol-i[data-id]');
-  const pinEl = target.closest('[data-pin]');
-  let i = itemEl && itemById(itemEl.dataset.drag || itemEl.dataset.id);
-  let c = !i && folderEl && catById(folderEl.dataset.cdrag || folderEl.dataset.id);
-  if (!i && !c && pinEl) {
-    const key = pinEl.dataset.pin;
-    if (key.startsWith('i:')) i = itemById(key.slice(2)); else c = catById(key.slice(2));
-  }
+  const i = itemEl && itemById(itemEl.dataset.drag || itemEl.dataset.id);
+  const c = !i && folderEl && catById(folderEl.dataset.cdrag || folderEl.dataset.id);
   if (!c && !i) return false;
   const entries = c ? folderMenu(c) : itemMenu(i);
   const order = orderEntry(target.closest('[data-cgrid] [data-cdrag]'));
