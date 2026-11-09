@@ -31,6 +31,7 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   (keine eigene Pinnwand am Handy); Notizen- und Notiz-Ordner-Kacheln mit Knopf direkt in den Canvas (zuletzt benutzter Ordner: `inkFolder`).
   Kopfleisten der Bereiche schmal im selben Dunkelgrün, gleiche Höhe (44 px) und Schrift in Salbei (außer Canvas). Einen eigenen Bereich „Kategorien“ gibt es nicht mehr (Ordner in Todos/Notizen).
 - Keine kleinen Beschreibungs-/Hinweistexte auf den Seiten (Bedienung erklärt sich über Menü und Knöpfe).
+- Todo-Listen und Notiz-Ordner getrennt (`todoLists`/`noteFolders` in folders.js): Listen erscheinen nur bei den Notizen, wenn Notizen darin liegen, und umgekehrt.
 - Todos und Notizen: geöffneter Ordner ohne Ordner-Spalte, Wechsel oben über den Titel (`openFolderDrop` in menu.js, auch Canvas).
   Abhaken: Zeile bleibt kurz markiert (`.just-done`, `toggleTodo` in data.js), nochmal tippen nimmt zurück.
 - Reine Canvas-Ordner (`categories.canvas_only`, `isCanvasOnly`/`inkMode` in core.js): öffnen direkt den Canvas, ohne Notizen-Liste und ohne Notizen-Bereich;

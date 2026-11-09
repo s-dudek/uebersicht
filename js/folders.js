@@ -60,8 +60,10 @@ function dropTray(folders, current) {
 }
 
 // Notizen: wie Todos – Ordner-Übersicht, geöffnet groß mit Titeln, Tippen = Notiz
+// Notiz-Ordner: getrennt von den Todo-Listen; eine Liste erscheint nur hier, wenn Notizen darin liegen
+const isNoteFolder = (c) => !isTodoList(c) || state.items.some((i) => i.type === 'note' && i.category_id === c.id);
 export const noteFolders = () => [
-  ...orderCats(state.categories, 'notes').map((c) => ({ id: c.id, name: c.name, color: c.color, shared: isCatShared(c) })),
+  ...orderCats(state.categories.filter(isNoteFolder), 'notes').map((c) => ({ id: c.id, name: c.name, color: c.color, shared: isCatShared(c) })),
   { id: '', name: 'Ohne Kategorie', color: null, shared: false },
 ];
 

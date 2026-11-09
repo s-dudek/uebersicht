@@ -4,7 +4,6 @@ import {
   askConfirm,
   catById,
   esc,
-  isCatShared,
   isTodoList,
   localLists,
   membersOf,
@@ -21,10 +20,9 @@ import { personPicker, shareMessage } from './items.js';
 import { render } from './render.js';
 import { closeSheet, openSheet } from './sheet.js';
 
-// Neue Todo-Liste (neue oder vorhandene Kategorie) bzw. neuer Notiz-Ordner (folder)
+// Neue Todo-Liste bzw. neuer Notiz-Ordner (folder) – Listen und Ordner bleiben getrennt
 export function openNewList({ folder = false } = {}) {
   const isList = !folder;
-  const available = state.categories.filter((c) => !isTodoList(c));
   let color = COLORS[1], canvas = false;   // Ordner: mit Notizen-Liste oder nur Canvas
   const sheet = openSheet(`
     <div class="sheet-head"><h2>${isList ? 'Neue Liste' : 'Neuer Ordner'}</h2><button class="link-btn" data-close>Fertig</button></div>
@@ -36,11 +34,7 @@ export function openNewList({ folder = false } = {}) {
       ${isList ? '' : `<div class="field"><label>Art</label><div class="seg-view nl-kind">
         <button type="button" class="on" data-kind="">${ICON.notes}<span>Notizen und Canvas</span></button>
         <button type="button" data-kind="canvas">${ICON.ink}<span>Nur Canvas</span></button></div></div>`}
-    </form>
-    ${isList && available.length ? `<div class="divider"></div>
-      <div class="field"><label>Oder vorhandene Kategorie als Liste nehmen</label>
-        <div class="pick">${available.map((c) => `<button class="pick-item" data-pick="${c.id}"><i class="ldot" style="background:${safeColor(c.color)}"></i>${esc(c.name)}${isCatShared(c) ? `<small>gemeinsam</small>` : ''}</button>`).join('')}</div>
-      </div>` : ''}`);
+    </form>`);
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
   setTimeout(() => sheet.querySelector('#nl-name').focus(), 60);
   sheet.querySelectorAll('[data-color]').forEach((b) => b.addEventListener('click', () => {
@@ -51,13 +45,6 @@ export function openNewList({ folder = false } = {}) {
     canvas = !!b.dataset.kind;
     sheet.querySelectorAll('[data-kind]').forEach((x) => x.classList.toggle('on', x === b));
   }));
-  const asList = async (c) => {
-    if (c.owner_id === state.me) {
-      const { error } = await sb.from('categories').update({ todo_list: true }).eq('id', c.id);
-      if (error) return toast('Fehler: ' + error.message);
-      c.todo_list = true;
-    } else setLocalLists([...new Set([...localLists(), c.id])]);
-  };
   sheet.querySelector('#nl-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = sheet.querySelector('#nl-name').value.trim();
@@ -70,13 +57,6 @@ export function openNewList({ folder = false } = {}) {
     toast(`${isList ? 'Liste' : 'Ordner'} „${name}“ angelegt`);
     if (isList) document.querySelector(`.addrow[data-list="${data.id}"] input`)?.focus();
   });
-  sheet.querySelectorAll('[data-pick]').forEach((b) => b.addEventListener('click', async () => {
-    const c = catById(b.dataset.pick);
-    await asList(c);
-    closeSheet(); render();
-    toast(`„${c.name}“ ist jetzt eine Liste`);
-    document.querySelector(`.addrow[data-list="${c.id}"] input`)?.focus();
-  }));
 }
 
 export function openCategory(cid) {
@@ -100,9 +80,9 @@ export function openCategory(cid) {
       <button class="menu-item" id="c-list" type="button">${listOn ? 'Als Todo-Liste anzeigen: an' : 'Als Todo-Liste anzeigen: aus'}<span class="sw ${listOn ? 'on' : ''}"></span></button>
       ${listOn && state.items.some((i) => i.type === 'todo' && i.category_id === cid) ? '<div class="hint">Solange Todos darin sind, bleibt sie in den Todos sichtbar.</div>' : ''}
     </div>
-    <div class="field"><label>Notizen</label>
+    ${listOn ? '' : `<div class="field"><label>Notizen</label>
       <button class="menu-item" id="c-canvas" type="button">Nur Canvas (ohne Notizen-Liste): ${c.canvas_only ? 'an' : 'aus'}<span class="sw ${c.canvas_only ? 'on' : ''}"></span></button>
-    </div>
+    </div>`}
     <div class="divider"></div>
     <button class="btn danger block" id="c-delete">Kategorie löschen</button>
     <div class="hint" style="text-align:center">Einträge bleiben erhalten, nur ohne Kategorie.</div>
@@ -166,7 +146,7 @@ export function openCategory(cid) {
       if (!next) setLocalLists(localLists().filter((x) => x !== cid));
       render(); openCategory(cid);
     });
-    sheet.querySelector('#c-canvas').addEventListener('click', async () => {
+    sheet.querySelector('#c-canvas')?.addEventListener('click', async () => {
       const next = !c.canvas_only;
       const { error } = await sb.from('categories').update({ canvas_only: next }).eq('id', cid);
       if (error) return toast('Fehler: ' + error.message);
