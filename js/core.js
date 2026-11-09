@@ -93,7 +93,7 @@ export const state = {
   categories: [],
   members: [],         // {category_id, user_id}
   items: [],
-  trash: { items: [], cats: [] },   // Papierkorb: gelöschte Einträge und Kategorien (deleted_at)
+  trash: { items: [], cats: [], hidden: [] },   // Papierkorb: gelöschte Einträge und Kategorien (deleted_at)
   shares: [],          // {item_id, user_id}
   tab: 'home',
   weekStart: (() => { const x = new Date(); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); const p = (n) => String(n).padStart(2, '0'); return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`; })(),   // Montag der angezeigten Woche

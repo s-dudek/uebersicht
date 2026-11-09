@@ -20,12 +20,15 @@ export async function loadAll() {
   const err = c.error || m.error || i.error || s.error || p.error;
   if (err) { toast('Laden fehlgeschlagen: ' + err.message, 4000); return; }
   // Papierkorb: Markiertes getrennt halten; Einträge einer gelöschten Kategorie erscheinen bis dahin „ohne Kategorie“
+  // „Für mich entfernt“ (geteilte Einträge anderer, je Person in cat_order.hidden): nur bei mir ausgeblendet
+  state.profiles = Object.fromEntries(p.data.map((x) => [x.id, x]));
+  const hidden = new Set(state.profiles[state.me]?.cat_order?.hidden || []);
+  const isHidden = (x) => x.owner_id !== state.me && hidden.has(x.id);
   state.categories = c.data.filter((x) => !x.deleted_at);
   state.members = m.data;
-  state.items = i.data.filter((x) => !x.deleted_at);
-  state.trash = { items: i.data.filter((x) => x.deleted_at), cats: c.data.filter((x) => x.deleted_at) };
+  state.items = i.data.filter((x) => !x.deleted_at && !isHidden(x));
+  state.trash = { items: i.data.filter((x) => x.deleted_at), cats: c.data.filter((x) => x.deleted_at), hidden: i.data.filter((x) => !x.deleted_at && isHidden(x)) };
   state.shares = s.data;
-  state.profiles = Object.fromEntries(p.data.map((x) => [x.id, x]));
   state.loaded = true;
   render();
   setTimeout(checkReminders, 1200);

@@ -61,13 +61,12 @@ export function calDayBody(today) {
     </div>`;
 }
 
-// Desktop: Datum oben (mit Bearbeiten/Fertig), darunter dieselben Kacheln wie am Smartphone, dem Platz angepasst
+// Desktop: Knopf Bearbeiten/Fertig, darunter dieselben Kacheln wie am Smartphone, dem Platz angepasst (Datum ist eine eigene Kachel)
 function renderDashboard() {
   const today = ymd(new Date()), d = new Date();
   if (!isDesktop()) return `<div class="dash-wrap">${renderTiles(today, d)}</div>`;
   return `<div class="dash-wrap">
-    <header class="dash-head"><b>${d.toLocaleDateString('de-AT', { weekday: 'long' })}</b><span>${d.toLocaleDateString('de-AT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-      <button class="chip dash-edit ${state.homeEdit ? 'on' : ''}" data-act="home-edit">${state.homeEdit ? 'Fertig' : 'Bearbeiten'}</button></header>
+    <div class="dash-bar"><button class="chip ${state.homeEdit ? 'on' : ''}" data-act="home-edit">${state.homeEdit ? 'Fertig' : 'Bearbeiten'}</button></div>
     ${renderTiles(today, d)}
   </div>`;
 }

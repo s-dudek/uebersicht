@@ -8,6 +8,7 @@ import { openItem } from './items.js';
 import { defaultSize, isPinTile, SIZES, setHomeEdit, setTileSize, tileSize } from './home-tiles.js';
 import { isPinned, pinKey, togglePin } from './pins.js';
 import { render } from './render.js';
+import { hideForMe } from './trash.js';
 
 let menuEl = null;
 
@@ -28,7 +29,8 @@ function itemMenu(i) {
     entries.push({ move: folders.map((f) => [f, f.id === cur]) });
   }
   entries.push('sep', pinEntry(pinKey.item(i.id)));
-  if (canDeleteItem(i)) entries.push(['trash', 'Löschen', () => deleteItem(i.id), { danger: true }]);
+  if (i.owner_id !== state.me) entries.push(['eye', 'Für mich entfernen', () => hideForMe(i.id)]);   // geteilt: bleibt bei der anderen Person
+  if (canDeleteItem(i)) entries.push(['trash', i.owner_id === state.me ? 'Löschen' : 'Löschen (für alle)', () => deleteItem(i.id), { danger: true }]);
   return entries;
 }
 

@@ -24,6 +24,7 @@ import { openTraining } from './training.js';
 import { pushOn, pushSupport, remindHint } from './reminders.js';
 import { render } from './render.js';
 import { categoryOptions, closeSheet, colorPick, openSheet } from './sheet.js';
+import { hideForMe } from './trash.js';
 
 // ---------- Todo / Notiz öffnen ----------
 // Text einer Notiz zum Lesen: maskiert, Zeilenumbrüche bleiben, Web-Adressen werden zu Links
@@ -89,7 +90,8 @@ export function openItem(id, { isNew = false, edit = false } = {}) {
       <div class="hint" id="f-remind-hint">${remindHint(i)}</div>
     </div>
     <div class="field"><label>Geteilt</label><div id="share-area"></div></div>
-    ${canDeleteItem(i) ? `<button class="btn danger block" id="f-delete">${isNote ? 'Notiz' : 'Todo'} löschen</button>` : ''}
+    ${mine ? '' : '<button class="btn secondary block" id="f-hide">Für mich entfernen</button>'}
+    ${canDeleteItem(i) ? `<button class="btn danger block" id="f-delete">${isNote ? 'Notiz' : 'Todo'} löschen${mine ? '' : ' (für alle)'}</button>` : ''}
   `, { full: isNote, onClose: () => { saveText.flush(); if (isNew && !itemById(id)?.title && !itemById(id)?.body) silentDelete(id); } });
 
   const $status = sheet.querySelector('#save-status');
@@ -140,6 +142,7 @@ export function openItem(id, { isNew = false, edit = false } = {}) {
     saveItem(id, { category_id: e.target.value || null }).then(() => renderShareArea(sheet, id));
   });
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
+  sheet.querySelector('#f-hide')?.addEventListener('click', () => { saveText.flush(); closeSheet(); hideForMe(id); });
   sheet.querySelector('#f-delete')?.addEventListener('click', async () => {
     saveText.flush = () => {};
     if (await deleteItem(id)) { isNew = false; closeSheet(); }

@@ -159,11 +159,7 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
    ========================================================================== */
 /* Startseite als Übersicht */
 .dash-wrap { max-width: 1240px; margin: 0 auto; }
-.dash-head { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 4px 0 22px; text-align: center; }
-.dash-head b { font-family: var(--font-head); font-size: 46px; line-height: 1; }
-.dash-head span { font-size: 19px; color: var(--grey); }
-.dash-head { position: relative; }
-.dash-edit { position: absolute; right: 0; top: 8px; }
+.dash-bar { display: flex; justify-content: flex-end; margin: 0 0 12px; }
 .dash-day .th svg { width: 20px; height: 20px; }
 .link-more { display: inline-flex; align-items: center; gap: 4px; }
 .link-more svg { width: 14px; height: 14px; }
@@ -238,17 +234,16 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 .mt.sz-l { justify-content: flex-start; }
 .mt.sz-l .mt-list { margin-top: 6px; }
 .mt.sz-s:active { transform: scale(.97); }   /* nur kleine: bei großen rutschten Knöpfe darin unter dem Finger weg */
-/* Kalender: dunkel mit großem Datum */
-.mt-cal { justify-content: space-between; gap: 0; background: var(--ink); color: var(--green-l); border: 0; box-shadow: 0 10px 28px rgba(12,55,65,.22); }
-.mt-cal.sz-l { justify-content: space-between; }
-.mt-cal > small, .mt-date > small { font-size: 17px; font-weight: 600; letter-spacing: .02em; }
-.mt-cal > b, .mt-date > b { font-family: var(--font-head); font-size: 78px; line-height: .9; color: var(--white); }
-.mt-cal > span, .mt-date > span { font-size: 16px; font-weight: 500; }
-.mt-cal.sz-s > small { font-size: 14px; }
-.mt-cal.sz-s > b { font-size: 44px; }
-.mt-cal.sz-m { flex-direction: row; align-items: center; justify-content: flex-start; gap: 14px; }
-.mt-cal.sz-m > b { font-size: 60px; order: -1; }
-.mt-cal.sz-m > small, .mt-cal.sz-m > span { display: block; }
+/* Datum: dunkel mit großem Tag */
+.mt-date { justify-content: space-between; gap: 0; background: var(--ink); color: var(--green-l); border: 0; box-shadow: 0 10px 28px rgba(12,55,65,.22); }
+.mt-date.sz-l { justify-content: space-between; }
+.mt-date > small { font-size: 17px; font-weight: 600; letter-spacing: .02em; }
+.mt-date > b { font-family: var(--font-head); font-size: 78px; line-height: .9; color: var(--white); }
+.mt-date > span { font-size: 16px; font-weight: 500; }
+.mt-date.sz-s > small { font-size: 14px; }
+.mt-date.sz-s > b { font-size: 44px; }
+.mt-date.sz-m { flex-direction: row; align-items: center; justify-content: flex-start; gap: 14px; }
+.mt-date.sz-m > b { font-size: 60px; order: -1; }
 /* Bearbeiten: Kacheln wackeln, Knopf für die Größe in der Ecke */
 .mtiles.editing .mt { animation: jiggle .28s ease-in-out infinite alternate; cursor: grab; }
 .mtiles.editing .mt:nth-child(even) { animation-delay: -.14s; }
@@ -277,19 +272,14 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
   .mt.sz-l .mt-list { column-count: 2; column-gap: 32px; }
   .mt.sz-l .mt-list li { break-inside: avoid; }
   .mt-list li { padding: 5px 0; }
-  /* Kalender Mittel: Datum links, Termine rechts */
-  .mt-cal.sz-m { flex-direction: row; align-items: stretch; justify-content: flex-start; gap: 22px; }
-  .mt-cal .mt-date { flex: none; display: flex; flex-direction: column; justify-content: space-between; }
-  .mt-cal.sz-m .mt-date > b { font-size: 96px; }
-  .mt-cal .mt-events { flex: 1; min-width: 0; margin: 0; color: var(--green-l); }
-  .mt-cal .mt-events li { border-color: rgba(168, 190, 167, .25); }
-  /* Kalender Groß: der Tag als Zeitleiste (hell wie vorher) */
-  .mt-cal.mt-day { display: block; background: var(--glass); color: var(--ink); border: 1px solid var(--glass-line); box-shadow: var(--tile-shadow); }
+  /* Kalender Groß: der Tag als Zeitleiste */
+  .mt-day { display: block; }
   .mt-day .ds-track { height: 104px; }
 }
 @media (min-width: 600px) {
   .mtiles { grid-auto-rows: 140px; gap: 14px; }
-  .mt-cal.sz-l > b { font-size: 110px; }
+  .mt-date.sz-l > b { font-size: 110px; }
+  .mt-date.sz-m > b { font-size: 76px; }
 }
 
 .dash-day[data-act] { cursor: pointer; }

@@ -10,6 +10,7 @@ import { ICON } from './icons.js';
 import { renderShareArea } from './items.js';
 import { render } from './render.js';
 import { categoryOptions, clearSheetClose, closeSheet, openSheet } from './sheet.js';
+import { hideForMe } from './trash.js';
 
 // ====================================================================
 // Termine + Geburtstage (type 'event'; meta.kind, meta.time, meta.repeat, meta.remind)
@@ -145,7 +146,8 @@ export function openEvent(id, { isNew = false } = {}) {
       <div class="field"><label>Notiz</label><textarea class="textarea" id="ev-body" style="min-height:80px" placeholder="${b ? 'Geschenkidee, Adresse …' : 'Ort, Details …'}">${esc(ev.body)}</textarea></div>
       <div class="field"><label>Kategorie</label><select class="select" id="ev-cat">${categoryOptions(ev.category_id)}</select></div>
       <div class="field"><label>Geteilt</label><div id="share-area"></div></div>
-      ${canDeleteItem(ev) ? `<button class="btn danger block" id="ev-del">${b ? 'Geburtstag' : 'Termin'} löschen</button>` : ''}
+      ${ev.owner_id === state.me ? '' : '<button class="btn secondary block" id="ev-hide">Für mich entfernen</button>'}
+      ${canDeleteItem(ev) ? `<button class="btn danger block" id="ev-del">${b ? 'Geburtstag' : 'Termin'} löschen${ev.owner_id === state.me ? '' : ' (für alle)'}</button>` : ''}
     `, { onClose: () => { saveText.flush(); if (isNew && !itemById(id)?.title) silentDelete(id); } });
 
     const saveText = debounce(() => {
@@ -194,6 +196,7 @@ export function openEvent(id, { isNew = false } = {}) {
     sheet.querySelector('#ev-rep')?.addEventListener('click', () => setMeta({ repeat: itemById(id).meta?.repeat === 'yearly' ? '' : 'yearly' }));
     sheet.querySelectorAll('[data-rem]').forEach((x) => x.addEventListener('click', () => setMeta({ remind: x.dataset.rem })));
     sheet.querySelector('#ev-cat').addEventListener('change', (x) => saveItem(id, { category_id: x.target.value || null }).then(() => renderShareArea(sheet, id)));
+    sheet.querySelector('#ev-hide')?.addEventListener('click', () => { saveText.flush(); clearSheetClose(); closeSheet(); hideForMe(id); });
     sheet.querySelector('#ev-del')?.addEventListener('click', async () => {
       if (!(await askConfirm(`„${evTitle(itemById(id))}“ löschen?`, 'Löschen', 'Landet im Papierkorb.'))) return;
       clearSheetClose(); closeSheet(); trashItems([id]);

@@ -1,4 +1,4 @@
-// Startseite: Kacheln wie Widgets am iPhone – Kalender, Todos, Notizen, Gerichte, Training
+// Startseite: Kacheln wie Widgets am iPhone – Datum, Kalender (Termine), Todos, Notizen, Gerichte, Training
 // und alles, was „Zu Home hinzugefügt“ wurde (Kategorien, Notizen, Todos; pins.js).
 // Am Desktop größer und mit mehr Inhalt (Kalender groß: Tag als Zeitleiste, Todos zum Abhaken).
 // Reihenfolge und Größe je Person, getrennt für Desktop (profiles.cat_order: 'tiles'/'tilesz', Desktop 'tilesD'/'tileszD'; Größen als "todos:s").
@@ -24,7 +24,9 @@ const slotName = (m) => SLOTS.find(([k]) => k === m.meta?.slot)?.[1];
 function allTiles(today) {
   const todos = () => state.items.filter((i) => i.type === 'todo' && !i.done);
   const base = [
-    { key: 'cal', label: 'Kalender', size: 'l', act: `data-act="home-cal" data-id="${today}"` },
+    { key: 'date', label: 'Datum', size: 'l', desk: 's', act: `data-act="home-cal" data-id="${today}"` },
+    { key: 'cal', label: 'Kalender', icon: ICON.calendar, size: 'm', desk: 'l', act: `data-act="home-cal" data-id="${state.homeDay || today}"`,
+      lines: () => calRows(today), empty: 'Heute nichts eingetragen', badge: true },
     { key: 'todos', label: 'Todos', icon: ICON.todos, size: 's', desk: 'm', act: 'data-act="nav" data-id="todos"', lines: () => checks(todos()), empty: 'Alles erledigt', badge: true },
     { key: 'notes', label: 'Notizen', icon: ICON.notes, size: 's', desk: 'm', act: 'data-act="nav" data-id="notes"', ink: 'last',
       lines: () => titles(state.items.filter((i) => i.type === 'note').sort(byNewest)), empty: 'Noch keine Notizen', badge: true },
@@ -48,9 +50,11 @@ function allTiles(today) {
   return [...base, ...pins].map((t) => ({ ...t, size: isDesktop() && t.desk ? t.desk : t.size }));
 }
 
+// gespeicherte Reihenfolge; neue Kacheln an ihrer Standardstelle einfügen (z. B. „Datum“ vorne)
 const ordered = (tiles) => {
-  const saved = catOrder(kind('tiles')).map((k) => tiles.find((t) => t.key === k)).filter(Boolean);
-  return [...saved, ...tiles.filter((t) => !saved.includes(t))];
+  const list = catOrder(kind('tiles')).map((k) => tiles.find((t) => t.key === k)).filter(Boolean);
+  tiles.forEach((t, i) => { if (!list.includes(t)) list.splice(Math.min(i, list.length), 0, t); });
+  return list;
 };
 export const tileSize = (key, fallback = 's') => {
   const s = catOrder(kind('tilesz')).find((x) => x.startsWith(key + ':') && !x.slice(key.length + 1).includes(':'))?.slice(key.length + 1);
@@ -69,19 +73,22 @@ const line = (x) => (typeof x === 'object'
   : `<li>${esc(x)}</li>`);
 
 // Kalender: Datum; am Desktop Mittel zusätzlich die Termine des Tages, Groß der Tag als Zeitleiste
-function calBody(size, today, d) {
-  if (size === 's') return `<small>${d.toLocaleDateString('de-AT', { weekday: 'short' })}</small><b>${d.getDate()}</b>`;
-  const date = `<small>${d.toLocaleDateString('de-AT', { weekday: 'long' })}</small><b>${d.getDate()}</b><span>${d.toLocaleDateString('de-AT', { month: 'long', year: 'numeric' })}</span>`;
-  if (!isDesktop()) return date;
-  if (size === 'l') return calDayBody(today);
+// Datum: Wochentag und Tag groß (dunkel)
+function dateBody(size, d) {
+  if (size === 's' && !isDesktop()) return `<small>${d.toLocaleDateString('de-AT', { weekday: 'short' })}</small><b>${d.getDate()}</b>`;
+  return `<small>${d.toLocaleDateString('de-AT', { weekday: 'long' })}</small><b>${d.getDate()}</b><span>${d.toLocaleDateString('de-AT', { month: 'long', year: 'numeric' })}</span>`;
+}
+
+// Termine des Tages als Zeilen (nur die für die Startseite eingeschalteten Abschnitte)
+function calRows(today) {
   const { timed, allday } = dayContent(today, 'home');
-  const rows = [...allday.map((a) => `ganztägig · ${a.label}`), ...timed.map((t) => `${hm(t.start)} · ${t.label}`)];
-  return `<div class="mt-date">${date}</div><ul class="mt-list mt-events">${(rows.length ? rows : ['Heute nichts eingetragen']).slice(0, 6).map(line).join('')}</ul>`;
+  return [...allday.map((a) => `ganztägig · ${a.label}`), ...timed.map((t) => `${hm(t.start)} · ${t.label}`)];
 }
 
 // Inhalt je Kachel und Größe: klein nur Symbol und Name, größer mit Vorschau
 function body(t, size, today, d) {
-  if (t.key === 'cal') return calBody(size, today, d);
+  if (t.key === 'date') return dateBody(size, d);
+  if (t.key === 'cal' && size === 'l' && isDesktop()) return calDayBody(today);   // Desktop groß: Tag als Zeitleiste
   const lines = t.lines(), n = previewRows(size);
   const badge = t.badge && lines.length ? `<i>${lines.length}</i>` : '';
   const preview = n ? `<ul class="mt-list">${(lines.length ? lines : [t.empty]).slice(0, n).map(line).join('')}</ul>` : '';
@@ -93,10 +100,9 @@ export function renderTiles(today, d) {
   const edit = !!state.homeEdit;
   const tile = (t) => {
     const size = tileSize(t.key, t.size), wide = t.key === 'cal' && size === 'l' && isDesktop();
-    const act = t.key === 'cal' ? `data-act="home-cal" data-id="${state.homeDay || today}"` : t.act;
     // Notizen bzw. Notiz-Ordner: Knopf direkt in den Canvas
     const ink = !edit && t.ink != null ? `<button class="mt-ink" data-act="home-canvas" data-id="${esc(t.ink)}" aria-label="Canvas öffnen" title="Canvas">${ICON.ink}</button>` : '';
-    return `<div class="mt mt-${isPinTile(t.key) ? 'pin' : t.key} sz-${size} ${wide ? 'mt-day dash-day' : ''}" role="button" tabindex="0" aria-label="${esc(t.label)}" data-tile="${esc(t.key)}" data-cdrag="${esc(t.key)}" ${edit ? '' : act}>
+    return `<div class="mt mt-${isPinTile(t.key) ? 'pin' : t.key} sz-${size} ${wide ? 'mt-day dash-day' : ''}" role="button" tabindex="0" aria-label="${esc(t.label)}" data-tile="${esc(t.key)}" data-cdrag="${esc(t.key)}" ${edit ? '' : t.act}>
       ${body(t, size, today, d)}${ink}
       ${edit ? `<button class="mt-size" data-act="tile-size" data-id="${esc(t.key)}" aria-label="Größe ändern">${ICON[SIZES.find(([k]) => k === size)[2]]}</button>` : ''}</div>`;
   };
