@@ -70,6 +70,10 @@ export function moveGoogle(o, day, t1, t2) {
   return call('save', { cal: o.gcal, id: o.gid, event });
 }
 
+// neuer Termin in einem Google-Kalender (z. B. beim Duplizieren) bzw. Termin löschen
+export const addGoogle = (gcal, event) => call('save', { cal: gcal, event });
+export const deleteGoogle = (o) => call('delete', { cal: o.gcal, id: o.gid });
+
 // Bearbeiten-Fenster: o = vorhandenes Vorkommen (mit gcal) oder null für neu.
 // Beim Anlegen: cals = beschreibbare Kalender, sel = vorgewählter, pre = schon Eingetipptes,
 // toApp(pre) wechselt zum Termin in der App. onDone(gcal) lädt den Kalender neu.

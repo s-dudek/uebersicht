@@ -51,6 +51,7 @@ js/
   events.js         Termine und Geburtstage
   calendar.js       Kalender (Tag, Woche wie bei Google, Monat), Kalenderliste
   cal-drag.js       Kalender: Termine ziehen (verschieben) und Dauer ändern
+  cal-menu.js       Kalender: Menü zum Termin (Duplizieren, Kopieren an, Löschen mit Rückgängig)
   cal-sources.js    Abschnitte ein/aus (cal_prefs), verknüpfte Kalender laden
   ics.js            ICS-Abos lesen (Wiederholungen, Zeitzonen)
   google-cal.js     Google-Kalender verbinden und Termine bearbeiten

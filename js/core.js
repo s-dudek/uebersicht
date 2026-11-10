@@ -25,10 +25,35 @@ export const onLayoutChange = (fn) => DESKTOP.addEventListener('change', fn);
 export const safeColor = (c, fallback = '') => (/^#[0-9a-fA-F]{3,8}$/.test(c || '') ? c : fallback);
 
 export function toast(text, ms = 2600) {
+  settleUndo();
   $toast.textContent = text;
+  $toast.classList.remove('has-undo');
   $toast.hidden = false;
   clearTimeout(toast.t);
   toast.t = setTimeout(() => ($toast.hidden = true), ms);
+}
+
+// Meldung mit Knopf „Rückgängig“ (5 Sekunden): undo() nimmt zurück, done() läuft, wenn nicht zurückgenommen wurde
+// (auch sofort, wenn vorher eine andere Meldung kommt)
+let pendingUndo = null;
+function settleUndo() { const p = pendingUndo; pendingUndo = null; p?.done(); }
+export function undoToast(text, { undo, done = () => {} }, ms = 5000) {
+  settleUndo();
+  const p = pendingUndo = { done };
+  $toast.innerHTML = '<span></span><button class="toast-undo" type="button">Rückgängig</button>';
+  $toast.firstChild.textContent = text;
+  $toast.classList.add('has-undo');
+  $toast.hidden = false;
+  clearTimeout(toast.t);
+  const hide = () => { $toast.hidden = true; $toast.classList.remove('has-undo'); };
+  toast.t = setTimeout(() => { if (pendingUndo === p) { pendingUndo = null; hide(); done(); } }, ms);
+  $toast.lastChild.addEventListener('click', () => {
+    if (pendingUndo !== p) return;
+    pendingUndo = null;
+    clearTimeout(toast.t);
+    hide();
+    undo();
+  });
 }
 
 // Bestätigungsdialog in der Seite (statt confirm(), das nicht überall funktioniert)

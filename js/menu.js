@@ -1,4 +1,5 @@
 // Rechtsklick-Menü (Maus): Funktionen für Einträge und Ordner
+import { calMenuEntries } from './cal-menu.js';
 import { deleteCategory, leaveCategory, openCategory } from './categories.js';
 import { $app, COLORS, canDeleteItem, catById, esc, itemById, safeColor, state } from './core.js';
 import { deleteItem, saveItem, toggleTodo } from './data.js';
@@ -72,6 +73,9 @@ export function openMenuFor(target, x, y) {
     showMenu(x, y, entries, null);
     return true;
   }
+  // Termin im Kalender: Duplizieren, Kopieren an, Löschen (cal-menu.js)
+  const cal = calMenuEntries(target);
+  if (cal) { showMenu(x, y, cal, null); return true; }
   const itemEl = target.closest('[data-drag], [data-act="open"][data-id]');
   const folderEl = target.closest('.fcard[data-cdrag]');
   const i = itemEl && itemById(itemEl.dataset.drag || itemEl.dataset.id);

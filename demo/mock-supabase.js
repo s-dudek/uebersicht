@@ -188,6 +188,17 @@
 
   async function rpc(name, args) {
     await new Promise((r) => setTimeout(r, 60));
+    if (name === 'give_event') {   // Termin an eine andere Person kopieren (wie in supabase-setup.sql)
+      if (!me()) return { data: 'not_allowed', error: null };
+      if (args.target === me()) return { data: 'self', error: null };
+      if (!db.profiles.some((p) => p.id === args.target)) return { data: 'not_found', error: null };
+      const now = new Date().toISOString(), bday = args.p_kind === 'birthday';
+      db.items.push({ id: uuid(), owner_id: args.target, type: 'event', title: String(args.p_title || '').slice(0, 300), body: String(args.p_body || '').slice(0, 4000),
+        done: false, due_date: args.p_day, category_id: null, created_at: now, updated_at: now,
+        meta: { kind: bday ? 'birthday' : 'event', repeat: bday ? 'yearly' : '', remind: '', time: args.p_time || '', end: args.p_end || '', from: me() } });
+      save(); notify();
+      return { data: 'ok', error: null };
+    }
     const email = String(args.target_email || '').trim().toLowerCase();
     const target = db.profiles.find((p) => p.email === email);
     if (name === 'share_category') {

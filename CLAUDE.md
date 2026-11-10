@@ -99,7 +99,9 @@ In der App zeigt Training → „Übungen“ die ganze Datenbank.
   Edge Function `supabase/functions/calendar-feed` (CORS-Umweg, prüft Anmeldung und Adresse), gelesen in `js/ics.js`.
   Google-Kalender bearbeitbar (`js/google-cal.js`): Edge Function `supabase/functions/google-calendar` (OAuth; alle Kalender der Kalenderliste je als Eintrag `x:g:<google-id>`, nur beschreibbare bearbeitbar),
   Neue Termine gehen in den zuletzt gewählten Kalender (`calTarget` im Browser: 'app' oder Google-ID), Auswahl oben im Termin-Fenster;
-  Termine in Tag/Woche ziehen und am unteren Rand länger/kürzer ziehen (`cal-drag.js`, Touch nach langem Drücken; eigene App-Termine und beschreibbare Google-Kalender, `moveGoogle`);
+  Termine in Tag/Woche ziehen und am unteren Rand länger/kürzer ziehen (`cal-drag.js`; eigene App-Termine und beschreibbare Google-Kalender, `moveGoogle`);
+  Menü zum Termin (`cal-menu.js`, Rechtsklick bzw. Touch langes Drücken – weiterziehen schließt es und verschiebt): Duplizieren (Tag + Kalender App/Google),
+  Kopieren an eine Person (RPC `give_event`, Kopie gehört ihr), Löschen sofort mit 5 s „Rückgängig“ (`undoToast` in core.js; Google erst nach Ablauf gelöscht, bis dahin `hideOcc`);
   Tag/Woche mit fester Gesamthöhe und voller Breite, sichtbar 06:00–19:00 (Raster in %, Höhe über Container-Einheiten); Ganztägiges als Leisten (mehrtägig über die Tage gezogen,
   zugeklappt 2 Zeilen mit „+n“, aufklappbar); Kalenderliste als Dropdown am Knopf neben „Heute“ (auch Startseiten-Auswahl); Termine zuerst ansehen (`event-view.js`), dann „Bearbeiten“; Wochenende leicht rot;
   Startseiten-Kachel mit Tageswechsel (`state.homeDay`); Knopf „Aktualisieren“ lädt alles sofort, sonst verknüpfte Kalender höchstens alle 15 Minuten.

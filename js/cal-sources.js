@@ -113,9 +113,14 @@ export const feedError = (id) => feeds.get(id)?.error || null;
 export const extOcc = (id) => occById.get(id);
 export const calOf = (id) => calendars.find((c) => c.id === id);
 
+// gerade gelöschte Termine (noch „Rückgängig“ möglich): schon ausblenden
+const gone = new Set();
+export const hideOcc = (id, on) => { if (on) gone.add(id); else gone.delete(id); };
+
 // Vorkommen der sichtbaren verknüpften Kalender an einem Tag
 export function extOn(day, where = 'hide') {
-  return calendars.filter((c) => isShown('x:' + c.id, where)).flatMap((c) => (feeds.get(c.id)?.byDay.get(day) || []).map((o) => ({ ...o, color: c.color, calName: c.name })));
+  return calendars.filter((c) => isShown('x:' + c.id, where))
+    .flatMap((c) => (feeds.get(c.id)?.byDay.get(day) || []).filter((o) => !gone.has(o.id)).map((o) => ({ ...o, color: c.color, calName: c.name })));
 }
 
 export async function addCalendar({ name, url, color }) {

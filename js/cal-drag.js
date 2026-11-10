@@ -1,17 +1,20 @@
 // Kalender (Tag/Woche): Termine ziehen = verschieben (auch auf einen anderen Tag),
-// am unteren Rand ziehen = länger/kürzer. Maus: sobald sie sich bewegt; Touch: erst nach langem Drücken
-// (sonst scrollt die Ansicht). Ziehbar sind eigene App-Termine und Termine aus beschreibbaren Google-Kalendern.
+// am unteren Rand ziehen = länger/kürzer. Maus: sobald sie sich bewegt; Touch: langes Drücken öffnet das Menü
+// (cal-menu.js), weiterziehen schließt es und verschiebt (vorher scrollt die Ansicht).
+// Ziehbar sind eigene App-Termine und Termine aus beschreibbaren Google-Kalendern.
 import { $app, itemById, toast } from './core.js';
+import { CAL_ENTRY } from './cal-menu.js';
 import { hm } from './calendar.js';
 import { extOcc, reloadGoogle } from './cal-sources.js';
 import { saveItem } from './data.js';
 import { moveGoogle } from './google-cal.js';
+import { closeMenu, openMenuFor } from './menu.js';
 import { render } from './render.js';
 
 const STEP = 15;      // Raster beim Ziehen (Minuten)
 const MIN_DUR = 15;   // kürzeste Dauer
 const LAST = 1439;    // spätestes Ende (23:59)
-const HOLD = 380;     // Touch: so lange drücken, dann ziehen (ms)
+const HOLD = 420;     // Touch: so lange drücken, dann Menü (weiterziehen = verschieben)
 const SLOP = 6;       // so weit (Punkte) darf sich der Zeiger vorher bewegen
 
 let g = null;         // laufendes Ziehen
@@ -26,20 +29,27 @@ export function initCalDrag() {
   document.addEventListener('pointerup', up);
   document.addEventListener('pointercancel', () => finish(false));
   // Touch: nach dem langen Drücken darf die Ansicht nicht mehr scrollen
-  document.addEventListener('touchmove', (e) => { if (g?.active) e.preventDefault(); }, { passive: false });
+  document.addEventListener('touchmove', (e) => { if (g?.active || g?.menu) e.preventDefault(); }, { passive: false });
   document.addEventListener('click', (e) => { if (Date.now() < quietUntil) { e.preventDefault(); e.stopPropagation(); } }, true);
   $app.addEventListener('contextmenu', (e) => { if (g?.touch) e.preventDefault(); });
 }
 
 function down(e) {
-  const el = e.target.closest('.cblk[data-mv]');
-  if (!el || e.button > 0) return;
-  const col = el.closest('.tcol');
-  const st = +el.dataset.st, en = +el.dataset.en;
-  g = { el, col, day: col.dataset.slotday, mode: e.target.closest('.cblk-rs') ? 'size' : 'move', pid: e.pointerId,
-    sx: e.clientX, sy: e.clientY, st0: st, en0: en, st, en, touch: e.pointerType !== 'mouse', active: false };
+  const mv = e.target.closest('.cblk[data-mv]'), entry = e.target.closest(CAL_ENTRY), touch = e.pointerType !== 'mouse';
+  if ((!mv && !(touch && entry)) || e.button > 0) return;   // Maus ohne Ziehen: Rechtsklick öffnet das Menü (menu.js)
+  const col = mv?.closest('.tcol');
+  const st = +(mv?.dataset.st || 0), en = +(mv?.dataset.en || 0);
+  g = { el: mv, entry: entry || mv, col, day: col?.dataset.slotday, mode: e.target.closest('.cblk-rs') ? 'size' : 'move', pid: e.pointerId,
+    sx: e.clientX, sy: e.clientY, st0: st, en0: en, st, en, touch, active: false, menu: false };
   g.day0 = g.day;
-  if (g.touch) g.timer = setTimeout(activate, HOLD);
+  if (touch) g.timer = setTimeout(hold, HOLD);
+}
+
+// Touch: lange gedrückt – Menü zeigen
+function hold() {
+  if (!g) return;
+  g.menu = openMenuFor(g.entry, g.sx, g.sy);
+  navigator.vibrate?.(10);
 }
 
 function activate() {
@@ -55,7 +65,9 @@ function move(e) {
   const dx = e.clientX - g.sx, dy = e.clientY - g.sy;
   if (!g.active) {
     if (Math.hypot(dx, dy) < SLOP) return;
-    if (g.touch) return finish(false);   // vor dem langen Drücken bewegt: die Ansicht scrollt
+    if (g.touch && !g.menu) return finish(false);   // vor dem langen Drücken bewegt: die Ansicht scrollt
+    if (!g.el) return;                              // nicht ziehbar: Menü bleibt offen
+    if (g.menu) { closeMenu(); g.menu = false; }    // nach dem Menü weitergezogen: verschieben
     activate();
   }
   e.preventDefault();
@@ -96,7 +108,7 @@ function finish(apply) {
   if (!g) return;
   const d = g; g = null;
   clearTimeout(d.timer);
-  if (!d.active) return;
+  if (!d.active) { if (d.menu) quietUntil = Date.now() + 400; return; }   // Menü offen: Loslassen öffnet den Termin nicht
   quietUntil = Date.now() + 400;
   render.hold = false;
   render.pending = false;
