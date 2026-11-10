@@ -11,6 +11,7 @@ import { FRAME_LAYOUTS, LAYOUT_FIELDS } from './ink-layout.js';
 import { clampSize, cleanText, KINDS, openPenPanel, PALETTE } from './ink-pen.js';
 import { deletePageTree, deserialize, loadChild, loadRoot, removeImages, savePage, serialize, titleIn, uploadImage } from './ink-store.js';
 import { openTree, titleSvg } from './ink-tree.js';
+import { calCardHtml, calColor, drawCalCard, nextCalSize, openCalOf, pickCalEvent } from './ink-cal.js';
 import { openItem } from './items.js';
 import { dropMenu } from './menu.js';
 import { notesIn } from './notes.js';
@@ -90,6 +91,9 @@ function openPage(row, note = null) {
     onDeleteTitles: deleteTitles,
     onExport: (n) => openExport([n]),
     onEditLayout: editLayoutSheet,
+    // Termin-Felder (ink-cal.js)
+    calCard: calCardHtml, calColor, nextCalSize, drawCal: drawCalCard,
+    onCal: (it) => { flushAll(); openCalOf(it); },
   });
   page.board.imagePaths().forEach((p) => page.atOpen.add(p));
   stack.push(page);
@@ -206,11 +210,12 @@ function showOutline() {
 
 // schmale Kopfleiste (Smartphone): Bereich und Speichern im Menü „Mehr“
 function openMore(btn) {
-  dropMenu(btn, `<button class="cm-i" data-a="ink-frame">${ICON.frame}<span>Bereich (A4) anlegen</span></button>
+  dropMenu(btn, `<button class="cm-i" data-a="ink-cal">${ICON.calendar}<span>Termin einfügen</span></button>
+    <button class="cm-i" data-a="ink-frame">${ICON.frame}<span>Bereich (A4) anlegen</span></button>
     <button class="cm-i" data-a="ink-export">${ICON.download}<span>Speichern als PDF, PNG, JPEG</span></button>
     <button class="cm-i" data-a="ink-grid">${ICON.grid}<span>${ui.grid ? 'Raster ausblenden' : 'Raster einblenden'}</span></button>`, (b) => {
     if (b.dataset.a === 'ink-frame') openFrameChoice(btn);
-    else if (b.dataset.a === 'ink-grid') inkAction('ink-grid');
+    else if (b.dataset.a === 'ink-grid' || b.dataset.a === 'ink-cal') inkAction(b.dataset.a);
     else { flushAll(); openExport(); }
   });
 }
@@ -439,6 +444,7 @@ export async function inkAction(act, id, btn) {
     case 'ink-undo': b?.undo(); return;
     case 'ink-redo': b?.redo(); return;
     case 'ink-img': picker.click(); return;
+    case 'ink-cal': pickCalEvent().then((c) => { if (c) top()?.board.addCal(c); }); return;
     case 'ink-frame': openFrameChoice(btn); return;
     case 'ink-fold': toggleBar(); return;
     case 'ink-export': flushAll(); openExport(); return;
@@ -709,6 +715,7 @@ function inkBar() {
       ${tool('shape', SHAPE_ICON[ui.shape], 'Formen')}
       ${tool('dim', 'ruler', 'Bemaßung')}
       ${tb('ink-img', 'image', 'Bild hinzufügen')}
+      ${tb('ink-cal', 'calendar', 'Termin einfügen', { cls: 'wide-only' })}
       <div class="ink-right">
         <div class="seg-view ink-seg">${seg('text', 'text', 'Text')}${seg('pen', 'pen', 'Zeichnen')}${seg('eraser', 'eraser', 'Radieren')}</div>
         <button class="ink-select ${selecting ? 'on' : ''}" data-act="ink-tool" data-id="lasso" aria-pressed="${selecting}" aria-label="Auswählen" title="Auswählen: antippen oder umkreisen">${ICON.lasso}<span>Auswahl</span></button>

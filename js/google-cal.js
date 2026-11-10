@@ -64,6 +64,12 @@ export async function listGoogle(gcal, from, to) {
   })).filter((o) => !isNaN(o.start) && !isNaN(o.end));
 }
 
+// Termin im Kalender verschoben bzw. länger/kürzer gezogen: nur Tag und Uhrzeit ändern (Rest bleibt)
+export function moveGoogle(o, day, t1, t2) {
+  const event = { allDay: false, start: `${day}T${t1}:00`, end: `${day}T${t2}:00`, title: o.title, location: o.location, desc: o.desc };
+  return call('save', { cal: o.gcal, id: o.gid, event });
+}
+
 // Bearbeiten-Fenster: o = vorhandenes Vorkommen (mit gcal) oder null für neu.
 // Beim Anlegen: cals = beschreibbare Kalender, sel = vorgewählter, pre = schon Eingetipptes,
 // toApp(pre) wechselt zum Termin in der App. onDone(gcal) lädt den Kalender neu.

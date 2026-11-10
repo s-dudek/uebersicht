@@ -1,6 +1,7 @@
 // Bereich Kalender: Tag, Woche (Zeitraster wie bei Google), Monat; Abschnitte ein- und ausblenden, verknüpfte Kalender
+import { calDragBusy } from './cal-drag.js';
 import { addCalendar, calendars, calOf, ensureExternal, EXT_COLORS, extOn, extOcc, feedError, google, isShown, reloadGoogle, removeCalendar, SECTIONS, toggleSection, unlinkGoogle } from './cal-sources.js';
-import { $app, askConfirm, esc, state, toast } from './core.js';
+import { $app, askConfirm, canDeleteItem, esc, state, toast } from './core.js';
 import { addDays, dayName, isoWeek, mondayOf, parseYmd, ymd } from './dates.js';
 import { loadAll } from './data.js';
 import { showEventCard, whenText } from './event-view.js';
@@ -66,12 +67,21 @@ export const allChip = (a) => `<button class="cchip k-${a.kind} ${a.item.done ? 
 
 export const hm = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 
+// ziehbar (cal-drag.js): eigene App-Termine und Termine aus beschreibbaren Google-Kalendern
+const movable = (t) => {
+  if (t.kind === 'ev') return canDeleteItem(t.item) ? `ev:${t.item.id}` : '';
+  if (t.kind !== 'x') return '';
+  const o = extOcc(t.item.id);
+  return o?.gcal && !o.allDay && calOf(o.cal)?.writable ? `x:${t.item.id}` : '';
+};
+
 const timedBlock = (t, narrow = false) => {
-  const dur = Math.min(t.end, 1440) - t.start, short = dur < 45;
+  const dur = Math.min(t.end, 1440) - t.start, short = dur < 45, mv = movable(t);
   const pos = `top:${pct(t.start)};height:max(22px, calc(${(dur / 1440) * 100}% - 2px));left:calc(${(t.col / t.cols) * 100}% + 1px);width:calc(${100 / t.cols}% - 3px)`;
   const attr = openAttr(t).replace(/style="([^"]*)"/, '').trim();
-  return `<button class="cblk k-${t.kind} ${narrow ? 'narrow' : ''}" ${attr} style="${pos}${t.kind === 'x' ? `;--xc:${t.color}` : ''}">
-    ${narrow && short ? '' : `<small>${hm(t.start)}${t.kind === 'ev' && t.item.meta?.end ? '–' + esc(t.item.meta.end) : ''}</small>`}<b>${esc(t.label)}</b></button>`;
+  const drag = mv ? `data-mv="${esc(mv)}" data-st="${t.start}" data-en="${Math.min(t.end, 1439)}"` : '';
+  return `<button class="cblk k-${t.kind} ${narrow ? 'narrow' : ''}" ${attr} ${drag} style="${pos}${t.kind === 'x' ? `;--xc:${t.color}` : ''}">
+    ${narrow && short ? '' : `<small>${hm(t.start)}${t.kind === 'ev' && t.item.meta?.end ? '–' + esc(t.item.meta.end) : ''}</small>`}<b>${esc(t.label)}</b>${mv ? '<i class="cblk-rs" aria-hidden="true"></i>' : ''}</button>`;
 };
 
 const hourLines = () => Array.from({ length: 24 }, (_, k) => `<div class="hl" style="top:${pct(k * 60)}"><span>${k ? String(k).padStart(2, '0') + ':00' : ''}</span></div>`).join('');
@@ -236,7 +246,7 @@ export function initCalendarGestures() {
   $app.addEventListener('touchend', (e) => {
     if (!on) return; on = false;
     const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
-    if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.6) calMove(dx < 0 ? 1 : -1);
+    if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.6 && !calDragBusy()) calMove(dx < 0 ? 1 : -1);
   }, { passive: true });
 }
 

@@ -49,6 +49,8 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   und ihrer Beschreibung oben; Notiz löschen löscht die Unterseite mit (data.js). Auswahl lässt sich nachträglich umgestalten (Farbe, Stärke, Schrift).
   unendliche Fläche (verschieben, zoomen 25–400 %, „Ursprungsansicht“), Werkzeugleiste unter der Kopfleiste (einfahrbar), Ordnerwahl über den Titel,
   Formen (als Striche), Textmarker (Strich mit `m`), Text (Element `x`), Bemaßung (Element `d`), Bilder mit Zuschnitt `cr` und Radierspuren `er`,
+  Drehen über den Griff oben an der Auswahl (Striche/Formen/Bemaßung: Punkte gedreht; Bilder und Texte: Winkel `r` um die Mitte; gedrehte Bilder nicht zuschneiden),
+  Termin-Feld (Element `c`, ink-cal.js: Verweis `ev` bzw. `xo` plus Kopie `tt`/`d`/`tm`, Größe `sz` s/m/l wie Kacheln, HTML-Ebene; ziehen = verschieben, antippen = Wochenansicht des Tages, Inhalt immer aktuell aus dem Kalender),
   Bereiche mit Name `n`, Hintergrund `bg` (lines/dots/blank), Farbe `fc`, Layout `ly` im Dudek-CI (ink-layout.js) mit Angaben `lf` (Titel, Projekt, Nr., Kontakt), Gliederung (Notizen zuerst, Titel unter ihrem Bereich, „Auf der Fläche zeigen“),
   Werkzeugleiste: Umschalter Text/Zeichnen/Radieren, Auswahl als eigener Knopf (solange aktiv ruhen die anderen Werkzeuge),
   Eigenschaften-Leiste unten (`.ink-ctx`, contextHtml in ink.js): je nach Werkzeug/Auswahl Farbe, Stärke, Schrift, Radiergröße, Aktionen; rechts runder Knopf „Ursprungsansicht“,
@@ -97,6 +99,7 @@ In der App zeigt Training → „Übungen“ die ganze Datenbank.
   Edge Function `supabase/functions/calendar-feed` (CORS-Umweg, prüft Anmeldung und Adresse), gelesen in `js/ics.js`.
   Google-Kalender bearbeitbar (`js/google-cal.js`): Edge Function `supabase/functions/google-calendar` (OAuth; alle Kalender der Kalenderliste je als Eintrag `x:g:<google-id>`, nur beschreibbare bearbeitbar),
   Neue Termine gehen in den zuletzt gewählten Kalender (`calTarget` im Browser: 'app' oder Google-ID), Auswahl oben im Termin-Fenster;
+  Termine in Tag/Woche ziehen und am unteren Rand länger/kürzer ziehen (`cal-drag.js`, Touch nach langem Drücken; eigene App-Termine und beschreibbare Google-Kalender, `moveGoogle`);
   Tag/Woche mit fester Gesamthöhe und voller Breite, sichtbar 06:00–19:00 (Raster in %, Höhe über Container-Einheiten); Ganztägiges als Leisten (mehrtägig über die Tage gezogen,
   zugeklappt 2 Zeilen mit „+n“, aufklappbar); Kalenderliste als Dropdown am Knopf neben „Heute“ (auch Startseiten-Auswahl); Termine zuerst ansehen (`event-view.js`), dann „Bearbeiten“; Wochenende leicht rot;
   Startseiten-Kachel mit Tageswechsel (`state.homeDay`); Knopf „Aktualisieren“ lädt alles sofort, sonst verknüpfte Kalender höchstens alle 15 Minuten.

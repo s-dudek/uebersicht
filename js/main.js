@@ -1,6 +1,7 @@
 // Einstieg: alle Teile starten, sobald die Module geladen sind
 import { initActions } from './actions.js';
 import { initAuth } from './auth.js';
+import { initCalDrag } from './cal-drag.js';
 import { initCalendarGestures } from './calendar.js';
 import { startControl } from './control.js';
 import { onLayoutChange } from './core.js';
@@ -18,6 +19,7 @@ initActions();           // Tippen und Absenden in der Hauptansicht
 initItemDrag();          // Einträge ziehen, sortieren, gruppieren
 initCategorySort();      // Ordner umsortieren
 initCalendarGestures();  // Kalender: antippen und wischen
+initCalDrag();           // Kalender: Termine ziehen und Länge ändern
 initContextMenu();       // Rechtsklick-Menü (Maus)
 initSync();              // beim Zurückkehren in die App neu laden
 initReminders();         // Erinnerungen prüfen

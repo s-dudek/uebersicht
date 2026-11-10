@@ -38,6 +38,7 @@ js/
   ink-board.js      Canvas: unendliche Zeichenfläche mit Zoom (Stift, Radierer, Auswahl, Formen, Bemaßung, Titel)
   ink-draw.js       Canvas: Geometrie und Zeichnen (Striche, Formen, Maße, Bilder, Kästchen)
   ink-crop.js       Canvas: Bild zuschneiden
+  ink-cal.js        Canvas: Termin-Feld (Verweis auf einen Termin, Auswahl, Karte für den Export)
   ink-pen.js        Canvas: Fenster für Farbe und Stärke (Stift, Textmarker, Text)
   ink-tree.js       Canvas: Gliederung (Bereiche, Titel und Unterseiten)
   ink-store.js      Canvas: Datenbank und Bilder (Supabase Storage)
@@ -49,6 +50,7 @@ js/
   event-view.js     Termin ansehen (vor dem Bearbeiten)
   events.js         Termine und Geburtstage
   calendar.js       Kalender (Tag, Woche wie bei Google, Monat), Kalenderliste
+  cal-drag.js       Kalender: Termine ziehen (verschieben) und Dauer ändern
   cal-sources.js    Abschnitte ein/aus (cal_prefs), verknüpfte Kalender laden
   ics.js            ICS-Abos lesen (Wiederholungen, Zeitzonen)
   google-cal.js     Google-Kalender verbinden und Termine bearbeiten

@@ -7,8 +7,8 @@ import { esc } from './core.js';
 import { ICON } from './icons.js';
 import { startCrop } from './ink-crop.js';
 import {
-  bbox, dimLabelAt, distTo, drawDim, drawFrameBg, drawGrid, drawImageItem, drawStroke, drawText, fontCss, FONTS, fontListeners,
-  FRAME_BG, FRAME_COLORS, forgetBox, forgetErased, fullRect, GRID, LINE_H, nearItem, NOTES_W, shapeStrokes, share, TEXT_FS, textSize, transform, union,
+  bbox, canRotate, dimLabelAt, distTo, drawDim, drawFrameBg, drawGrid, drawImageItem, drawStroke, drawText, fontCss, FONTS, fontListeners,
+  FRAME_BG, FRAME_COLORS, forgetBox, forgetErased, fullRect, GRID, LINE_H, nearItem, NOTES_W, rotateItem, shapeStrokes, share, TEXT_FS, textSize, transform, union,
 } from './ink-draw.js';
 import { drawFrameLayout, FRAME_LAYOUTS } from './ink-layout.js';
 import { FRAMES, getImage, newId } from './ink-store.js';
@@ -58,6 +58,7 @@ export function createBoard(opts) {
       <div class="ink-tiles"></div>
       <div class="ink-frames"></div>
       <div class="ink-notes-layer"></div>
+      <div class="ink-cals"></div>
       <div class="ink-titles"></div>
     </div>
     <canvas class="ink-live" aria-hidden="true"></canvas>
@@ -68,6 +69,7 @@ export function createBoard(opts) {
   const titleLayer = pg.querySelector('.ink-titles');
   const frameLayer = pg.querySelector('.ink-frames');
   const notesLayer = pg.querySelector('.ink-notes-layer');
+  const calLayer = pg.querySelector('.ink-cals');
   const lassoSvg = sc.querySelector('.ink-lasso');
   const lassoLine = lassoSvg.firstElementChild;
 
@@ -274,7 +276,7 @@ export function createBoard(opts) {
       if (it.ly) drawFrameLayout(ctx, bbox(it), it.ly, it.lf);
       return;
     }
-    if (it.t === 'n') return;                                                        // Notizen-Bereich ist HTML
+    if (it.t === 'n' || it.t === 'c') return;                                        // Notizen-Bereich und Termin-Felder sind HTML
     if (it.t === 'x') return drawText(ctx, it);
     if (it.t === 's') return drawStroke(ctx, it);
     if (it.t === 't') { it.s.forEach((s) => drawStroke(ctx, s)); (it.tx || []).forEach((t) => drawText(ctx, t)); return; }
@@ -307,7 +309,7 @@ export function createBoard(opts) {
   const redrawAll = () => tiles.forEach(drawTile);
 
   // ---------- Titel: Flächen über den Strichen (tippen öffnet, ziehen verschiebt) ----------
-  function renderOverlays() { renderTitles(); renderFrames(); renderNotes(true); }
+  function renderOverlays() { renderTitles(); renderFrames(); renderNotes(true); renderCals(true); }
 
   // ---------- Notizen-Bereich (Startseite) und Beschreibung (Notiz-Unterseite): HTML auf der Fläche ----------
   // Die Notizen kommen aus der Notizen-Liste des Ordners; ihre Titel öffnen Unterseiten, die Liste wächst nach unten.
@@ -352,6 +354,29 @@ export function createBoard(opts) {
     else if (b?.dataset.ndel) opts.onNoteDelete(b.dataset.ndel);
     else if (b && 'nadd' in b.dataset) opts.onNoteAdd();
     else if (b?.classList.contains('ink-desc')) opts.onDesc();
+  });
+
+  // ---------- Termin-Felder (ink-cal.js): HTML auf der Fläche, Inhalt immer aktuell aus dem Kalender ----------
+  // ziehen verschiebt (auf den Kästchen), antippen öffnet die Wochenansicht; Knöpfe: Größe, Entfernen
+  let calSig = '';
+  function renderCals(force = false) {
+    const cards = items.map((it, idx) => [it, idx]).filter(([it]) => it.t === 'c');
+    const html = cards.map(([it]) => opts.calCard?.(it) || '');
+    const sig = JSON.stringify([cards.map(([it, idx]) => [idx, it.x, it.y, it.sz]), html, scale]);
+    if (!force && sig === calSig) return;
+    calSig = sig;
+    calLayer.innerHTML = cards.map(([it, idx], k) => {
+      const [x0, y0, x1, y1] = bbox(it);
+      return `<div class="ink-cal sz-${esc(it.sz || 'm')}" data-cal="${idx}" role="button" tabindex="0" style="left:${x0 * scale}px;top:${y0 * scale}px;width:${(x1 - x0) * scale}px;height:${(y1 - y0) * scale}px;font-size:${16 * scale}px;--cc:${opts.calColor?.(it) || '#3E7CA8'}">${html[k]}</div>`;
+    }).join('');
+  }
+  calLayer.addEventListener('click', (e) => {
+    const b = e.target.closest('button'), card = e.target.closest('.ink-cal');
+    const it = card && items[+card.dataset.cal];
+    if (!b || it?.t !== 'c') return;
+    if ('csz' in b.dataset) replace(it, { ...it, sz: opts.nextCalSize(it.sz) });
+    else if ('cdel' in b.dataset) commit(items.filter((o) => o !== it));
+    renderCals(true);
   });
 
   function renderTitles() {
@@ -480,7 +505,8 @@ export function createBoard(opts) {
   const selBox = document.createElement('div');
   selBox.className = 'ink-sel';
   selBox.hidden = true;
-  selBox.innerHTML = '<canvas></canvas><i class="ink-sel-h" aria-hidden="true"></i>';   // Aktionen stehen in der Eigenschaften-Leiste
+  // Griffe: rechts unten Größe, oben Drehen; Aktionen stehen in der Eigenschaften-Leiste
+  selBox.innerHTML = '<canvas></canvas><i class="ink-sel-h" aria-hidden="true"></i><i class="ink-sel-r" aria-hidden="true"></i>';
   pg.appendChild(selBox);
   const selCv = selBox.querySelector('canvas');
   const single = (t) => (sel?.set.size === 1 && [...sel.set][0].t === t ? [...sel.set][0] : null);
@@ -499,6 +525,7 @@ export function createBoard(opts) {
     const [x0, y0, x1, y1] = sel.box, pad = 6;
     const w = (x1 - x0) * k + pad * 2, hh = (y1 - y0) * k + pad * 2;
     selBox.hidden = false;
+    selBox.classList.toggle('norot', ![...sel.set].some(canRotate));
     Object.assign(selBox.style, { left: (x0 - pad + dx) * scale + 'px', top: (y0 - pad + dy) * scale + 'px', width: w * scale + 'px', height: hh * scale + 'px' });
     if (dx || dy || k !== 1) return;   // beim Ziehen nur verschieben, nicht neu zeichnen
     const q = Math.min(dpr, SEL_PX / (Math.max(w, hh) * scale));   // bei starkem Zoom nicht riesig
@@ -518,6 +545,19 @@ export function createBoard(opts) {
     const [ox, oy] = sel.box;
     const moved = [];
     const next = items.map((it) => { if (!sel.set.has(it)) return it; const n = transform(it, ox, oy, k, dx, dy); moved.push(n); return n; });
+    commit(next);
+    sel = { set: new Set(moved), box: union(moved) };
+    redrawAll();
+    renderOverlays();
+    renderSel();
+  }
+
+  // Auswahl um ihre Mitte drehen
+  function rotateSel(a) {
+    if (!sel || !a) return renderSel();
+    const [x0, y0, x1, y1] = sel.box, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    const moved = [];
+    const next = items.map((it) => { if (!sel.set.has(it)) return it; const n = rotateItem(it, cx, cy, a); moved.push(n); return n; });
     commit(next);
     sel = { set: new Set(moved), box: union(moved) };
     redrawAll();
@@ -615,7 +655,7 @@ export function createBoard(opts) {
     let best = null, bestD = r;
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
-      if (it.t === 'f' || it.t === 'n') continue;
+      if (it.t === 'f' || it.t === 'n' || it.t === 'c') continue;
       let d = distTo(it, x, y);
       if (it.t === 'i') d = d ? Infinity : r * .75;
       if (d < bestD || (!best && d <= bestD)) { best = it; bestD = d; }
@@ -862,7 +902,7 @@ export function createBoard(opts) {
     return [
       list.some(titlePart) && !list.some((it) => it.t === 't') && 'title',
       (single('d') || single('x')) && 'edit',
-      single('i') && 'crop',
+      single('i') && !single('i').r && 'crop',   // gedrehte Bilder: erst gerade stellen
       single('i')?.er?.length && 'unerase',
       list.length > 1 && !oneGroup && 'group',
       oneGroup && 'ungroup',
@@ -924,8 +964,9 @@ export function createBoard(opts) {
     else if ((a.kind === 'erase' && a.hit) || a.kind === 'shape' || a.kind === 'dim') { items = a.before; redrawAll(); }
     else if (a.kind === 'lasso') { lassoSvg.classList.remove('on'); lassoLine.setAttribute('points', ''); }
     else if (a.kind === 'fmove') { a.tab.closest('.ink-frame').style.translate = ''; selBox.classList.remove('bare'); clearSel(); }
-    else if (a.kind === 'nmove') a.el.style.translate = '';
+    else if (a.kind === 'nmove' || a.kind === 'cmove') a.el.style.translate = '';
     else if (a.kind === 'move' || a.kind === 'scale') { selCv.style.transform = ''; renderSel(); }
+    else if (a.kind === 'rotate') { selBox.style.rotate = ''; renderSel(); }
     else if (a.kind === 'tpress') clearTimeout(a.timer);
     sc.classList.remove('panning');
     opts.hold(false);
@@ -1050,6 +1091,15 @@ export function createBoard(opts) {
       return;
     }
     if (e.target.closest('button, input, textarea')) return;
+    const cal = e.target.closest('.ink-cal');
+    if (cal && !act && !(e.pointerType === 'touch' && (fingers.size || isPalm(e)))) {   // Termin-Feld: ziehen verschiebt, antippen öffnet den Kalender
+      e.preventDefault();
+      capture(sc, e.pointerId);
+      opts.hold(true);
+      const [x, y] = pos(e);
+      act = { kind: 'cmove', id: e.pointerId, x, y, dx: 0, dy: 0, moved: false, el: cal, it: items[+cal.dataset.cal] };
+      return;
+    }
     if (e.target.closest('.ink-notes') && e.pointerType !== 'touch') return;   // im Notizen-Bereich wird nicht gezeichnet
     if (e.pointerType === 'mouse' && e.button === 1 && !act) {   // mittlere Maustaste: verschieben
       e.preventDefault();
@@ -1089,8 +1139,11 @@ export function createBoard(opts) {
     const t = eraserEnd ? 'eraser' : tool;
     if (!['shape', 'dim', 'text', 'marker'].includes(t)) startLp(e);
 
-    const onHandle = e.target.closest('.ink-sel-h');
-    if (sel && onHandle) act = { kind: 'scale', id: e.pointerId, touch, x, y, k: 1 };
+    const onHandle = e.target.closest('.ink-sel-h'), onRot = e.target.closest('.ink-sel-r');
+    if (sel && onRot) {
+      const [x0, y0, x1, y1] = sel.box, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+      act = { kind: 'rotate', id: e.pointerId, touch, cx, cy, a0: Math.atan2(y - cy, x - cx), a: 0 };
+    } else if (sel && onHandle) act = { kind: 'scale', id: e.pointerId, touch, x, y, k: 1 };
     else if (onSel) act = { kind: 'move', id: e.pointerId, touch, x, y, dx: 0, dy: 0 };
     else if (t === 'pen') {
       clearSel();
@@ -1167,6 +1220,11 @@ export function createBoard(opts) {
     } else if (act.kind === 'move') {
       act.dx = x - act.x; act.dy = y - act.y;
       renderSel(act.dx, act.dy, 1);
+    } else if (act.kind === 'cmove') {
+      act.moved ||= Math.hypot(x - act.x, y - act.y) * cur() > 6;   // erst ab ein paar Punkten Bewegung ist es kein Antippen
+      act.dx = Math.round((x - act.x) / GRID) * GRID;
+      act.dy = Math.round((y - act.y) / GRID) * GRID;
+      act.el.style.translate = `${act.dx * scale}px ${act.dy * scale}px`;
     } else if (act.kind === 'nmove') {
       act.dx = Math.round((x - act.x) / GRID) * GRID;
       act.dy = Math.round((y - act.y) / GRID) * GRID;
@@ -1177,6 +1235,11 @@ export function createBoard(opts) {
       act.dy = Math.round((y - act.y) / GRID) * GRID;
       renderSel(act.dx, act.dy, 1);
       act.tab.closest('.ink-frame').style.translate = `${act.dx * scale}px ${act.dy * scale}px`;
+    } else if (act.kind === 'rotate') {
+      // in 15°-Schritten einrasten, wenn man in der Nähe ist
+      const deg = (Math.atan2(y - act.cy, x - act.cx) - act.a0) * 180 / Math.PI, snap = Math.round(deg / 15) * 15;
+      act.a = (Math.abs(deg - snap) < 4 ? snap : deg) * Math.PI / 180;
+      selBox.style.rotate = act.a + 'rad';
     } else if (act.kind === 'scale') {
       const [x0, y0, x1, y1] = sel.box;
       act.k = Math.max(.2, Math.min(6, Math.max((x - x0) / (act.x - x0 || 1), (y - y0) / (act.y - y0 || 1))));
@@ -1310,6 +1373,11 @@ export function createBoard(opts) {
       applySel(a.dx, a.dy, 1);
       if (a.title) clearSel();   // verschobener Titel bleibt antippbar
     }
+    else if (a.kind === 'cmove') {
+      a.el.style.translate = '';
+      if (!a.moved) opts.onCal?.(a.it);
+      else if (a.dx || a.dy) replace(a.it, { ...a.it, x: a.it.x + a.dx, y: a.it.y + a.dy });
+    }
     else if (a.kind === 'nmove') {
       a.el.style.translate = '';
       const n = notesItem();
@@ -1321,6 +1389,7 @@ export function createBoard(opts) {
       else { clearSel(); const r = a.tab.getBoundingClientRect(); openFrameMenu(a.n, r.left, r.bottom + 6); }
     }
     else if (a.kind === 'scale') { selCv.style.transform = ''; applySel(0, 0, a.k); }
+    else if (a.kind === 'rotate') { selBox.style.rotate = ''; rotateSel(a.a); }
     opts.hold(false);
   }
   // Finger kurz angetippt (er verschiebt sonst): mit Text neuen Text beginnen oder bearbeiten, mit der Auswahl auswählen
@@ -1388,6 +1457,13 @@ export function createBoard(opts) {
       redrawAll();
     },
     addFrame,
+    // Termin-Feld in der Mitte des sichtbaren Bereichs einfügen (auf den Kästchen)
+    addCal(c) {
+      const [w, h] = bbox({ ...c, x: 0, y: 0 }).slice(2);
+      const snap = (v) => Math.round(v / GRID) * GRID;
+      commit([...items, { ...c, x: snap(view.x + sc.clientWidth / 2 / cur() - w / 2), y: snap(view.y + sc.clientHeight / 2 / cur() - h / 2) }]);
+      renderCals(true);
+    },
     // Bereiche für den Export: Name und Rechteck in Einheiten
     frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, bg: f.bg || (f.ly ? 'blank' : 'grid'), ly: f.ly, lf: f.lf, box: bbox(f) })),
     renameFrame(n, name) { const f = frameList()[n]; if (f) setFrame(f, { n: name.trim().slice(0, 40) }); },
@@ -1404,7 +1480,7 @@ export function createBoard(opts) {
     // Vorlage (Layout) und Angaben eines Bereichs, z. B. aus dem Speichern-Fenster
     setFrameLayout(n, ly) { const f = frameList()[n]; if (f) setFrame(f, { ly }); },
     setFrameInfo(n, lf) { const f = frameList()[n]; if (f) setFrame(f, { lf: Object.keys(lf).length ? lf : null }); },
-    refreshNotes: () => renderNotes(),
+    refreshNotes: () => { renderNotes(); renderCals(); },   // auch Termin-Felder: der Termin kann sich geändert haben
     // Titel entfernen (Unterseite wurde schon gelöscht), z. B. aus der Gliederung
     removeTitle(pageId) {
       const gone = items.filter((it) => it.t === 't' && it.page === pageId);
@@ -1438,6 +1514,7 @@ export function createBoard(opts) {
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       drawList(ctx, inside);
+      inside.filter((it) => it.t === 'c').forEach((it) => opts.drawCal?.(ctx, it));   // Termin-Felder als Karte
       return cv;
     },
     imagePaths: () => items.filter((it) => it.t === 'i').map((it) => it.src),

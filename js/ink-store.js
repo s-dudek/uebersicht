@@ -6,6 +6,8 @@ import { FRAME_LAYOUTS, LAYOUT_FIELDS } from './ink-layout.js';
 const BUCKET = 'ink';
 const IMG_PATH = /^(?:[uc]\/)?[\w-]{1,64}\/[\w-]{1,64}\.jpg$/;   // u/<user-id>/… oder c/<ordner-id>/… (ältere: <user-id>/…)
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DAY = /^\d{4}-\d{2}-\d{2}$/, TIME = /^\d{2}:\d{2}$/;
+const EXT_OCC = /^x:[\w.@:#-]{1,400}$/;   // Termin eines verknüpften Kalenders (cal-sources.js)
 const MAX_IMG = 1600;                                  // längste Bildseite in Pixel
 export const newId = () => crypto.randomUUID();
 
@@ -56,11 +58,13 @@ function decodeRel(str) {
 }
 
 // Text: gespeichert und beim Laden geprüft (auch Texte in Titeln)
-const textOut = (it) => ({ t: 'x', x: it.x, y: it.y, txt: it.txt, c: it.c, fs: it.fs, ff: it.ff, fw: it.fw, ...(it.i ? { i: 1 } : {}) });
+const rotOut = (it) => (it.r ? { r: Math.round(it.r * 1e4) / 1e4 } : {});   // Drehung (Bogenmaß)
+const rotIn = (it) => { const r = num(it?.r, 0, 6.2832, 0); return r ? { r } : {}; };
+const textOut = (it) => ({ t: 'x', x: it.x, y: it.y, txt: it.txt, c: it.c, fs: it.fs, ff: it.ff, fw: it.fw, ...(it.i ? { i: 1 } : {}), ...rotOut(it) });
 function textIn(it) {
   if (it?.t !== 'x' || typeof it.txt !== 'string' || !it.txt) return null;
   return { t: 'x', x: num(it.x, -1e6, 1e6, 0), y: num(it.y, -1e6, 1e6, 0), txt: it.txt.slice(0, 2000), c: safeColor(it.c, '#0C3741'), fs: num(it.fs, 4, 400, 20),
-    ff: FONTS[it.ff] ? it.ff : 'sans', fw: [300, 400, 500, 700].includes(it.fw) ? it.fw : 400, ...(it.i === 1 ? { i: 1 } : {}) };
+    ff: FONTS[it.ff] ? it.ff : 'sans', fw: [300, 400, 500, 700].includes(it.fw) ? it.fw : 400, ...(it.i === 1 ? { i: 1 } : {}), ...rotIn(it) };
 }
 const textsIn = (list) => (Array.isArray(list) ? list.slice(0, 50).map(textIn).filter(Boolean) : []);
 
@@ -77,6 +81,11 @@ export function serialize(items, h, w) {
     items: items.map((it) => {
       const g = it.g ? { g: it.g } : {};
       if (it.t === 'n') return { t: 'n', x: it.x, y: it.y };
+      if (it.t === 'c') {   // Termin-Feld: Verweis und Kopie für unterwegs
+        const c = { t: 'c', x: it.x, y: it.y, sz: it.sz, d: it.d, tt: it.tt };
+        for (const k of ['ev', 'xo', 'tm']) if (it[k]) c[k] = it[k];
+        return c;
+      }
       if (it.t === 'f') {
         const f = { t: 'f', fmt: it.fmt, x: it.x, y: it.y };
         for (const k of ['n', 'bg', 'fc', 'ly', 'lf']) if (it[k]) f[k] = it[k];
@@ -85,7 +94,7 @@ export function serialize(items, h, w) {
       if (it.t === 'x') return { ...textOut(it), ...g };
       if (it.t === 's') return { t: 's', ...strokeOut(it), ...g };
       if (it.t === 'i') {
-        const img = { t: 'i', src: it.src, x: it.x, y: it.y, w: it.w, h: it.h, ...g };
+        const img = { t: 'i', src: it.src, x: it.x, y: it.y, w: it.w, h: it.h, ...rotOut(it), ...g };
         if (it.cr) img.cr = it.cr.map((v) => Math.round(v * 1e4) / 1e4);
         if (it.er?.length) img.er = it.er.map((e) => ({ r: Math.round(e.r * 1e5) / 1e5, p: encodeRel(e.pts) }));
         return img;
@@ -104,7 +113,7 @@ export function deserialize(data) {
     let out = null;
     if (it?.t === 's') out = strokeIn(it);
     else if (it?.t === 'i' && IMG_PATH.test(it.src || '')) {
-      out = { t: 'i', src: it.src, x: num(it.x, -1e6, 1e6, 0), y: num(it.y, -1e6, 1e6, 0), w: num(it.w, 1, 20000, 300), h: num(it.h, 1, 20000, 200) };
+      out = { t: 'i', src: it.src, x: num(it.x, -1e6, 1e6, 0), y: num(it.y, -1e6, 1e6, 0), w: num(it.w, 1, 20000, 300), h: num(it.h, 1, 20000, 200), ...rotIn(it) };
       const cr = Array.isArray(it.cr) && it.cr.length === 4 ? it.cr.map((v) => num(v, 0, 1, 0)) : null;
       if (cr && cr[2] - cr[0] > .01 && cr[3] - cr[1] > .01) out.cr = cr;   // Zuschnitt
       if (Array.isArray(it.er)) {                                            // radierte Stellen
@@ -131,6 +140,10 @@ export function deserialize(data) {
         if (Object.keys(lf).length) out.lf = lf;
       }
     } else if (it?.t === 'x') out = textIn(it);   // Text
+    else if (it?.t === 'c' && DAY.test(it.d || '') && (UUID.test(it.ev || '') || EXT_OCC.test(it.xo || ''))) {   // Termin-Feld
+      out = { t: 'c', x: num(it.x, -1e6, 1e6, 0), y: num(it.y, -1e6, 1e6, 0), sz: ['s', 'm', 'l'].includes(it.sz) ? it.sz : 'm', d: it.d,
+        tt: typeof it.tt === 'string' ? it.tt.slice(0, 200) : '', ...(it.ev ? { ev: it.ev } : { xo: it.xo }), ...(TIME.test(it.tm || '') ? { tm: it.tm } : {}) };
+    }
     if (!out) continue;
     if (UUID.test(it.g || '')) out.g = it.g;   // Gruppe
     items.push(out);

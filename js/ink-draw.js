@@ -1,20 +1,60 @@
 // Canvas: Geometrie und Zeichnen (ohne Zustand der Zeichenfläche)
 // Elemente: s = Strich (m: Textmarker), t = Titel (Striche s, Texte tx), i = Bild, f = Bereich (A4), d = Bemaßung, x = Text,
-// n = Notizen-Bereich (nur Lage; die Liste der Notizen ist HTML darüber)
+// n = Notizen-Bereich (nur Lage; die Liste der Notizen ist HTML darüber), c = Termin-Feld (HTML, ink-cal.js)
 import { FRAMES } from './ink-store.js';
 
 export const GRID = 25;   // Kästchengröße in Einheiten
 export const NOTES_W = 600;   // Breite des Notizen-Bereichs in Einheiten (die Höhe wächst mit den Notizen)
+export const CAL_SIZES = { s: [225, 100], m: [325, 150], l: [450, 200] };   // Termin-Feld (c): Klein, Mittel, Groß
+
+// ---------- Drehen: Bilder und Texte tragen einen Winkel r (Bogenmaß, um ihre Mitte) ----------
+const TAU = Math.PI * 2;
+// achsparalleler Umriss eines um seine Mitte gedrehten Rechtecks
+function rotBox(x, y, w, h, r) {
+  if (!r) return [x, y, x + w, y + h];
+  const c = Math.abs(Math.cos(r)), s = Math.abs(Math.sin(r));
+  const hw = (w * c + h * s) / 2, hh = (w * s + h * c) / 2, cx = x + w / 2, cy = y + h / 2;
+  return [cx - hw, cy - hh, cx + hw, cy + hh];
+}
+// zeichnet fn gedreht um die Mitte des Rechtecks
+function rotated(ctx, it, w, h, fn) {
+  if (!it.r) return fn();
+  const cx = it.x + w / 2, cy = it.y + h / 2;
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(it.r); ctx.translate(-cx, -cy);
+  fn();
+  ctx.restore();
+}
+// Element um den Punkt (cx, cy) drehen: neues Objekt (für „Rückgängig“); Bereiche, Notizen, Termine bleiben gerade
+export function rotateItem(it, cx, cy, a) {
+  const cos = Math.cos(a), sin = Math.sin(a);
+  const rp = (x, y) => [cx + (x - cx) * cos - (y - cy) * sin, cy + (x - cx) * sin + (y - cy) * cos];
+  const st = (s) => { const pts = s.pts.slice(); for (let i = 0; i < pts.length; i += 3) [pts[i], pts[i + 1]] = rp(pts[i], pts[i + 1]); return { ...s, pts }; };
+  const box = (w, h) => {   // Bild/Text: Mitte mitdrehen, Winkel dazuzählen
+    const [mx, my] = rp(it.x + w / 2, it.y + h / 2);
+    const r = (((it.r || 0) + a) % TAU + TAU) % TAU;
+    return { ...it, x: mx - w / 2, y: my - h / 2, ...(Math.abs(r) < 1e-4 || Math.abs(r - TAU) < 1e-4 ? { r: undefined } : { r }) };
+  };
+  const clean = (o) => { if (o.r === undefined) delete o.r; return o; };
+  if (it.t === 's') return st(it);
+  if (it.t === 't') return { ...it, s: it.s.map(st), ...(it.tx ? { tx: it.tx.map((t) => rotateItem(t, cx, cy, a)) } : {}) };
+  if (it.t === 'd') return { ...it, a: rp(...it.a), b: rp(...it.b) };
+  if (it.t === 'i') return clean(box(it.w, it.h));
+  if (it.t === 'x') { const [w, h] = textSize(it.txt, it); return clean(box(w, h)); }
+  return it;
+}
+export const canRotate = (it) => ['s', 't', 'd', 'i', 'x'].includes(it.t);
 
 // ---------- Umriss (Rechteck) eines Elements, zwischengespeichert ----------
 const boxes = new WeakMap();
 export function bbox(it) {
   let b = boxes.get(it);
   if (b) return b;
-  if (it.t === 'i') b = [it.x, it.y, it.x + it.w, it.y + it.h];
+  if (it.t === 'i') b = rotBox(it.x, it.y, it.w, it.h, it.r);
   else if (it.t === 'f') { const [w, h] = FRAMES[it.fmt]; b = [it.x, it.y, it.x + w, it.y + h]; }
-  else if (it.t === 'x') { const [w, h] = textSize(it.txt, it); b = [it.x, it.y, it.x + w, it.y + h]; }
+  else if (it.t === 'x') { const [w, h] = textSize(it.txt, it); b = rotBox(it.x, it.y, w, h, it.r); }
   else if (it.t === 'n') b = [it.x, it.y, it.x + NOTES_W, it.y + 300];
+  else if (it.t === 'c') { const [w, h] = CAL_SIZES[it.sz] || CAL_SIZES.m; b = [it.x, it.y, it.x + w, it.y + h]; }
   else if (it.t === 'd') {
     const m = dimSize(it).fs * 1.6 + 10;
     b = [Math.min(it.a[0], it.b[0]) - m, Math.min(it.a[1], it.b[1]) - m, Math.max(it.a[0], it.b[0]) + m, Math.max(it.a[1], it.b[1]) + m];
@@ -49,7 +89,7 @@ export function inPolygon(x, y, poly) {
 
 // Anteil eines Elements innerhalb der Lasso-Linie (0–1)
 export function share(it, poly) {
-  if (it.t === 'f' || it.t === 'n') return 0;   // Bereiche werden über ihren Reiter verschoben, nicht ausgewählt
+  if (it.t === 'f' || it.t === 'n' || it.t === 'c') return 0;   // Bereiche und Felder werden direkt verschoben, nicht ausgewählt
   if (it.t === 'i' || it.t === 'x') { const b = bbox(it); return inPolygon((b[0] + b[2]) / 2, (b[1] + b[3]) / 2, poly) ? 1 : 0; }
   if (it.t === 'd') return (inPolygon(it.a[0], it.a[1], poly) + inPolygon(it.b[0], it.b[1], poly)) / 2;
   let n = 0, hit = 0;
@@ -105,7 +145,7 @@ export function transform(it, ox, oy, k, dx, dy) {
   const st = (s) => ({ ...s, w: s.w * k, pts: s.pts.map((v, i) => (i % 3 === 0 ? tx(v) : i % 3 === 1 ? ty(v) : v)) });
   if (it.t === 's') return st(it);
   if (it.t === 't') return { ...it, s: it.s.map(st), ...(it.tx ? { tx: it.tx.map((t) => transform(t, ox, oy, k, dx, dy)) } : {}) };
-  if (it.t === 'f') return { ...it, x: it.x + dx, y: it.y + dy };   // Bereiche werden nur verschoben
+  if (it.t === 'f' || it.t === 'c') return { ...it, x: it.x + dx, y: it.y + dy };   // Bereiche und Termin-Felder werden nur verschoben
   if (it.t === 'd') return { ...it, w: it.w * k, a: [tx(it.a[0]), ty(it.a[1])], b: [tx(it.b[0]), ty(it.b[1])] };
   if (it.t === 'x') return { ...it, x: tx(it.x), y: ty(it.y), fs: it.fs * k };
   return { ...it, x: tx(it.x), y: ty(it.y), w: it.w * k, h: it.h * k };   // Zuschnitt und Radierung sind relativ und wandern mit
@@ -198,7 +238,8 @@ export function drawText(ctx, it) {
   ctx.font = f;
   ctx.textBaseline = 'top';
   ctx.textAlign = 'left';
-  it.txt.split('\n').forEach((l, i) => ctx.fillText(l, it.x, it.y + i * it.fs * LINE_H + it.fs * .15));
+  const [w, h] = it.r ? textSize(it.txt, it) : [0, 0];
+  rotated(ctx, it, w, h, () => it.txt.split('\n').forEach((l, i) => ctx.fillText(l, it.x, it.y + i * it.fs * LINE_H + it.fs * .15)));
 }
 
 // ---------- Bereiche: eigener Hintergrund (weiß, darauf Linien oder Punkte), deckt die Kästchen der Fläche ab ----------
@@ -339,7 +380,7 @@ export function imageSource(it, bmp) {
 
 export function drawImageItem(ctx, it, bmp) {
   const [c0, c1, c2, c3] = cropOf(it), W = bmp.width, H = bmp.height;
-  ctx.drawImage(imageSource(it, bmp), c0 * W, c1 * H, (c2 - c0) * W, (c3 - c1) * H, it.x, it.y, it.w, it.h);
+  rotated(ctx, it, it.w, it.h, () => ctx.drawImage(imageSource(it, bmp), c0 * W, c1 * H, (c2 - c0) * W, (c3 - c1) * H, it.x, it.y, it.w, it.h));
 }
 
 // ---------- Kästchen-Raster der Ansicht (scharf auf Bildschirmpunkten, feine Linien blenden beim Verkleinern aus) ----------
