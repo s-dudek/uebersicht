@@ -233,6 +233,10 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 .mt-prog small, .mt-foot { font-size: 12.5px; font-weight: 500; color: var(--grey); }
 /* Notiz mit Skizze (Canvas-Rahmen): Bild füllt den Rest der Kachel */
 .mt-img { flex: 1; width: 100%; min-height: 0; object-fit: contain; border-radius: 12px; background: var(--white); box-shadow: inset 0 0 0 1px var(--soft); }
+/* Kachel „Notizen“: neueste Skizzen als Bildreihe; Notizen-Liste: kleines Vorschaubild */
+.mt-pics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; width: 100%; }
+.mt-pics img { width: 100%; aspect-ratio: 5 / 3; object-fit: contain; border-radius: 10px; background: var(--white); box-shadow: inset 0 0 0 1px var(--soft); cursor: pointer; }
+.tsketch { flex: none; width: 56px; height: 34px; object-fit: contain; border-radius: 6px; background: var(--white); box-shadow: inset 0 0 0 1px var(--soft); cursor: pointer; }
 /* Skizze in der Notiz */
 .nv-sketch { display: block; width: 100%; margin-top: 14px; padding: 0; border-radius: 16px; overflow: hidden; box-shadow: 0 0 0 1px var(--soft), var(--tile-shadow); background: var(--white); }
 .nv-sketch img { display: block; width: 100%; height: auto; }

@@ -36,7 +36,8 @@ function openNoteView(id) {
     <article class="note-view"${n.meta?.color ? ` style="--ic:${safeColor(n.meta.color)}"` : ''}>
       <h2 class="nv-title">${esc(n.title) || '<span class="muted">Ohne Titel</span>'}</h2>
       ${n.body.trim() ? `<div class="nv-body">${readable(n.body)}</div>` : sketchSrc(n) ? '' : '<p class="muted">Kein Text.</p>'}
-      ${sketchSrc(n) ? `<button class="nv-sketch" type="button" id="v-sketch" aria-label="Skizze im Canvas öffnen"><img src="${esc(sketchSrc(n))}" alt=""></button>` : ''}
+      ${sketchSrc(n) ? `<button class="nv-sketch" type="button" id="v-sketch" aria-label="Skizze im Canvas öffnen"><img src="${esc(sketchSrc(n))}" alt=""></button>`
+        : `<button class="nv-sketch-btn" type="button" id="v-sketch">${ICON.ink}<span>Skizze im Canvas hinzufügen</span></button>`}
     </article>`, { full: n.body.length > 400 });   // lange Notizen bekommen das ganze Fenster
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
   const edit = () => openItem(id, { edit: true });

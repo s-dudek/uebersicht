@@ -65,7 +65,12 @@ function allTiles(today) {
     { key: 'notes', label: 'Notizen', icon: ICON.notes, accent: '#7FA08A', size: 's', desk: 'm', act: 'data-act="nav" data-id="notes"', ink: 'last',
       lines: () => titles(notes()), empty: 'Noch keine Notizen', badge: true,
       stat: () => ({ big: String(notes().length), sub: notes().length === 1 ? 'Notiz' : 'Notizen' }),
-      foot: () => { const n = notes()[0]; return n ? `<span class="mt-foot">Zuletzt bearbeitet ${esc(ago(n.updated_at))}</span>` : ''; } },
+      foot: () => {
+        const pics = notes().filter(sketchSrc).slice(0, 4);   // Notizen mit Skizze: Bildreihe
+        if (pics.length) return `<span class="mt-pics">${pics.map((n) => `<img src="${esc(sketchSrc(n))}" alt="" data-act="open" data-id="${n.id}">`).join('')}</span>`;
+        const n = notes()[0];
+        return n ? `<span class="mt-foot">Zuletzt bearbeitet ${esc(ago(n.updated_at))}</span>` : '';
+      } },
     { key: 'meals', label: 'Gerichte', icon: ICON.pot, accent: '#D9873E', size: 'm', act: 'data-act="nav" data-id="meals"',
       lines: () => mealsOn(today).map((m) => (slotName(m) ? `${slotName(m)}: ${m.title}` : m.title)), empty: 'Heute nichts geplant',
       stat: () => { const m = mealsOn(today)[0]; return m ? { big: slotName(m) || 'Heute', sub: m.title, word: true } : { big: '–', sub: 'nichts geplant' }; },

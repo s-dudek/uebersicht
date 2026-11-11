@@ -1,5 +1,5 @@
 // Bereich Notizen: Übersicht und geöffneter Ordner
-import { catById, esc, inkMode, isCanvasOnly, nameOf, state } from './core.js';
+import { catById, esc, inkMode, isCanvasOnly, nameOf, sketchSrc, state } from './core.js';
 import { folderIc, itemTint, listLayout, noteFolders } from './folders.js';
 import { blocksHtml, noteKey } from './groups.js';
 import { ICON } from './icons.js';
@@ -38,6 +38,7 @@ function renderNoteList(fid) {
   const row = (n) => sel ? pickRow(n) : `
     <div class="trow ${n.meta?.color ? 'tinted' : ''}" data-drag="${n.id}" data-gid="${esc(n.meta?.group || '')}"${itemTint(n)}>
       <button class="tname" data-act="open" data-id="${n.id}"><span>${esc(n.title) || '<span class="muted">Ohne Titel</span>'}</span></button>
+      ${sketchSrc(n) ? `<img class="tsketch" src="${esc(sketchSrc(n))}" alt="" data-act="open" data-id="${n.id}">` : ''}
       ${n.remind_at && !n.reminded ? `<span class="tbell" title="Erinnerung">${ICON.bell}</span>` : ''}
       ${n.owner_id !== state.me ? `<span class="tby">${esc(nameOf(n.owner_id))}</span>` : ''}
     </div>`;
