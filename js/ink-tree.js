@@ -5,7 +5,7 @@ import { esc, toast } from './core.js';
 import { ICON } from './icons.js';
 import { bbox, fontCss, LINE_H, textSize } from './ink-draw.js';
 import { deserialize, loadTree } from './ink-store.js';
-import { closeSheet, openSheet } from './sheet.js';
+import { closeSheet, openSheet, sheetActs } from './sheet.js';
 
 // Titel als Bild aus den eigenen Strichen und Texten (nur Zahlen, geprüfte Farben und maskierter Text).
 // Die Linien behalten ihre Bildschirmstärke, damit ein verkleinerter oder vergrößerter Titel nicht fetter wirkt.
@@ -41,7 +41,7 @@ const frameName = (f, n) => f.n || f.lf?.t || `${fmtName(f)} · ${n + 1}`;
 // notes: [{ id, title }] Notizen des Ordners; onDeleteTitle(seite, titel), onDeleteNote(id)
 export async function openTree({ cat, open, notes, onOpen, onRename, onShow, onDeleteTitle, onDeleteNote }) {
   const sheet = openSheet(`<div class="sheet-head"><h2>Gliederung</h2>
-      <span class="sh-btns"><button class="tree-show" aria-label="Auf der Fläche zeigen" title="Auf der Fläche zeigen">${ICON.eye}</button><button class="link-btn" data-close>Fertig</button></span></div>
+      <span class="sh-btns"><button class="tree-show" aria-label="Auf der Fläche zeigen" title="Auf der Fläche zeigen">${ICON.eye}</button>${sheetActs()}</span></div>
     <div class="tree-body"><p class="muted">Lädt …</p></div>`);
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
   sheet.querySelector('.tree-show').addEventListener('click', () => { closeSheet(); onShow(); });

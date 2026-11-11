@@ -4,7 +4,7 @@ import { deleteItem, insertCategory, loadAll, saveItem } from './data.js';
 import { addDays, dayName, isoWeek, parseYmd, ymd } from './dates.js';
 import { ICON } from './icons.js';
 import { render } from './render.js';
-import { closeSheet, openSheet } from './sheet.js';
+import { closeSheet, openSheet, sheetActs } from './sheet.js';
 
 export function groupBySection(items, row) {
   const groups = new Map();
@@ -97,7 +97,7 @@ export function openMeal(id) {
   const n = meta.nutrition || {};
   const pre = meta.cook_date && meta.cook_date !== m.due_date;
   const sheet = openSheet(`
-    <div class="sheet-head"><span class="status">${esc(slotLabel(meta.slot))} · ${esc(dayName(m.due_date, { weekday: 'long', day: 'numeric', month: 'long' }))}</span><button class="link-btn" data-close>Fertig</button></div>
+    <div class="sheet-head"><span class="status">${esc(slotLabel(meta.slot))} · ${esc(dayName(m.due_date, { weekday: 'long', day: 'numeric', month: 'long' }))}</span>${sheetActs({ save: true, del: canDeleteItem(m), delLabel: 'Gericht entfernen' })}</div>
     <div class="title-row"><span class="icon-pick has">${m.icon && ICON[m.icon] ? ICON[m.icon] : ICON.pot}</span><textarea class="title-input m-title" id="m-title" rows="2">${esc(m.title)}</textarea></div>
     <div class="m-badges">
       ${(meta.tags || []).map((t) => `<span class="utag light">${esc(t)}</span>`).join('')}
@@ -118,13 +118,14 @@ export function openMeal(id) {
       <div class="field" style="flex:1;margin:0"><label>Essen am</label><input class="input" type="date" id="m-date" value="${esc(m.due_date || '')}"></div>
       <div class="field" style="flex:1;margin:0"><label>Kochen am</label><input class="input" type="date" id="m-cook" value="${esc(meta.cook_date || m.due_date || '')}"></div>
     </div>
-    ${canDeleteItem(m) ? '<button class="btn danger block" id="m-delete">Gericht entfernen</button>' : ''}`, { onClose: () => saveTitle.flush() });
+`, { onClose: () => saveTitle.flush() });
   const saveTitle = debounce(() => { const v = sheet.querySelector('#m-title')?.value; if (v != null && v !== itemById(id)?.title) saveItem(id, { title: v }); }, 600);
   sheet.querySelector('#m-title').addEventListener('input', saveTitle);
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
   sheet.querySelector('#m-date').addEventListener('change', (e) => { if (e.target.value) saveItem(id, { due_date: e.target.value }); });
   sheet.querySelector('#m-cook').addEventListener('change', (e) => saveItem(id, { meta: { ...(itemById(id).meta || {}), cook_date: e.target.value || null } }));
-  sheet.querySelector('#m-delete')?.addEventListener('click', async () => { if (await deleteItem(id)) closeSheet(); });
+  sheet.querySelector('[data-save]').addEventListener('click', closeSheet);   // Titel wird beim Schließen gespeichert
+  sheet.querySelector('[data-del]')?.addEventListener('click', async () => { if (await deleteItem(id)) closeSheet(); });
 }
 
 // ---------- Wochenplan aus einem Code übernehmen (Fenster: plan-import.js) ----------

@@ -3,7 +3,7 @@ import { esc, itemById, safeColor, sb, state, toast } from './core.js';
 import { ICON } from './icons.js';
 import { notesIn } from './notes.js';
 import { render } from './render.js';
-import { closeSheet, colorPick, openSheet } from './sheet.js';
+import { closeSheet, colorPick, openSheet, sheetActs } from './sheet.js';
 import { byDue, todosIn } from './todos.js';
 
 // Reihenfolge: eigene Sortierung (meta.sort); neue, noch nicht sortierte Notizen oben
@@ -72,12 +72,11 @@ export function openGroupEdit(gid, fid, type = 'note') {
   const b = noteBlocks(fid, type).find((x) => x.group === gid);
   if (!b) return;
   const sheet = openSheet(`
-    <div class="sheet-head"><h2>Gruppe</h2><button class="link-btn" data-close>Fertig</button></div>
+    <div class="sheet-head"><h2>Gruppe</h2>${sheetActs({ save: true, del: true, delLabel: 'Gruppe auflösen' })}</div>
     <div class="field"><label for="g-name">Name</label><input class="input" id="g-name" value="${esc(b.name)}" autocomplete="off"></div>
     <div class="field"><label>Farbe</label>${colorPick(b.color, 'g-col')}</div>
     <p class="hint">${b.items.length} ${type === 'todo' ? 'Todos' : 'Notizen'}: ${b.items.map((n) => esc(n.title || 'Ohne Titel')).join(', ')}</p>
-    <div class="divider"></div>
-    <button class="btn danger block" id="g-split">Gruppe auflösen</button>`, {
+`, {
     onClose: () => {
       const v = sheet.querySelector('#g-name').value.trim() || 'Gruppe';
       if (v !== b.name) applyNoteOrder(fid, flatOrder(fid, type).map((f) => (f.group === gid ? { ...f, gname: v } : f)));
@@ -88,7 +87,8 @@ export function openGroupEdit(gid, fid, type = 'note') {
     sheet.querySelectorAll('#g-col [data-col]').forEach((y) => y.classList.toggle('on', y === x));
     applyNoteOrder(fid, flatOrder(fid, type).map((f) => (f.group === gid ? { ...f, gcolor: x.dataset.col } : f)));
   }));
-  sheet.querySelector('#g-split').addEventListener('click', () => {
+  sheet.querySelector('[data-save]').addEventListener('click', closeSheet);   // Name wird beim Schließen übernommen
+  sheet.querySelector('[data-del]').addEventListener('click', () => {
     sheet.querySelector('#g-name').value = b.name;
     closeSheet();
     applyNoteOrder(fid, flatOrder(fid, type).map((f) => (f.group === gid ? { id: f.id, group: null } : f)));

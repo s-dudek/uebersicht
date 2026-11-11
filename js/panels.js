@@ -3,23 +3,23 @@ import { askConfirm, esc, sb, state, toast } from './core.js';
 import { disablePush, enablePush, pushOn, pushSupport } from './reminders.js';
 import { render } from './render.js';
 import { openTrash, trashCount } from './trash.js';
-import { categoryOptions, closeSheet, openSheet } from './sheet.js';
+import { categoryOptions, closeSheet, openSheet, sheetActs } from './sheet.js';
 
 // ---------- Menü ----------
 // ---------- Schnelle Notiz ----------
 export function openQuickNote() {
   const sheet = openSheet(`
-    <div class="sheet-head"><h2>Neue Notiz</h2><button class="link-btn" data-close>Fertig</button></div>
+    <div class="sheet-head"><h2>Neue Notiz</h2>${sheetActs({ save: true })}</div>
     <form class="quick" id="quick-note">
       <textarea id="quick-text" class="quick-text" rows="4" placeholder="Einfach lostippen … Die erste Zeile wird der Titel."></textarea>
       <div class="quick-row">
         <select id="quick-cat" class="select quick-cat" aria-label="Kategorie">${categoryOptions(state.tab === 'notes' ? state.list || null : null)}</select>
-        <button class="btn" type="submit">Speichern</button>
       </div>
     </form>`);
   const qt = sheet.querySelector('#quick-text');
   setTimeout(() => qt.focus(), 60);
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
+  sheet.querySelector('[data-save]').addEventListener('click', () => sheet.querySelector('#quick-note').requestSubmit());
   sheet.querySelector('#quick-note').addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = qt.value.trim();
@@ -41,7 +41,7 @@ export function openQuickNote() {
 export function openSettings() {
   const me = state.profiles[state.me];
   const sheet = openSheet(`
-    <div class="sheet-head"><h2>Einstellungen</h2><button class="link-btn" data-close>Fertig</button></div>
+    <div class="sheet-head"><h2>Einstellungen</h2>${sheetActs()}</div>
     <div class="field"><label>Angemeldet als</label>
       <div class="person"><div>${esc(me?.name || '')}<small>${esc(me?.email || '')}</small></div></div>
     </div>

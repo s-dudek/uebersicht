@@ -5,7 +5,7 @@ import { loadAll, purgeItems, restoreItems, TRASH_DAYS } from './data.js';
 import { catOrder, saveCatOrder } from './folders.js';
 import { ICON } from './icons.js';
 import { removeFolderImages } from './ink-store.js';
-import { closeSheet, openSheet } from './sheet.js';
+import { closeSheet, openSheet, sheetActs } from './sheet.js';
 
 const KIND = { note: ['Notiz', 'notes'], todo: ['Todo', 'todos'], event: ['Termin', 'calendar'], meal: ['Gericht', 'pot'], training: ['Training', 'dumbbell'] };
 const dateDe = (d) => d.toLocaleDateString('de-AT', { day: 'numeric', month: 'long' });
@@ -67,7 +67,7 @@ function listHtml() {
 }
 
 export function openTrash() {
-  const sheet = openSheet(`<div class="sheet-head"><h2>Papierkorb</h2><button class="link-btn" data-close>Fertig</button></div>
+  const sheet = openSheet(`<div class="sheet-head"><h2>Papierkorb</h2>${sheetActs()}</div>
     <p class="hint">Gelöschtes bleibt ${TRASH_DAYS} Tage hier und wird danach endgültig gelöscht.</p>
     <div class="tr-list">${listHtml()}</div>`);
   const redraw = () => { sheet.querySelector('.tr-list').innerHTML = listHtml(); };

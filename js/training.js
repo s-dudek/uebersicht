@@ -4,7 +4,7 @@ import { canDeleteItem, debounce, esc, itemById, sb, state } from './core.js';
 import { deleteItem, loadAll, saveItem } from './data.js';
 import { addDays, dayName, isoWeek, parseYmd, ymd } from './dates.js';
 import { ICON } from './icons.js';
-import { closeSheet, openSheet } from './sheet.js';
+import { closeSheet, openSheet, sheetActs } from './sheet.js';
 import { catalogHtml } from './training-catalog.js';
 
 export const KINDS = {
@@ -58,7 +58,7 @@ export function renderTraining() {
 
 // Übungs-Datenbank ansehen: alle Übungen und fertigen Einheiten mit ihren Nummern (für die kurzen Codes)
 export function openCatalog() {
-  const sheet = openSheet(`<div class="sheet-head"><h2>Übungen</h2><button class="link-btn" data-close>Fertig</button></div>
+  const sheet = openSheet(`<div class="sheet-head"><h2>Übungen</h2>${sheetActs()}</div>
     <p class="hint" style="margin:0 2px 10px">Jede Übung und Einheit hat eine feste Nummer. Claude stellt daraus kurze Codes zusammen, z. B. TR-261110-E3.</p>
     <div class="cat">${catalogHtml(esc)}</div>`, { full: true });
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
@@ -73,7 +73,7 @@ export function openTraining(id) {
   const checked = new Set(meta.checked || []);
   const list = (title, arr) => (arr?.length ? `<div class="field"><label>${title}</label><ul class="ing">${arr.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '');
   const sheet = openSheet(`
-    <div class="sheet-head"><span class="status">${esc(label)} · ${esc(dayName(t.due_date, { weekday: 'long', day: 'numeric', month: 'long' }))}</span><button class="link-btn" data-close>Fertig</button></div>
+    <div class="sheet-head"><span class="status">${esc(label)} · ${esc(dayName(t.due_date, { weekday: 'long', day: 'numeric', month: 'long' }))}</span>${sheetActs({ save: true, del: canDeleteItem(t), delLabel: 'Einheit entfernen' })}</div>
     <div class="title-row"><span class="icon-pick has">${ICON[icon]}</span><textarea class="title-input m-title" id="t-title" rows="2">${esc(t.title)}</textarea></div>
     <div class="m-badges">
       ${meta.minutes ? `<span class="utag light">${ICON.clock} ${esc(meta.minutes)} Min.</span>` : ''}
@@ -89,7 +89,7 @@ export function openTraining(id) {
     ${meta.note ? `<div class="field"><label>Hinweis</label><p class="m-note">${esc(meta.note)}</p></div>` : ''}
     <button class="btn block ${t.done ? 'secondary' : ''}" id="t-done">${ICON.check} ${t.done ? 'Erledigt – wieder öffnen' : 'Als erledigt markieren'}</button>
     <div class="field" style="margin-top:14px"><label>Am</label><input class="input" type="date" id="t-date" value="${esc(t.due_date || '')}"></div>
-    ${canDeleteItem(t) ? '<button class="btn danger block" id="t-delete">Einheit entfernen</button>' : ''}`, { onClose: () => saveTitle.flush() });
+`, { onClose: () => saveTitle.flush() });
   const saveTitle = debounce(() => { const v = sheet.querySelector('#t-title')?.value; if (v != null && v !== itemById(id)?.title) saveItem(id, { title: v }); }, 600);
   sheet.querySelector('#t-title').addEventListener('input', saveTitle);
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
@@ -104,7 +104,8 @@ export function openTraining(id) {
   }));
   sheet.querySelector('#t-done').addEventListener('click', () => { saveItem(id, { done: !itemById(id).done }); closeSheet(); });
   sheet.querySelector('#t-date').addEventListener('change', (e) => { if (e.target.value) saveItem(id, { due_date: e.target.value }); });
-  sheet.querySelector('#t-delete')?.addEventListener('click', async () => { if (await deleteItem(id)) closeSheet(); });
+  sheet.querySelector('[data-save]').addEventListener('click', closeSheet);   // Titel wird beim Schließen gespeichert
+  sheet.querySelector('[data-del]')?.addEventListener('click', async () => { if (await deleteItem(id)) closeSheet(); });
 }
 
 // ---------- Einheiten aus einem Code übernehmen ----------

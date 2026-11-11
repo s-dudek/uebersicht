@@ -11,7 +11,7 @@ import { connectGoogle, openGoogleEvent } from './google-cal.js';
 import { ICON } from './icons.js';
 import { mealsOn } from './meals.js';
 import { render } from './render.js';
-import { closeSheet, openSheet } from './sheet.js';
+import { closeSheet, openSheet, sheetActs } from './sheet.js';
 
 // ---------- Kalender: Tag / Woche / Monat ----------
 // Zeitraster: der ganze Tag, sichtbar ist jeweils 06:00–19:00 (Höhe in style.css über die Rasterhöhe)
@@ -302,7 +302,7 @@ function openSourcesDrop(btn, where) {
 // Kalender verknüpfen: Name, Abo-Adresse (ICS), Farbe – mit kurzer Anleitung je Anbieter
 function openLinkForm() {
   let color = EXT_COLORS[calendars.length % EXT_COLORS.length];
-  const sheet = openSheet(`<div class="sheet-head"><h2>Kalender verknüpfen</h2><button class="link-btn" data-close>Abbrechen</button></div>
+  const sheet = openSheet(`<div class="sheet-head"><h2>Kalender verknüpfen</h2>${sheetActs({ save: true, saveLabel: 'Verknüpfen' })}</div>
     <form id="cl-form">
       <div class="field"><label for="cl-name">Name</label><input class="input" id="cl-name" maxlength="60" placeholder="z. B. Outlook Arbeit" required></div>
       <div class="field"><label for="cl-url">Abo-Adresse (ICS)</label><input class="input" id="cl-url" type="url" inputmode="url" placeholder="https://… .ics oder webcal://…" required></div>
@@ -313,18 +313,18 @@ function openLinkForm() {
         <p><b>iCloud:</b> Kalender-App → Kalender teilen → „Öffentlicher Kalender“ → Link kopieren.</p>
         <p class="muted">Die Adresse bleibt privat (nur du siehst sie). Der Kalender wird gelesen, nicht verändert, und etwa alle 15 Minuten aktualisiert.</p>
       </details>
-      <button class="btn block" id="cl-go">Verknüpfen</button>
     </form>`);
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
   sheet.querySelectorAll('[data-color]').forEach((b) => b.addEventListener('click', () => {
     color = b.dataset.color;
     sheet.querySelectorAll('[data-color]').forEach((x) => x.classList.toggle('on', x === b));
   }));
+  sheet.querySelector('[data-save]').addEventListener('click', () => sheet.querySelector('#cl-form').requestSubmit());
   sheet.querySelector('#cl-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = sheet.querySelector('#cl-name').value, url = sheet.querySelector('#cl-url').value.trim();
     if (!/^(https|webcals?):\/\//i.test(url)) return toast('Bitte eine https- oder webcal-Adresse einfügen.', 4000);
-    const go = sheet.querySelector('#cl-go');
+    const go = sheet.querySelector('[data-save]');
     go.disabled = true; go.textContent = 'Verknüpfe …';
     try { await addCalendar({ name, url, color }); closeSheet(); toast('Verknüpft. Die Termine werden geladen …'); }
     catch (err) { toast('Fehler: ' + err.message, 5000); go.disabled = false; go.textContent = 'Verknüpfen'; }

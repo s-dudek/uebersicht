@@ -3,7 +3,7 @@
 // Alles läuft über die Edge Function "google-calendar"; die Google-Schlüssel bleiben auf dem Server.
 import { askConfirm, esc, safeColor, sb, store, toast } from './core.js';
 import { addDays, ymd } from './dates.js';
-import { closeSheet, openSheet } from './sheet.js';
+import { closeSheet, openSheet, sheetActs } from './sheet.js';
 
 const TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return 'Europe/Vienna'; } })();
 const pad = (n) => String(n).padStart(2, '0');
@@ -84,7 +84,7 @@ export function openGoogleEvent(o, { day = ymd(new Date()), time = '', sections 
   const en = o ? (o.allDay ? new Date(o.end - 864e5) : o.end) : new Date(st.getTime() + 36e5);
   const allDay = o ? o.allDay : false;
   const head = sections.find((c) => c.key === here) || { name, color };
-  const sheet = openSheet(`<div class="sheet-head"><span class="status"><i class="src-dot" style="background:${safeColor(head.color, G_BLUE)}"></i>${esc(head.name)}</span><button class="link-btn" data-close>Abbrechen</button></div>
+  const sheet = openSheet(`<div class="sheet-head"><span class="status"><i class="src-dot" style="background:${safeColor(head.color, G_BLUE)}"></i>${esc(head.name)}</span>${sheetActs({ save: true, saveLabel: isNew ? 'Anlegen' : 'Speichern', del: !isNew })}</div>
     <form id="ge-form">
       ${sections.length > 1 ? `<div class="field"><label for="ge-cal">Abschnitt</label><select class="select" id="ge-cal">
         ${sections.map((c) => `<option value="${esc(c.key)}" ${c.key === here ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>` : ''}
@@ -95,8 +95,6 @@ export function openGoogleEvent(o, { day = ymd(new Date()), time = '', sections 
       <div class="field"><label for="ge-loc">Ort</label><input class="input" id="ge-loc" maxlength="300" value="${esc(o?.location || '')}"></div>
       <div class="field"><label for="ge-desc">Beschreibung</label><textarea class="textarea" id="ge-desc" style="min-height:80px" maxlength="4000">${esc(o?.desc || pre.desc || '')}</textarea></div>
       ${o?.recurring ? '<p class="hint">Wiederkehrender Termin: geändert wird nur dieser eine Termin.</p>' : ''}
-      <button class="btn block" id="ge-save">${isNew ? 'Anlegen' : 'Speichern'}</button>
-      ${isNew ? '' : `<button class="btn danger block" type="button" id="ge-del" style="margin-top:10px">Termin löschen</button>`}
     </form>`);
   let all = allDay;
   const $ = (s) => sheet.querySelector(s);
@@ -121,6 +119,7 @@ export function openGoogleEvent(o, { day = ymd(new Date()), time = '', sections 
     btn.disabled = true;
     try { await fn(); closeSheet(); await onDone?.(gcal); } catch (e) { toast('Google: ' + e.message, 5000); btn.disabled = false; }
   };
+  $('[data-save]').addEventListener('click', () => $('#ge-form').requestSubmit());
   $('#ge-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const d1 = $('#ge-d1').value, d2 = $('#ge-d2').value || d1, t1 = $('#ge-t1').value || '09:00', t2 = $('#ge-t2').value || t1;
@@ -130,20 +129,20 @@ export function openGoogleEvent(o, { day = ymd(new Date()), time = '', sections 
     if (!all && event.end <= event.start) return toast('Das Ende liegt vor dem Beginn.', 3000);
     Object.assign(event, { title: $('#ge-title').value.trim(), location: $('#ge-loc').value.trim(), desc: $('#ge-desc').value });
     const key = $('#ge-cal')?.value || here, gcal = key.startsWith('g:') ? key.slice(2) : '';
-    if (isNew) return busy($('#ge-save'), () => call('save', { cal: gcal || 'primary', event }), gcal);
-    if (key === here) return busy($('#ge-save'), () => call('save', { cal: o.gcal, id: o.gid, event }), o.gcal);
+    if (isNew) return busy($('[data-save]'), () => call('save', { cal: gcal || 'primary', event }), gcal);
+    if (key === here) return busy($('[data-save]'), () => call('save', { cal: o.gcal, id: o.gid, event }), o.gcal);
     // in einen anderen Abschnitt verschieben: dort anlegen, hier löschen
     const span = all ? Math.max(1, Math.round((new Date(event.end) - new Date(event.start)) / 864e5)) : 1;
-    busy($('#ge-save'), async () => {
+    busy($('[data-save]'), async () => {
       if (gcal) await call('save', { cal: gcal, event }); else await toSection(key, { ...form(), span });
       await call('delete', { cal: o.gcal, id: o.gid });
       if (gcal) await onDone?.(gcal);
       toast('Verschoben');
     }, o.gcal);
   });
-  $('#ge-del')?.addEventListener('click', async () => {
+  $('[data-del]')?.addEventListener('click', async () => {
     if (!(await askConfirm(`„${o.title}“ löschen?`, 'Löschen', 'Der Termin wird auch in Google gelöscht.'))) return;
-    busy($('#ge-del'), () => call('delete', { cal: o.gcal, id: o.gid }), o.gcal);
+    busy($('[data-del]'), () => call('delete', { cal: o.gcal, id: o.gid }), o.gcal);
   });
   if (isNew) setTimeout(() => $('#ge-title')?.focus(), 60);
 }

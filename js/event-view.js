@@ -2,21 +2,20 @@
 // Gemeinsam für eigene Termine, Google-Termine und verknüpfte Kalender.
 import { esc, safeColor } from './core.js';
 import { ICON } from './icons.js';
-import { closeSheet, openSheet } from './sheet.js';
+import { closeSheet, openSheet, sheetActs } from './sheet.js';
 
 // o: { title, when, location, desc, calName, color, notes: [Text], hint, onEdit }
 export function showEventCard(o) {
   const sheet = openSheet(`<div class="sheet-head"><span class="status"><i class="src-dot" style="background:${safeColor(o.color, '#0C3741')}"></i>${esc(o.calName || 'Kalender')}</span>
-      <button class="link-btn" data-close>Fertig</button></div>
+      ${sheetActs({ edit: !!o.onEdit })}</div>
     <h2 class="xe-t">${esc(o.title)}</h2>
     <p class="xe-w">${ICON.clock}<span>${esc(o.when)}</span></p>
     ${o.location ? `<p class="xe-w">${ICON.pin}<span>${esc(o.location)}</span></p>` : ''}
     ${(o.notes || []).map((n) => `<p class="xe-w">${ICON.bell}<span>${esc(n)}</span></p>`).join('')}
     ${o.desc ? `<div class="xe-d">${esc(o.desc)}</div>` : ''}
-    ${o.onEdit ? `<button class="btn block xe-edit" type="button">${ICON.pen}<span>Bearbeiten</span></button>` : ''}
     ${o.hint ? `<p class="hint">${esc(o.hint)}</p>` : ''}`);
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
-  sheet.querySelector('.xe-edit')?.addEventListener('click', () => { closeSheet(); o.onEdit(); });
+  sheet.querySelector('[data-edit]')?.addEventListener('click', () => { closeSheet(); o.onEdit(); });
 }
 
 // Zeitangabe für Vorkommen mit Date-Objekten (ganztägig: Ende ist exklusiv)

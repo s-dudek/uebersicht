@@ -5,7 +5,7 @@ import { dayName, mondayOf, parseYmd } from './dates.js';
 import { ICON } from './icons.js';
 import { importPlan } from './meals.js';
 import { render } from './render.js';
-import { closeSheet, openSheet } from './sheet.js';
+import { closeSheet, openSheet, sheetActs } from './sheet.js';
 import { importTraining, validTraining } from './training.js';
 import { expandTrainingCode } from './training-catalog.js';
 
@@ -36,7 +36,7 @@ function span(dates) {
 
 export function openPlanImport() {
   const sheet = openSheet(`
-    <div class="sheet-head"><h2>Code einfügen</h2><button class="link-btn" data-close>Fertig</button></div>
+    <div class="sheet-head"><h2>Code einfügen</h2>${sheetActs()}</div>
     <p class="hint" style="margin:0 2px 12px">Den Code, den dir Claude für Essen oder Training zusammenstellt, hier komplett einfügen – für einen Tag oder eine ganze Woche.</p>
     <textarea class="textarea" id="imp-text" rows="7" placeholder="TR-261110-E3 oder PLAN { … }"></textarea>
     <div id="imp-preview"></div>

@@ -30,6 +30,8 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   cat_order 'tiles'/'tilesz'; langes Drücken = Menü, weiterziehen = verschieben, „Home-Bildschirm bearbeiten“ = wackeln mit Größen-Knopf, „Fertig“); Angeheftetes („Zu Home hinzufügen“) ist dort ebenfalls eine Kachel
   (keine eigene Pinnwand am Handy); Notizen- und Notiz-Ordner-Kacheln mit Knopf direkt in den Canvas (zuletzt benutzter Ordner: `inkFolder`).
   Kopfleisten der Bereiche schmal im selben Dunkelgrün, gleiche Höhe (44 px) und Schrift in Salbei (außer Canvas). Einen eigenen Bereich „Kategorien“ gibt es nicht mehr (Ordner in Todos/Notizen).
+- Fenster (Sheets): oben rechts runde Knöpfe aus `sheetActs()` (sheet.js) – Bearbeiten, Speichern ✓, Schließen ✕, Löschen; Kopf bleibt beim Scrollen oben.
+  Speichern übernimmt und schließt; Schließen verwirft bei neuen Einträgen (sonst ist schon gespeichert); keine Speichern-/Löschen-Knöpfe unten.
 - Keine kleinen Beschreibungs-/Hinweistexte auf den Seiten (Bedienung erklärt sich über Menü und Knöpfe).
 - Todo-Listen und Notiz-Ordner getrennt (`todoLists`/`noteFolders` in folders.js): Listen erscheinen nur bei den Notizen, wenn Notizen darin liegen, und umgekehrt.
 - Todos und Notizen: geöffneter Ordner ohne Ordner-Spalte, Wechsel oben über den Titel (`openFolderDrop` in menu.js, auch Canvas).

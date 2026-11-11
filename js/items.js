@@ -23,7 +23,7 @@ import { openMeal } from './meals.js';
 import { openTraining } from './training.js';
 import { pushOn, pushSupport, remindHint } from './reminders.js';
 import { render } from './render.js';
-import { categoryOptions, closeSheet, colorPick, openSheet } from './sheet.js';
+import { categoryOptions, clearSheetClose, closeSheet, colorPick, openSheet, sheetActs } from './sheet.js';
 import { hideForMe } from './trash.js';
 
 // ---------- Todo / Notiz öffnen ----------
@@ -43,7 +43,7 @@ function openNoteView(id) {
   const sheet = openSheet(`
     <div class="sheet-head">
       <span class="status">${info}</span>
-      <span class="sh-btns"><button class="link-btn ghost" id="v-edit">${ICON.pen}Bearbeiten</button><button class="link-btn" data-close>Fertig</button></span>
+      ${sheetActs({ edit: true })}
     </div>
     <article class="note-view"${n.meta?.color ? ` style="--ic:${safeColor(n.meta.color)}"` : ''}>
       <h2 class="nv-title">${esc(n.title) || '<span class="muted">Ohne Titel</span>'}</h2>
@@ -51,7 +51,7 @@ function openNoteView(id) {
     </article>`, { full: n.body.length > 400 });   // lange Notizen bekommen das ganze Fenster
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
   const edit = () => openItem(id, { edit: true });
-  sheet.querySelector('#v-edit').addEventListener('click', edit);
+  sheet.querySelector('[data-edit]').addEventListener('click', edit);
   sheet.querySelector('.note-view').addEventListener('dblclick', edit);   // Doppelklick am Desktop
 }
 
@@ -68,7 +68,7 @@ export function openItem(id, { isNew = false, edit = false } = {}) {
   const sheet = openSheet(`
     <div class="sheet-head">
       <span class="status" id="save-status"></span>
-      <button class="link-btn" data-close>Fertig</button>
+      ${sheetActs({ save: true, del: canDeleteItem(i), delLabel: mine ? 'Löschen' : 'Löschen (für alle)' })}
     </div>
     <div class="title-row">
       <input class="title-input" id="f-title" placeholder="${isNote ? 'Titel' : 'Todo'}" value="${esc(i.title)}">
@@ -91,7 +91,6 @@ export function openItem(id, { isNew = false, edit = false } = {}) {
     </div>
     <div class="field"><label>Geteilt</label><div id="share-area"></div></div>
     ${mine ? '' : '<button class="btn secondary block" id="f-hide">Für mich entfernen</button>'}
-    ${canDeleteItem(i) ? `<button class="btn danger block" id="f-delete">${isNote ? 'Notiz' : 'Todo'} löschen${mine ? '' : ' (für alle)'}</button>` : ''}
   `, { full: isNote, onClose: () => { saveText.flush(); if (isNew && !itemById(id)?.title && !itemById(id)?.body) silentDelete(id); } });
 
   const $status = sheet.querySelector('#save-status');
@@ -141,9 +140,14 @@ export function openItem(id, { isNew = false, edit = false } = {}) {
   sheet.querySelector('#f-cat').addEventListener('change', (e) => {
     saveItem(id, { category_id: e.target.value || null }).then(() => renderShareArea(sheet, id));
   });
-  sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
+  // Speichern: übernehmen und schließen; Schließen verwirft einen neuen Eintrag (Bestehendes ist schon gespeichert)
+  sheet.querySelector('[data-save]').addEventListener('click', closeSheet);
+  sheet.querySelector('[data-close]').addEventListener('click', () => {
+    if (isNew) { saveText.flush = () => {}; clearSheetClose(); silentDelete(id); }
+    closeSheet();
+  });
   sheet.querySelector('#f-hide')?.addEventListener('click', () => { saveText.flush(); closeSheet(); hideForMe(id); });
-  sheet.querySelector('#f-delete')?.addEventListener('click', async () => {
+  sheet.querySelector('[data-del]')?.addEventListener('click', async () => {
     saveText.flush = () => {};
     if (await deleteItem(id)) { isNew = false; closeSheet(); }
   });

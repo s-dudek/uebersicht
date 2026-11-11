@@ -16,7 +16,7 @@ import { openItem } from './items.js';
 import { dropMenu } from './menu.js';
 import { notesIn } from './notes.js';
 import { render } from './render.js';
-import { closeSheet, openSheet } from './sheet.js';
+import { closeSheet, openSheet, sheetActs } from './sheet.js';
 
 // Einstellungen der Werkzeuge: Farbe und Stärke je Art (Stift, Textmarker, Text) und zuletzt benutzte Farben bleiben gespeichert
 const saved = (() => { try { return JSON.parse(store('inkStyle')) || {}; } catch { return {}; } })();
@@ -183,11 +183,12 @@ function editLayoutSheet(lf) {
   return new Promise((resolve) => {
     let done = false;
     const finish = (v) => { if (!done) { done = true; resolve(v); } };
-    const sheet = openSheet(`<div class="sheet-head"><h2>Layout-Angaben</h2><button class="link-btn" data-close>Fertig</button></div>
+    const sheet = openSheet(`<div class="sheet-head"><h2>Layout-Angaben</h2>${sheetActs({ save: true })}</div>
       ${LAYOUT_FIELDS.map(([k, l]) => `<div class="field"><label for="lf-${k}">${l}</label><input class="input" id="lf-${k}" maxlength="80" value="${esc(lf[k] || '')}"></div>`).join('')}
       <p class="hint">Erscheint im Layout des Bereichs, auch beim Speichern als PDF oder Bild.</p>`, { onClose: () => finish(null) });
     const read = () => Object.fromEntries(LAYOUT_FIELDS.map(([k]) => [k, sheet.querySelector('#lf-' + k).value.trim().slice(0, 80)]).filter(([, v]) => v));
-    sheet.querySelector('[data-close]').addEventListener('click', () => { finish(read()); closeSheet(); });
+    sheet.querySelector('[data-save]').addEventListener('click', () => { finish(read()); closeSheet(); });
+    sheet.querySelector('[data-close]').addEventListener('click', closeSheet);   // ohne Übernehmen
   });
 }
 
@@ -478,7 +479,7 @@ function openExport(preselect) {
   if (!b) return;
   let frames = b.frames();
   if (!frames.length) {
-    const sheet = openSheet(`<div class="sheet-head"><h2>Speichern</h2><button class="link-btn" data-close>Fertig</button></div>
+    const sheet = openSheet(`<div class="sheet-head"><h2>Speichern</h2>${sheetActs()}</div>
       <p class="exp-lead">Noch kein Bereich auf dieser Seite. Lege einen Bereich an, schreibe hinein und speichere ihn dann.</p>
       <div class="exp-new"><button class="btn" data-f="a4p">${ICON.frame} A4 hoch</button><button class="btn" data-f="a4l">${ICON.frame} A4 quer</button></div>`);
     sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
@@ -487,7 +488,7 @@ function openExport(preselect) {
   }
   const chosen = new Set(preselect ?? frames.map((f) => f.n));
   let cur = preselect?.[0] ?? frames[0].n;   // Bereich in der Vorschau
-  const sheet = openSheet(`<div class="sheet-head"><h2>Speichern</h2><button class="link-btn" data-close>Fertig</button></div>
+  const sheet = openSheet(`<div class="sheet-head"><h2>Speichern</h2>${sheetActs()}</div>
     <div class="exp-wrap"><div class="exp-side"></div><div class="exp-prev"><div class="exp-host"></div><div class="exp-nav"></div></div></div>`, { full: true });
   sheet.classList.add('exp-sheet');
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);

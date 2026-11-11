@@ -9,7 +9,7 @@ import { addDays, parseYmd, ymd } from './dates.js';
 import { evNextRemind, evTitle, isBday } from './events.js';
 import { addGoogle, deleteGoogle } from './google-cal.js';
 import { render } from './render.js';
-import { closeSheet, openSheet } from './sheet.js';
+import { closeSheet, openSheet, sheetActs } from './sheet.js';
 
 // Termine in Tag, Woche, Monatsliste (eigene und verknüpfte)
 export const CAL_ENTRY = ['.cal-panel', '.cal-agenda'].flatMap((p) => [`${p} [data-act="open"][data-id]`, `${p} [data-act="ext-ev"][data-id]`]).join(', ');
@@ -102,19 +102,19 @@ async function removeEntry(e) {
 // ---------- Duplizieren: Tag und Abschnitt wählen ----------
 function openDuplicate(e) {
   const sel = calSections().some((x) => x.key === e.section) ? e.section : 'ev';
-  const sheet = openSheet(`<div class="sheet-head"><h2>Duplizieren</h2><button class="link-btn" data-close>Abbrechen</button></div>
+  const sheet = openSheet(`<div class="sheet-head"><h2>Duplizieren</h2>${sheetActs({ save: true, saveLabel: 'Duplizieren' })}</div>
     <p class="cm-what"><b>${esc(e.title || 'Termin')}</b><span>${esc(e.allDay ? 'ganztägig' : `${e.time}${e.end ? '–' + e.end : ''}`)}</span></p>
     <form id="dup-form">
       <div class="field"><label for="dup-day">Tag</label><input class="input" type="date" id="dup-day" value="${esc(e.day)}" required></div>
       <div class="field"><label for="dup-sec">Abschnitt</label><select class="select" id="dup-sec">${sectionOptions(sel)}</select></div>
-      <button class="btn block" id="dup-go">Duplizieren</button>
     </form>`);
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
+  sheet.querySelector('[data-save]').addEventListener('click', () => sheet.querySelector('#dup-form').requestSubmit());
   sheet.querySelector('#dup-form').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const day = sheet.querySelector('#dup-day').value, key = sheet.querySelector('#dup-sec').value;
     if (!day) return;
-    const btn = sheet.querySelector('#dup-go');
+    const btn = sheet.querySelector('[data-save]');
     btn.disabled = true;
     try {
       await createIn({ ...e, day, birth: '' }, key);
@@ -130,7 +130,7 @@ function openDuplicate(e) {
 // ---------- Kopieren nach: gleicher Tag, anderer Abschnitt ----------
 function openCopy(e) {
   const list = calSections().filter((x) => x.key !== e.section);
-  const sheet = openSheet(`<div class="sheet-head"><h2>Kopieren nach</h2><button class="link-btn" data-close>Abbrechen</button></div>
+  const sheet = openSheet(`<div class="sheet-head"><h2>Kopieren nach</h2>${sheetActs()}</div>
     <p class="cm-what"><b>${esc(e.title || 'Termin')}</b><span>${esc(parseYmd(e.day).toLocaleDateString('de-AT', { weekday: 'long', day: 'numeric', month: 'long' }))}</span></p>
     <div class="cm-secs">${list.map((x) => `<button class="cm-sec" data-sec="${esc(x.key)}"><i style="background:${safeColor(x.color, '#0C3741')}"></i><span>${esc(x.name)}</span></button>`).join('')}</div>`);
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);

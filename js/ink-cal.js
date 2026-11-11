@@ -10,7 +10,7 @@ import { evTitle, isYearly } from './events.js';
 import { ICON } from './icons.js';
 import { CAL_SIZES } from './ink-draw.js';
 import { navigate } from './nav.js';
-import { closeSheet, openSheet } from './sheet.js';
+import { closeSheet, openSheet, sheetActs } from './sheet.js';
 
 const BLUE = '#3E7CA8';
 const NEXT = { s: 'm', m: 'l', l: 's' };
@@ -104,7 +104,7 @@ export function pickCalEvent() {
         return `${head}<button class="icp-r" data-k="${unique.indexOf(hit[k])}"><i style="background:${safeColor(a.color, BLUE)}"></i><span>${esc(time || 'ganztägig')}</span><b>${esc(a.label)}</b></button>`;
       }).join('') : '<p class="kempty">Keine Termine gefunden.</p>';
     };
-    const sheet = openSheet(`<div class="sheet-head"><h2>Termin einfügen</h2><button class="link-btn" data-close>Abbrechen</button></div>
+    const sheet = openSheet(`<div class="sheet-head"><h2>Termin einfügen</h2>${sheetActs()}</div>
       <input class="input icp-q" type="search" placeholder="Suchen …" autocomplete="off">
       <div class="icp-list">${list('')}</div>`, { onClose: () => { if (!picked) resolve(null); } });
     const box = sheet.querySelector('.icp-list');

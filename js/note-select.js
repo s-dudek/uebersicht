@@ -5,7 +5,7 @@ import { noteFolders } from './folders.js';
 import { ICON } from './icons.js';
 import { notesIn } from './notes.js';
 import { render } from './render.js';
-import { closeSheet, openSheet } from './sheet.js';
+import { closeSheet, openSheet, sheetActs } from './sheet.js';
 
 // Auswahl gilt nur im Ordner, in dem sie begonnen wurde
 export const selecting = () => state.noteSel && state.noteSel.fid === state.list;
@@ -30,7 +30,7 @@ export function noteSelAction(act, id) {
 // Zielordner wählen
 function openMoveSheet(ids) {
   const here = state.noteSel.fid;
-  const sheet = openSheet(`<div class="sheet-head"><h2>${ids.length} ${ids.length === 1 ? 'Notiz' : 'Notizen'} verschieben</h2><button class="link-btn" data-close>Abbrechen</button></div>
+  const sheet = openSheet(`<div class="sheet-head"><h2>${ids.length} ${ids.length === 1 ? 'Notiz' : 'Notizen'} verschieben</h2>${sheetActs()}</div>
     <div class="pick">${noteFolders().filter((f) => f.id !== here).map((f) => `<button class="pick-item" data-to="${esc(f.id)}"><i class="ldot ${f.id ? '' : 'none'}" style="background:${safeColor(f.color)}"></i>${esc(f.name)}</button>`).join('')}</div>`);
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
   sheet.querySelectorAll('[data-to]').forEach((b) => b.addEventListener('click', async () => {

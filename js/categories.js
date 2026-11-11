@@ -18,17 +18,17 @@ import { insertCategory, loadAll } from './data.js';
 import { ICON, ITEM_ICONS } from './icons.js';
 import { personPicker, shareMessage } from './items.js';
 import { render } from './render.js';
-import { closeSheet, openSheet } from './sheet.js';
+import { closeSheet, openSheet, sheetActs } from './sheet.js';
 
 // Neue Todo-Liste bzw. neuer Notiz-Ordner (folder) – Listen und Ordner bleiben getrennt
 export function openNewList({ folder = false } = {}) {
   const isList = !folder;
   let color = COLORS[1], canvas = false;   // Ordner: mit Notizen-Liste oder nur Canvas
   const sheet = openSheet(`
-    <div class="sheet-head"><h2>${isList ? 'Neue Liste' : 'Neuer Ordner'}</h2><button class="link-btn" data-close>Fertig</button></div>
+    <div class="sheet-head"><h2>${isList ? 'Neue Liste' : 'Neuer Ordner'}</h2>${sheetActs({ save: true, saveLabel: 'Anlegen' })}</div>
     <form id="nl-form">
       <div class="field"><label>Name</label>
-        <div class="row-inline"><input class="input" id="nl-name" name="name" placeholder="${isList ? 'z. B. Einkaufen' : 'z. B. Urlaub'}" required><button class="btn">Anlegen</button></div>
+        <input class="input" id="nl-name" name="name" placeholder="${isList ? 'z. B. Einkaufen' : 'z. B. Urlaub'}" enterkeyhint="done" required>
       </div>
       <div class="field"><label>Farbe</label><div class="colors">${COLORS.map((col) => `<button type="button" class="color ${col === color ? 'on' : ''}" data-color="${col}" style="background:${col}"></button>`).join('')}</div></div>
       ${isList ? '' : `<div class="field"><label>Art</label><div class="seg-view nl-kind">
@@ -45,6 +45,7 @@ export function openNewList({ folder = false } = {}) {
     canvas = !!b.dataset.kind;
     sheet.querySelectorAll('[data-kind]').forEach((x) => x.classList.toggle('on', x === b));
   }));
+  sheet.querySelector('[data-save]').addEventListener('click', () => sheet.querySelector('#nl-form').requestSubmit());
   sheet.querySelector('#nl-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = sheet.querySelector('#nl-name').value.trim();
@@ -65,7 +66,7 @@ export function openCategory(cid) {
   const mine = c.owner_id === state.me;
   const listOn = isTodoList(c);
   const sheet = openSheet(mine ? `
-    <div class="sheet-head"><h2>${esc(c.name)}</h2><button class="link-btn" data-close>Fertig</button></div>
+    <div class="sheet-head"><h2>${esc(c.name)}</h2>${sheetActs({ save: true, del: true, delLabel: 'Kategorie löschen' })}</div>
     <div class="field"><label>Name</label><input class="input" id="c-name" value="${esc(c.name)}"></div>
     <div class="field"><label>Farbe</label><div class="colors">${COLORS.map((col) => `<button type="button" class="color ${col === c.color ? 'on' : ''}" data-color="${col}" style="background:${col}"></button>`).join('')}</div></div>
     <div class="field"><label>Symbol</label><div class="icon-grid cat-icons" id="c-icons" style="--fc:${safeColor(c.color)}">
@@ -83,11 +84,8 @@ export function openCategory(cid) {
     ${listOn ? '' : `<div class="field"><label>Notizen</label>
       <button class="menu-item" id="c-canvas" type="button">Nur Canvas (ohne Notizen-Liste): ${c.canvas_only ? 'an' : 'aus'}<span class="sw ${c.canvas_only ? 'on' : ''}"></span></button>
     </div>`}
-    <div class="divider"></div>
-    <button class="btn danger block" id="c-delete">Kategorie löschen</button>
-    <div class="hint" style="text-align:center">Einträge bleiben erhalten, nur ohne Kategorie.</div>
   ` : `
-    <div class="sheet-head"><span></span><button class="link-btn" data-close>Fertig</button></div>
+    <div class="sheet-head"><span></span>${sheetActs()}</div>
     <h2 style="display:flex;align-items:center;gap:10px;margin:4px 0 6px"><span class="dot" style="background:${safeColor(c.color)};width:14px;height:14px"></span>${esc(c.name)}</h2>
     <p class="muted" style="margin:0 0 20px">Gemeinsame Kategorie von ${esc(nameOf(c.owner_id))}${membersOf(cid).filter((u) => u !== state.me).length ? ', auch mit ' + esc(membersOf(cid).filter((u) => u !== state.me).map(nameOf).join(', ')) : ''}.</p>
     <button class="btn danger block" id="c-leave">Kategorie verlassen</button>
@@ -153,7 +151,9 @@ export function openCategory(cid) {
       c.canvas_only = next;
       render(); openCategory(cid);
     });
-    sheet.querySelector('#c-delete').addEventListener('click', () => deleteCategory(cid));
+    sheet.querySelector('[data-del]').addEventListener('click', () => deleteCategory(cid));
+    // Speichern: Namensfeld übernehmen (ändert sich sonst erst beim Verlassen des Feldes), dann schließen
+    sheet.querySelector('[data-save]').addEventListener('click', () => { sheet.querySelector('#c-name').dispatchEvent(new Event('change')); closeSheet(); });
   } else {
     sheet.querySelector('#c-leave').addEventListener('click', () => leaveCategory(cid));
   }

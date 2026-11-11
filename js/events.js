@@ -10,7 +10,7 @@ import { openGoogleEvent } from './google-cal.js';
 import { ICON } from './icons.js';
 import { renderShareArea } from './items.js';
 import { render } from './render.js';
-import { categoryOptions, clearSheetClose, closeSheet, openSheet } from './sheet.js';
+import { categoryOptions, clearSheetClose, closeSheet, openSheet, sheetActs } from './sheet.js';
 import { hideForMe } from './trash.js';
 
 // ====================================================================
@@ -66,7 +66,7 @@ export function evNextRemind(e) {
 
 export function openNewEventMenu() {
   const sheet = openSheet(`
-    <div class="sheet-head"><h2>Neu im Kalender</h2><button class="link-btn" data-close>Fertig</button></div>
+    <div class="sheet-head"><h2>Neu im Kalender</h2>${sheetActs()}</div>
     <div class="nev">
       <button class="nev-b" data-k="event">${ICON.calendar}<b>Termin</b><small>einmalig oder jährlich</small></button>
       <button class="nev-b" data-k="birthday">${ICON.cake}<b>Geburtstag</b><small>jedes Jahr mit Erinnerung</small></button>
@@ -122,7 +122,7 @@ export function openEvent(id, { isNew = false } = {}) {
     const ev = itemById(id); if (!ev) return closeSheet();
     const b = isBday(ev), m = ev.meta || {};
     const sheet = openSheet(`
-      <div class="sheet-head"><h2>${b ? 'Geburtstag' : 'Termin'}</h2><button class="link-btn" data-close>Fertig</button></div>
+      <div class="sheet-head"><h2>${b ? 'Geburtstag' : 'Termin'}</h2>${sheetActs({ save: true, del: canDeleteItem(ev), delLabel: ev.owner_id === state.me ? 'Löschen' : 'Löschen (für alle)' })}</div>
       <div class="field"><label for="ev-sec">Abschnitt</label><select class="select" id="ev-sec">${sectionOptions(b ? 'bday' : 'ev', canDeleteItem(ev) ? null : ['ev', 'bday'])}</select></div>
       <input class="title-input" id="ev-title" placeholder="${b ? 'Wer hat Geburtstag?' : 'Was steht an?'}" value="${esc(ev.title)}" autocomplete="off">
       <div class="field" style="margin-top:12px"><label>${b ? 'Geburtsdatum' : 'Datum'}</label>
@@ -141,7 +141,6 @@ export function openEvent(id, { isNew = false } = {}) {
       <div class="field"><label>Kategorie</label><select class="select" id="ev-cat">${categoryOptions(ev.category_id)}</select></div>
       <div class="field"><label>Geteilt</label><div id="share-area"></div></div>
       ${ev.owner_id === state.me ? '' : '<button class="btn secondary block" id="ev-hide">Für mich entfernen</button>'}
-      ${canDeleteItem(ev) ? `<button class="btn danger block" id="ev-del">${b ? 'Geburtstag' : 'Termin'} löschen${ev.owner_id === state.me ? '' : ' (für alle)'}</button>` : ''}
     `, { onClose: () => { saveText.flush(); if (isNew && !itemById(id)?.title) silentDelete(id); } });
 
     const saveText = debounce(() => {
@@ -162,7 +161,12 @@ export function openEvent(id, { isNew = false } = {}) {
       await saveItem(id, { ...extra, meta: next.meta, remind_at, reminded: false });
       if (redraw) { isNew = isNew && !itemById(id)?.title; draw(); }
     };
-    sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
+    // Speichern: übernehmen und schließen; Schließen verwirft einen neuen Termin (Bestehendes ist schon gespeichert)
+    sheet.querySelector('[data-save]').addEventListener('click', closeSheet);
+    sheet.querySelector('[data-close]').addEventListener('click', () => {
+      if (isNew) { clearSheetClose(); silentDelete(id); }
+      closeSheet();
+    });
     sheet.querySelector('#ev-title').addEventListener('input', saveText);
     sheet.querySelector('#ev-body').addEventListener('input', saveText);
     // anderer Abschnitt: Termin ↔ Geburtstag in der App; Google-Kalender = dorthin verschieben
@@ -196,7 +200,7 @@ export function openEvent(id, { isNew = false } = {}) {
     sheet.querySelectorAll('[data-rem]').forEach((x) => x.addEventListener('click', () => setMeta({ remind: x.dataset.rem })));
     sheet.querySelector('#ev-cat').addEventListener('change', (x) => saveItem(id, { category_id: x.target.value || null }).then(() => renderShareArea(sheet, id)));
     sheet.querySelector('#ev-hide')?.addEventListener('click', () => { saveText.flush(); clearSheetClose(); closeSheet(); hideForMe(id); });
-    sheet.querySelector('#ev-del')?.addEventListener('click', async () => {
+    sheet.querySelector('[data-del]')?.addEventListener('click', async () => {
       if (!(await askConfirm(`„${evTitle(itemById(id))}“ löschen?`, 'Löschen', 'Landet im Papierkorb.'))) return;
       clearSheetClose(); closeSheet(); trashItems([id]);
     });
