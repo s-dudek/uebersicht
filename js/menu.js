@@ -77,6 +77,11 @@ export function openMenuFor(target, x, y) {
   const cal = calMenuEntries(target);
   if (cal) { showMenu(x, y, cal, null); return true; }
   const itemEl = target.closest('[data-drag], [data-act="open"][data-id]');
+  // freie Fläche der Startseite: Home-Bildschirm bearbeiten
+  if (!itemEl && isHomeSpace(target)) {
+    showMenu(x, y, [['pen', state.homeEdit ? 'Bearbeiten beenden' : 'Home-Bildschirm bearbeiten', () => setHomeEdit(!state.homeEdit)]], null);
+    return true;
+  }
   const folderEl = target.closest('.fcard[data-cdrag]');
   const i = itemEl && itemById(itemEl.dataset.drag || itemEl.dataset.id);
   const c = !i && folderEl && catById(folderEl.dataset.cdrag || folderEl.dataset.id);
@@ -140,6 +145,9 @@ function showMenu(x, y, entries, item) {
   menuEl.querySelector('button')?.focus();
 }
 
+// Startseite neben den Kacheln (nicht auf Kacheln, Knöpfen oder der Leiste)
+const isHomeSpace = (el) => !!el.closest('.main.is-home') && !el.closest('.mt, button, a, input, .homebar, .dash-bar');
+
 export function initContextMenu() {
   // Rechtsklick nur mit der Maus; am Touchscreen öffnet langes Drücken auf Ordner und Karten das Menü (drag.js)
   let pointer = 'mouse';
@@ -150,6 +158,17 @@ export function initContextMenu() {
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
   window.addEventListener('resize', closeMenu);
   document.addEventListener('scroll', closeMenu, true);
+
+  // Touch: auf der freien Fläche der Startseite lange drücken öffnet das Menü (Kacheln regelt drag.js)
+  let hold = null;
+  const stopHold = () => { clearTimeout(hold?.t); hold = null; };
+  $app.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' || !isHomeSpace(e.target)) return;
+    const { clientX: x, clientY: y, target } = e;
+    hold = { x, y, t: setTimeout(() => { hold = null; navigator.vibrate?.(10); openMenuFor(target, x, y); }, 500) };
+  });
+  $app.addEventListener('pointermove', (e) => { if (hold && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 10) stopHold(); });
+  ['pointerup', 'pointercancel'].forEach((t) => $app.addEventListener(t, stopHold));
 
   // innerster Treffer zählt: Eintrag vor Ordner vor Karte auf der Startseite
   $app.addEventListener('contextmenu', (e) => {

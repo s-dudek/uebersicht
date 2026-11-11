@@ -29,6 +29,8 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   Einstellungen, Abmelden) und Kacheln (`home-tiles.js`, wie Widgets am iPhone: Größe Klein/Mittel/Groß und Reihenfolge je Person in
   cat_order 'tiles'/'tilesz'; langes Drücken = Menü, weiterziehen = verschieben, „Home-Bildschirm bearbeiten“ = wackeln mit Größen-Knopf, „Fertig“); Angeheftetes („Zu Home hinzufügen“) ist dort ebenfalls eine Kachel
   (keine eigene Pinnwand am Handy); Notizen- und Notiz-Ordner-Kacheln mit Knopf direkt in den Canvas (zuletzt benutzter Ordner: `inkFolder`).
+  Kachel-Gestaltung: Akzentfarbe `accent` (`--ac`), Symbol im Farbkreis, großes blasses Symbol dahinter; Klein = Kennzahl (`stat`), Mittel/Groß = Liste plus Grafik unten (`foot`: Wochenleiste, Fortschritt, zuletzt bearbeitet; am Handy bei Mittel ausgeblendet), Datum groß mit laufender Woche.
+  Freie Fläche der Startseite: Rechtsklick bzw. langes Drücken = „Home-Bildschirm bearbeiten“ (menu.js).
   Kopfleisten der Bereiche schmal im selben Dunkelgrün, gleiche Höhe (44 px) und Schrift in Salbei (außer Canvas). Einen eigenen Bereich „Kategorien“ gibt es nicht mehr (Ordner in Todos/Notizen).
 - Fenster (Sheets): oben rechts runde Knöpfe aus `sheetActs()` (sheet.js) – Bearbeiten, Speichern ✓, Schließen ✕, Löschen; Kopf bleibt beim Scrollen oben.
   Speichern übernimmt und schließt; Schließen verwirft bei neuen Einträgen (sonst ist schon gespeichert); keine Speichern-/Löschen-Knöpfe unten.

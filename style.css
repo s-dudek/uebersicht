@@ -209,16 +209,52 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 
 /* Smartphone/Tablet: Kacheln wie Widgets am iPhone – Klein (2 von 6 Spalten), Mittel (4), Groß (4 × 2 Zeilen) */
 .mtiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-rows: 104px; grid-auto-flow: dense; gap: 10px; }
-.mt { position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 6px; min-width: 0; padding: 14px; border-radius: 22px; text-align: left; overflow: hidden; cursor: pointer;
-  background: var(--glass); border: 1px solid var(--glass-line); box-shadow: var(--tile-shadow); color: var(--ink); font-weight: 600; font-size: 15px; }
+.mt { --ac: #4E7569; position: relative; isolation: isolate; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 6px; min-width: 0; padding: 14px; border-radius: 22px; text-align: left; overflow: hidden; cursor: pointer;
+  background: linear-gradient(155deg, color-mix(in srgb, var(--ac) 9%, var(--white)) 0%, var(--glass) 55%); border: 1px solid var(--glass-line);
+  box-shadow: var(--tile-shadow), inset 0 1px 0 rgba(255, 255, 255, .8); color: var(--ink); font-weight: 600; font-size: 15px; }
+/* großes, blasses Symbol hinter dem Inhalt (füllt die Fläche) */
+.mt-wm { position: absolute; z-index: -1; right: -16px; bottom: -22px; width: 118px; height: 118px; color: var(--ac); opacity: .08; pointer-events: none; }
+.mt .mt-wm svg { width: 100%; height: 100%; }
+.mt.sz-s .mt-wm { width: 92px; height: 92px; right: -14px; bottom: -16px; }
+/* Klein: große Kennzahl unten */
+.mt-stat { display: flex; flex-direction: column; gap: 1px; margin-top: auto; min-width: 0; max-width: 100%; }
+.mt-stat b { font-family: var(--font-head); font-size: 34px; line-height: 1; color: var(--ink); }
+.mt-stat.word b { font-size: 21px; line-height: 1.1; }
+.mt-stat small { font-size: 13px; font-weight: 500; color: var(--mid); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Mittel/Groß: Grafik unten (Wochenleiste, Fortschritt, zuletzt bearbeitet) */
+.mt-fill { flex: 1; }
+.mt-week { display: flex; justify-content: space-between; width: 100%; padding-top: 6px; border-top: 1px solid color-mix(in srgb, var(--ac) 18%, transparent); }
+.mt-week > span { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 18px; }
+.mt-week small { font-size: 10.5px; font-weight: 600; color: var(--grey); }
+.mt-week i { width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ac) 35%, transparent); }
+.mt-week i.lv1 { background: color-mix(in srgb, var(--ac) 55%, var(--white)); box-shadow: none; }
+.mt-week i.lv2 { background: var(--ac); box-shadow: none; }
+.mt-week .now small { color: var(--ac); }
+.mt-week .now i { outline: 2px solid color-mix(in srgb, var(--ac) 35%, transparent); outline-offset: 2px; }
+.mt-prog { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.mt-prog > span { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--ac) 14%, var(--white)); overflow: hidden; }
+.mt-prog i { display: block; height: 100%; border-radius: 3px; background: var(--ac); }
+.mt-prog small, .mt-foot { font-size: 12.5px; font-weight: 500; color: var(--grey); }
+.mt-stat em { display: none; font-style: normal; color: var(--ink); font-weight: 600; }
+/* Handy: kleine Kacheln kompakt (Name unten bei der Angabe), mittlere ohne Grafik unten (zu wenig Höhe) */
+@media (max-width: 599px) {
+  .mt.sz-s { padding: 12px; }
+  .mt.sz-s .mt-h > span:last-child { display: none; }
+  .mt.sz-s .mt-ic { width: 28px; height: 28px; border-radius: 10px; }
+  .mt.sz-s .mt-stat b { font-size: 30px; }
+  .mt.sz-s .mt-stat.word b { font-size: 19px; }
+  .mt-stat em { display: inline; }
+  .mt.sz-s .mt-stat small > span { display: none; }
+  .mt.sz-m .mt-fill, .mt.sz-m .mt-week, .mt.sz-m .mt-prog, .mt.sz-m .mt-foot { display: none; }
+}
 .mt.sz-s { grid-column: span 2; }
 .mt.sz-m { grid-column: span 4; }
 .mt.sz-l { grid-column: span 4; grid-row: span 2; }
-.mt-h { display: flex; flex-direction: column; gap: 8px; }
-.mt.sz-m .mt-h, .mt.sz-l .mt-h { flex-direction: row; align-items: center; }
+.mt-h { display: flex; flex-direction: row; align-items: center; gap: 9px; }
 .mt-h { min-width: 0; max-width: 100%; }
 .mt-h > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mt-ic { flex: none; display: grid; place-items: center; }
+.mt-ic { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 11px; background: color-mix(in srgb, var(--ac) 15%, var(--white)); color: var(--ac); }
+.mt .mt-ic svg { width: 18px; height: 18px; }
 /* Knopf direkt in den Canvas (Notizen, Notiz-Ordner) */
 .mt-ink { position: absolute; right: 10px; bottom: 10px; z-index: 2; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--ink); color: var(--green-l); }
 .mt-ink svg { width: 18px; height: 18px; }
@@ -227,9 +263,9 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 .mt.sz-s:has(.mt-ink) > i { right: 50px; }
 .mt:has(.mt-ink) .mt-list { padding-right: 40px; }
 .mt svg { width: 26px; height: 26px; flex: none; }
-.mt > i { position: absolute; top: 12px; right: 12px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--ink); color: var(--white); font-size: 12px; font-style: normal; line-height: 22px; text-align: center; }
+.mt > i { position: absolute; top: 14px; right: 14px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--ac); color: var(--white); font-size: 12px; font-style: normal; line-height: 22px; text-align: center; }
 .mt-list { list-style: none; margin: 0; padding: 0; width: 100%; font-size: 14px; font-weight: 400; color: var(--mid); }
-.mt-list li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 3px 0; border-top: 1px solid var(--soft); }
+.mt-list li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 3px 0; border-top: 1px solid color-mix(in srgb, var(--ac) 14%, transparent); }
 .mt-list li:first-child { border-top: 0; }
 .mt.sz-l { justify-content: flex-start; }
 .mt.sz-l .mt-list { margin-top: 6px; }
@@ -240,6 +276,13 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 .mt-date > small { font-size: 17px; font-weight: 600; letter-spacing: .02em; }
 .mt-date > b { font-family: var(--font-head); font-size: 78px; line-height: .9; color: var(--white); }
 .mt-date > span { font-size: 16px; font-weight: 500; }
+/* Datum groß: laufende Woche */
+.mt-date > .mt-dweek { display: flex; align-items: flex-end; justify-content: space-between; width: 100%; padding-top: 10px; border-top: 1px solid rgba(168, 190, 167, .25); font-size: 15px; font-weight: 600; color: var(--white); }
+.mt-dweek em { font-style: normal; font-size: 12px; color: var(--green-l); align-self: center; }
+.mt-dweek > span { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 24px; padding: 3px 0; border-radius: 10px; }
+.mt-dweek small { font-size: 10px; color: var(--green-l); opacity: .8; }
+.mt-dweek .now { background: var(--green-l); color: var(--ink); }
+.mt-dweek .now small { color: var(--ink); opacity: 1; }
 .mt-date.sz-s > small { font-size: 14px; }
 .mt-date.sz-s > b { font-size: 44px; }
 .mt-date.sz-m { flex-direction: row; align-items: center; justify-content: flex-start; gap: 14px; }
