@@ -464,3 +464,6 @@ drop function if exists public.give_event(uuid, text, text, date, text, text, te
 -- Erinnerungen als eigener Eintrag (z. B. aus dem Canvas oder schnell gestellt)
 alter table public.items drop constraint if exists items_type_check;
 alter table public.items add constraint items_type_check check (type in ('todo', 'note', 'meal', 'event', 'training', 'reminder'));
+
+-- Homescreen-Ausschnitt: Bild des Rahmens „Homescreen“ auf der Startseite eines Canvas (für die Kachel des Ordners)
+alter table public.ink_pages add column if not exists home_img text;

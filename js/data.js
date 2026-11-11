@@ -11,18 +11,21 @@ import { purgeCategory } from './trash.js';
 // Daten laden + Live-Updates
 // ====================================================================
 export async function loadAll() {
-  const [c, m, i, s, p] = await Promise.all([
+  const [c, m, i, s, p, h] = await Promise.all([
     sb.from('categories').select('*').order('name'),
     sb.from('category_members').select('*'),
     sb.from('items').select('*').order('created_at', { ascending: false }),
     sb.from('item_shares').select('*'),
     sb.from('profiles').select('*'),
+    sb.from('ink_pages').select('category_id, home_img').is('parent_id', null),
   ]);
   const err = c.error || m.error || i.error || s.error || p.error;
   if (err) { toast('Laden fehlgeschlagen: ' + err.message, 4000); return; }
   // Papierkorb: Markiertes getrennt halten; Einträge einer gelöschten Kategorie erscheinen bis dahin „ohne Kategorie“
   // „Für mich entfernt“ (geteilte Einträge anderer, je Person in cat_order.hidden): nur bei mir ausgeblendet
   state.profiles = Object.fromEntries(p.data.map((x) => [x.id, x]));
+  // Homescreen-Ausschnitte der Canvas-Ordner (Bild für ihre Kachel)
+  state.homeImgs = Object.fromEntries((h.data || []).filter((r) => r.home_img).map((r) => [r.category_id ?? '', r.home_img]));
   const hidden = new Set(state.profiles[state.me]?.cat_order?.hidden || []);
   const isHidden = (x) => x.owner_id !== state.me && hidden.has(x.id);
   state.categories = c.data.filter((x) => !x.deleted_at);

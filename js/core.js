@@ -128,6 +128,7 @@ export const state = {
   calView: store('calView') || 'week',   // 'day' | 'week' | 'month'
   inkSideOff: store('inkSideOff') === '1',   // Canvas am Desktop: Seitenleiste eingefahren
   homeDay: null,
+  homeImgs: {},        // Homescreen-Ausschnitt je Canvas-Ordner (ink_pages.home_img der Startseite), Schlüssel = Ordner-ID
   backTo: null,        // Rückweg in den Canvas ({ fid, match }), wenn man von dort in Kalender/Erinnerungen kam
   homeEdit: false,
   noteSel: null,                         // Notizen: Mehrfachauswahl { fid, ids: Set }                       // Startseite (schmal): Kacheln bearbeiten (wackeln)                         // Startseite: gezeigter Tag (null = heute)
@@ -138,8 +139,8 @@ export const state = {
 };
 
 export const catById = (id) => state.categories.find((c) => c.id === id);
-// Skizze einer Notiz (Bild aus ihrem Canvas-Rahmen, meta.sketch): nur echtes JPEG als data-URL zulassen
-export const sketchSrc = (i) => { const s = i?.meta?.sketch; return typeof s === 'string' && s.length < 600000 && /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(s) ? s : ''; };
+// Bild aus der Datenbank (z. B. Homescreen-Ausschnitt eines Canvas): nur echtes JPEG als data-URL zulassen
+export const jpegSrc = (s) => (typeof s === 'string' && s.length < 900000 && /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(s) ? s : '');
 // Reiner Canvas-Ordner: zeigt nur den Canvas, keine Notizen-Liste
 export const isCanvasOnly = (id) => !!(id && catById(id)?.canvas_only);
 // Notiz-Ordner im Canvas (Knopf „Canvas“ oder reiner Canvas-Ordner)

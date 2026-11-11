@@ -5,7 +5,7 @@
 // Langes Drücken: Menü mit Größe und „Home-Bildschirm bearbeiten“ (menu.js), weiterziehen = verschieben (drag.js).
 // Im Bearbeiten-Modus wackeln die Kacheln, lassen sich sofort ziehen und haben einen Knopf für die Größe.
 import { dayContent, hm } from './calendar.js';
-import { catById, esc, isDesktop, isTodoList, safeColor, sketchSrc, state, store } from './core.js';
+import { catById, esc, isDesktop, isTodoList, jpegSrc, safeColor, state, store } from './core.js';
 import { addDays, isoWeek, mondayOf, remindLabel, ymd } from './dates.js';
 import { evTitle } from './events.js';
 import { catOrder, catSym, saveCatOrder } from './folders.js';
@@ -65,12 +65,7 @@ function allTiles(today) {
     { key: 'notes', label: 'Notizen', icon: ICON.notes, accent: '#7FA08A', size: 's', desk: 'm', act: 'data-act="nav" data-id="notes"', ink: 'last',
       lines: () => titles(notes()), empty: 'Noch keine Notizen', badge: true,
       stat: () => ({ big: String(notes().length), sub: notes().length === 1 ? 'Notiz' : 'Notizen' }),
-      foot: () => {
-        const pics = notes().filter(sketchSrc).slice(0, 4);   // Notizen mit Skizze: Bildreihe
-        if (pics.length) return `<span class="mt-pics">${pics.map((n) => `<img src="${esc(sketchSrc(n))}" alt="" data-act="open" data-id="${n.id}">`).join('')}</span>`;
-        const n = notes()[0];
-        return n ? `<span class="mt-foot">Zuletzt bearbeitet ${esc(ago(n.updated_at))}</span>` : '';
-      } },
+      foot: () => { const n = notes()[0]; return n ? `<span class="mt-foot">Zuletzt bearbeitet ${esc(ago(n.updated_at))}</span>` : ''; } },
     { key: 'meals', label: 'Gerichte', icon: ICON.pot, accent: '#D9873E', size: 'm', act: 'data-act="nav" data-id="meals"',
       lines: () => mealsOn(today).map((m) => (slotName(m) ? `${slotName(m)}: ${m.title}` : m.title)), empty: 'Heute nichts geplant',
       stat: () => { const m = mealsOn(today)[0]; return m ? { big: slotName(m) || 'Heute', sub: m.title, word: true } : { big: '–', sub: 'nichts geplant' }; },
@@ -87,14 +82,15 @@ function allTiles(today) {
     if (type === 'cat') {
       const list = isTodoList(obj);
       const inside = state.items.filter((i) => i.category_id === obj.id && (list ? i.type === 'todo' && !i.done : i.type === 'note'));
-      return { key, label: obj.name, icon: catSym(obj), accent: safeColor(obj.color, '#4E7569'), size: 'm', act: obj.canvas_only ? `data-act="home-canvas" data-id="${obj.id}"` : `data-act="pin-open" data-id="${obj.id}"`,
-        lines: () => (list ? checks : titles)(inside.sort(byNewest)), empty: list ? 'Alles erledigt' : 'Leer', badge: !obj.canvas_only, ink: list || obj.canvas_only ? null : obj.id,
+      const shot = jpegSrc(state.homeImgs[obj.id]);   // Homescreen-Ausschnitt aus dem Canvas: füllt die Kachel
+      return { key, label: obj.name, icon: catSym(obj), accent: safeColor(obj.color, '#4E7569'), size: 'm', shot,
+        act: obj.canvas_only || shot ? `data-act="home-canvas" data-id="${obj.id}"` : `data-act="pin-open" data-id="${obj.id}"`,
+        lines: () => (list ? checks : titles)(inside.sort(byNewest)), empty: list ? 'Alles erledigt' : 'Leer', badge: !obj.canvas_only, ink: list || obj.canvas_only || shot ? null : obj.id,
         stat: () => (obj.canvas_only ? { big: 'Canvas', sub: 'öffnen', word: true } : { big: String(inside.length), sub: list ? 'offen' : inside.length === 1 ? 'Notiz' : 'Notizen' }) };
     }
     const i = obj;
     return { key, label: i.type === 'note' ? i.title || 'Notiz' : 'Todo', icon: i.type === 'note' ? ICON.notes : ICON.todos, accent: i.type === 'note' ? '#7FA08A' : '#4E7569', size: 's', act: `data-act="open" data-id="${i.id}"`,
       lines: () => (i.type === 'note' ? String(i.body || '').split('\n').filter(Boolean) : checks([i])), empty: i.type === 'note' ? 'Kein Text' : '',
-      img: i.type === 'note' ? sketchSrc(i) : '',   // Skizze aus dem Canvas
       stat: () => (i.type === 'note' ? { big: '', sub: String(i.body || '').split('\n').find(Boolean) || 'Kein Text' } : { big: '', sub: i.title || 'Ohne Titel' }) };
   });
   // Standardgröße: am Desktop teils größer (mehr Platz für Inhalt)
@@ -152,7 +148,7 @@ function body(t, size, today, d) {
   if (t.key === 'date') return dateBody(size, d);
   if (t.key === 'cal' && size === 'l' && isDesktop()) return calDayBody(today);   // Desktop groß: Tag als Zeitleiste
   const head = `<span class="mt-h"><span class="mt-ic">${t.icon}</span><span>${esc(t.label)}</span></span>`;
-  if (t.img) return `${head}<img class="mt-img" src="${esc(t.img)}" alt="">`;   // Notiz mit Skizze: das Bild füllt die Kachel
+  if (t.shot) return `<img class="mt-shot" src="${esc(t.shot)}" alt=""><span class="mt-shot-l"><span class="mt-ic">${t.icon}</span>${esc(t.label)}</span>`;
   if (size === 's') {
     const s = t.stat?.() || { big: '', sub: '' };
     // schmal (Handy): Name steht vor der Angabe unten statt neben dem Symbol
@@ -171,7 +167,8 @@ export function renderTiles(today, d) {
     // Notizen bzw. Notiz-Ordner: Knopf direkt in den Canvas
     const ink = !edit && t.ink != null ? `<button class="mt-ink" data-act="home-canvas" data-id="${esc(t.ink)}" aria-label="Canvas öffnen" title="Canvas">${ICON.ink}</button>` : '';
     const ac = t.accent ? ` style="--ac:${safeColor(t.accent, '#4E7569')}"` : '';
-    return `<div class="mt mt-${isPinTile(t.key) ? 'pin' : t.key} sz-${size} ${wide ? 'mt-day dash-day' : ''}"${ac} role="button" tabindex="0" aria-label="${esc(t.label)}" data-tile="${esc(t.key)}" data-cdrag="${esc(t.key)}" ${edit ? '' : t.act}>
+    const shot = t.shot && !(t.key === 'cal' && wide) ? 'has-shot' : '';
+    return `<div class="mt mt-${isPinTile(t.key) ? 'pin' : t.key} sz-${size} ${wide ? 'mt-day dash-day' : ''} ${shot}"${ac} role="button" tabindex="0" aria-label="${esc(t.label)}" data-tile="${esc(t.key)}" data-cdrag="${esc(t.key)}" ${edit ? '' : t.act}>
       ${body(t, size, today, d)}${ink}
       ${edit ? `<button class="mt-size" data-act="tile-size" data-id="${esc(t.key)}" aria-label="Größe ändern">${ICON[SIZES.find(([k]) => k === size)[2]]}</button>` : ''}</div>`;
   };

@@ -59,8 +59,9 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   unendliche Fläche (verschieben, zoomen 25–400 %, „Ursprungsansicht“), Werkzeugleiste unter der Kopfleiste (einfahrbar), Ordnerwahl über den Titel,
   Formen (als Striche), Textmarker (Strich mit `m`), Text (Element `x`), Bemaßung (Element `d`), Bilder mit Zuschnitt `cr` und Radierspuren `er`,
   Drehen über den Griff oben an der Auswahl (Striche/Formen/Bemaßung: Punkte gedreht; Bilder und Texte: Winkel `r` um die Mitte; gedrehte Bilder nicht zuschneiden),
-  Notiz-Skizze: im Notiz-Fenster „Skizze im Canvas“ → Bereich `fmt: 'note'` (500×300) mit `nid` auf der Startseite des Ordner-Canvas (`openSketch`, `sketchFrame`);
-  nach jedem Speichern wird der Rahmen als JPEG in `meta.sketch` der Notiz gelegt (`updateSketches`, still ohne Neuzeichnen; Anzeige nur über `sketchSrc` geprüft) – zu sehen in der Notiz (Knopf „Skizze im Canvas hinzufügen“ schon in der Ansicht), als kleines Bild in der Notizen-Liste, in der Home-Kachel der Notiz und als Bildreihe in der Kachel „Notizen“ (Mittel/Groß).
+  Homescreen-Ausschnitt: Menü „Bereich“ → „Homescreen-Ausschnitt“ legt einen Rahmen `fmt: 'home'` (750×500, einer je Canvas, nur Startseite) an und heftet den Ordner an;
+  nach jedem Speichern wird der Rahmen als JPEG in `ink_pages.home_img` gelegt (`updateHomeImg`), geladen in `state.homeImgs` (loadAll), geprüft mit `jpegSrc`;
+  die Ordner-Kachel zeigt dann nur das Bild (ganze Fläche, Name als Schild) und öffnet den Canvas. Geht auch bei reinen Canvas-Ordnern.
   Kopieren: Auswahl → „Kopieren“ (Leiste/Menü) legt eine Kopie versetzt daneben und merkt sie; langes Drücken/Rechtsklick auf freie Stelle → „Einfügen“ (auch in anderen Ordnern; ohne Titel und Bereiche).
   Termin-Feld (Element `c`, ink-cal.js: Verweis `ev` bzw. `xo` plus Kopie `tt`/`d`/`tm`, Größe `sz` s/m/l wie Kacheln, HTML-Ebene; ziehen = verschieben, antippen = Wochenansicht des Tages, Inhalt immer aktuell aus dem Kalender),
   Bereiche mit Name `n`, Hintergrund `bg` (lines/dots/blank), Farbe `fc`, Layout `ly` im Dudek-CI (ink-layout.js) mit Angaben `lf` (Titel, Projekt, Nr., Kontakt), Gliederung (Notizen zuerst, Titel unter ihrem Bereich, „Auf der Fläche zeigen“),

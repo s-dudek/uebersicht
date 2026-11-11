@@ -408,7 +408,7 @@ export function createBoard(opts) {
   // ---------- Bereiche (A4): gestrichelter Rahmen mit Reiter zum Verschieben ----------
   const frameList = () => items.filter((it) => it.t === 'f');
   const fmtName = (f) => FRAME_NAMES[f.fmt] || 'A4 hoch';
-  const frameName = (f, n) => f.n || f.lf?.t || `${fmtName(f)} · ${n}`;
+  const frameName = (f, n) => f.n || f.lf?.t || (f.fmt === 'home' ? FRAME_NAMES.home : `${fmtName(f)} · ${n}`);
 
   function renderFrames() {
     frameLayer.innerHTML = '';
@@ -1506,13 +1506,13 @@ export function createBoard(opts) {
       goTo(v.x, v.y, Math.min(v.z, 1));
     },
     // Bereiche für den Export: Name und Rechteck in Einheiten
-    frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, bg: f.bg || (f.ly ? 'blank' : 'grid'), ly: f.ly, lf: f.lf, nid: f.nid, box: bbox(f) })),
-    // Skizzen-Rahmen einer Notiz zeigen bzw. in der Mitte des sichtbaren Bereichs anlegen
-    sketchFrame(nid, name) {
-      const f = frameList().find((x) => x.nid === nid);
+    frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, bg: f.bg || (f.ly ? 'blank' : 'grid'), ly: f.ly, lf: f.lf, box: bbox(f) })),
+    // Homescreen-Ausschnitt zeigen bzw. in der Mitte des sichtbaren Bereichs anlegen (einer je Canvas)
+    homeFrame() {
+      const f = frameList().find((x) => x.fmt === 'home');
       if (!f) {
-        const [w, h] = FRAMES.note, snap = (v) => Math.round(v / GRID) * GRID;
-        commit([...items, { t: 'f', fmt: 'note', nid, n: String(name || 'Notiz').slice(0, 40), x: snap(view.x + sc.clientWidth / 2 / cur() - w / 2), y: snap(view.y + sc.clientHeight / 2 / cur() - h / 2) }]);
+        const [w, h] = FRAMES.home, snap = (v) => Math.round(v / GRID) * GRID;
+        commit([...items, { t: 'f', fmt: 'home', x: snap(view.x + sc.clientWidth / 2 / cur() - w / 2), y: snap(view.y + sc.clientHeight / 2 / cur() - h / 2) }]);
         redrawAll();
         renderOverlays();
         return;

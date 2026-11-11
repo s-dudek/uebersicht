@@ -15,6 +15,7 @@ import { calCardHtml, calColor, drawCalCard, nextCalSize, openCalOf, pickCalEven
 import { bellCardHtml, bellColor, drawBellCard, openBellOf } from './ink-remind.js';
 import { askReminder, createReminder } from './remind-page.js';
 import { openItem } from './items.js';
+import { isPinned, pinKey, togglePin } from './pins.js';
 import { dropMenu } from './menu.js';
 import { notesIn } from './notes.js';
 import { render } from './render.js';
@@ -268,29 +269,17 @@ async function flush(page) {
   page.pending = null;
   const err = await savePage(page.id, list, hh, ww);
   if (err) { page.pending ??= { list, hh, ww }; toast('Speichern fehlgeschlagen: ' + err.message, 4000); return; }
-  if (page === stack[0]) updateSketches(page);
+  if (page === stack[0]) updateHomeImg(page);
 }
 
-// Skizzen-Rahmen von Notizen (Startseite des Canvas): Bild für Notiz und Kachel aktualisieren, still ohne Neuzeichnen
-const SKETCH_W = 360;   // Breite des Bildes in Pixel
-async function updateSketches(page) {
-  for (const f of page.board.frames().filter((x) => x.nid)) {
-    const note = itemById(f.nid);
-    if (!note) continue;
-    const url = (await page.board.renderBox(f.box, SKETCH_W, 'blank')).toDataURL('image/jpeg', .75);
-    if (note.meta?.sketch === url) continue;
-    note.meta = { ...(note.meta || {}), sketch: url };
-    sb.from('items').update({ meta: note.meta }).eq('id', note.id).then(() => {});
-  }
-}
-
-// Notiz → Skizze im Canvas ihres Ordners: Rahmen zeigen bzw. anlegen (nach dem Laden der Seite)
-let sketchFor = null;
-export function openSketch(note) {
-  sketchFor = { nid: note.id, name: note.title };
-  const fid = note.category_id && catById(note.category_id) ? note.category_id : '';
-  Object.assign(state, { tab: 'notes', list: fid, noteMode: 'ink', keepList: true });
-  render();
+// Homescreen-Ausschnitt (Bereich fmt 'home' auf der Startseite des Canvas): Bild für die Kachel des Ordners speichern
+const HOME_W = 640;   // Breite des Bildes in Pixel
+async function updateHomeImg(page) {
+  const f = page.board.frames().find((x) => x.fmt === 'home');
+  const url = f ? (await page.board.renderBox(f.box, HOME_W, 'blank')).toDataURL('image/jpeg', .8) : null;   // Rahmen gelöscht: Bild weg
+  if ((state.homeImgs[cat ?? ''] || null) === url) return;
+  state.homeImgs[cat ?? ''] = url;
+  sb.from('ink_pages').update({ home_img: url }).eq('id', page.id).then(() => {});
 }
 
 const flushAll = () => stack.forEach(flush);
@@ -345,10 +334,20 @@ picker.addEventListener('change', async () => {
 // Bereich anlegen: leer (A4 hoch/quer) oder gleich mit einem Layout im Dudek-CI
 function openFrameChoice(btn) {
   const fmt = (f, ly, label) => `<button class="cm-i" data-f="${f}" data-ly="${ly}">${ICON.frame}<span>${label}</span></button>`;
-  dropMenu(btn, `${fmt('a4p', '', 'A4 hoch')}${fmt('a4l', '', 'A4 quer')}<hr>
+  dropMenu(btn, `${cat ? `<button class="cm-i" data-home>${ICON.home}<span>Homescreen-Ausschnitt</span></button><hr>` : ''}
+    ${fmt('a4p', '', 'A4 hoch')}${fmt('a4l', '', 'A4 quer')}<hr>
     <div class="cm-h">Mit Dudek-Layout</div>
     ${FRAME_LAYOUTS.filter(([k]) => k).map(([k, l]) => `${fmt('a4p', k, `${l.replace('Dudek · ', '')} · A4 hoch`)}${fmt('a4l', k, `${l.replace('Dudek · ', '')} · A4 quer`)}`).join('')}`,
-  (b) => top()?.board.addFrame(b.dataset.f, b.dataset.ly));
+  (b) => ('home' in b.dataset ? homeFrame() : top()?.board.addFrame(b.dataset.f, b.dataset.ly)));
+}
+
+// Homescreen-Ausschnitt: Rahmen auf der Startseite des Canvas; sein Inhalt füllt die Kachel des Ordners (wird bei Bedarf angeheftet)
+function homeFrame() {
+  if (stack.length > 1) closePage(stack.pop());   // nur auf der Startseite des Canvas
+  top()?.board.homeFrame();
+  if (!isPinned(pinKey.cat(cat))) togglePin(pinKey.cat(cat));
+  applyUi();
+  render();
 }
 
 // Formen: Linie, Pfeil, Rechteck, Ellipse, Dreieck
@@ -673,7 +672,6 @@ export function mountInk() {
   page.board.attach();
   page.board.refreshNotes();   // Notizen können sich inzwischen geändert haben (auch durch die andere Person)
   if (focusOn && stack.length === 1) { page.board.showMatch(focusOn); focusOn = null; }
-  if (sketchFor && stack.length === 1) { page.board.sketchFrame(sketchFor.nid, sketchFor.name); sketchFor = null; }
   updateTools();
 }
 

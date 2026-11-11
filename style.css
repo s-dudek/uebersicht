@@ -231,18 +231,13 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 .mt-prog > span { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--ac) 14%, var(--white)); overflow: hidden; }
 .mt-prog i { display: block; height: 100%; border-radius: 3px; background: var(--ac); }
 .mt-prog small, .mt-foot { font-size: 12.5px; font-weight: 500; color: var(--grey); }
-/* Notiz mit Skizze (Canvas-Rahmen): Bild füllt den Rest der Kachel */
-.mt-img { flex: 1; width: 100%; min-height: 0; object-fit: contain; border-radius: 12px; background: var(--white); box-shadow: inset 0 0 0 1px var(--soft); }
-/* Kachel „Notizen“: neueste Skizzen als Bildreihe; Notizen-Liste: kleines Vorschaubild */
-.mt-pics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; width: 100%; }
-.mt-pics img { width: 100%; aspect-ratio: 5 / 3; object-fit: contain; border-radius: 10px; background: var(--white); box-shadow: inset 0 0 0 1px var(--soft); cursor: pointer; }
-.tsketch { flex: none; width: 56px; height: 34px; object-fit: contain; border-radius: 6px; background: var(--white); box-shadow: inset 0 0 0 1px var(--soft); cursor: pointer; }
-/* Skizze in der Notiz */
-.nv-sketch { display: block; width: 100%; margin-top: 14px; padding: 0; border-radius: 16px; overflow: hidden; box-shadow: 0 0 0 1px var(--soft), var(--tile-shadow); background: var(--white); }
-.nv-sketch img { display: block; width: 100%; height: auto; }
-.nv-sketch-btn { display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 10px; padding: 10px 12px; border-radius: 14px; background: var(--pale); color: var(--ink); font-size: 15px; font-weight: 600; text-align: left; }
-.nv-sketch-btn svg { width: 22px; height: 22px; flex: none; }
-.nv-sketch-btn img { width: 96px; height: 58px; object-fit: contain; border-radius: 8px; background: var(--white); flex: none; }
+/* Homescreen-Ausschnitt eines Canvas: das Bild ist die ganze Kachel, Name als Schild unten links */
+.mt.has-shot { padding: 0; background: var(--white); }
+.mt-shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.mt-shot-l { position: absolute; left: 10px; bottom: 10px; display: flex; align-items: center; gap: 7px; max-width: calc(100% - 20px); padding: 4px 10px 4px 4px; border-radius: 999px;
+  background: rgba(255, 255, 255, .9); box-shadow: 0 2px 10px rgba(12, 55, 65, .15); font-size: 13px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.mt-shot-l .mt-ic { width: 24px; height: 24px; border-radius: 50%; }
+.mt-shot-l .mt-ic svg { width: 14px; height: 14px; }
 .mt-stat em { display: none; font-style: normal; color: var(--ink); font-weight: 600; }
 /* Handy: kleine Kacheln kompakt (Name unten bei der Angabe), mittlere ohne Grafik unten (zu wenig Höhe) */
 @media (max-width: 599px) {
