@@ -212,10 +212,6 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 .mt { --ac: #4E7569; position: relative; isolation: isolate; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 6px; min-width: 0; padding: 14px; border-radius: 22px; text-align: left; overflow: hidden; cursor: pointer;
   background: linear-gradient(155deg, color-mix(in srgb, var(--ac) 9%, var(--white)) 0%, var(--glass) 55%); border: 1px solid var(--glass-line);
   box-shadow: var(--tile-shadow), inset 0 1px 0 rgba(255, 255, 255, .8); color: var(--ink); font-weight: 600; font-size: 15px; }
-/* großes, blasses Symbol hinter dem Inhalt (füllt die Fläche) */
-.mt-wm { position: absolute; z-index: -1; right: -16px; bottom: -22px; width: 118px; height: 118px; color: var(--ac); opacity: .08; pointer-events: none; }
-.mt .mt-wm svg { width: 100%; height: 100%; }
-.mt.sz-s .mt-wm { width: 92px; height: 92px; right: -14px; bottom: -16px; }
 /* Klein: große Kennzahl unten */
 .mt-stat { display: flex; flex-direction: column; gap: 1px; margin-top: auto; min-width: 0; max-width: 100%; }
 .mt-stat b { font-family: var(--font-head); font-size: 34px; line-height: 1; color: var(--ink); }
@@ -246,6 +242,11 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
   .mt-stat em { display: inline; }
   .mt.sz-s .mt-stat small > span { display: none; }
   .mt.sz-m .mt-fill, .mt.sz-m .mt-week, .mt.sz-m .mt-prog, .mt.sz-m .mt-foot { display: none; }
+  .mt-date.sz-l { padding: 12px 14px; }
+  .mt-date.sz-l .md-day { font-size: 60px; }
+  .mt-date.sz-l .md-ring { width: 40px; height: 40px; }
+  .mt-date.sz-l .md-year small { display: none; }
+  .mt-date.sz-l .mt-dweek { padding-top: 6px; font-size: 14px; }
 }
 .mt.sz-s { grid-column: span 2; }
 .mt.sz-m { grid-column: span 4; }
@@ -271,22 +272,40 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 .mt.sz-l .mt-list { margin-top: 6px; }
 .mt.sz-s:active { transform: scale(.97); }   /* nur kleine: bei großen rutschten Knöpfe darin unter dem Finger weg */
 /* Datum: dunkel mit großem Tag */
-.mt-date { justify-content: space-between; gap: 0; background: var(--ink); color: var(--green-l); border: 0; box-shadow: 0 10px 28px rgba(12,55,65,.22); }
-.mt-date.sz-l { justify-content: space-between; }
-.mt-date > small { font-size: 17px; font-weight: 600; letter-spacing: .02em; }
-.mt-date > b { font-family: var(--font-head); font-size: 78px; line-height: .9; color: var(--white); }
-.mt-date > span { font-size: 16px; font-weight: 500; }
+.mt-date { justify-content: space-between; gap: 2px; border: 0; color: var(--green-l);
+  background: radial-gradient(120% 90% at 100% 0%, rgba(168, 190, 167, .26), transparent 55%), radial-gradient(90% 70% at 0% 100%, rgba(62, 124, 168, .22), transparent 60%), linear-gradient(160deg, #124b57, var(--ink) 65%);
+  box-shadow: 0 12px 30px rgba(12, 55, 65, .28), inset 0 1px 0 rgba(255, 255, 255, .12), inset 0 0 0 1px rgba(168, 190, 167, .14); }
+.md-top { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 8px; }
+.md-wd { font-size: 17px; font-weight: 600; letter-spacing: .02em; text-transform: capitalize; }
+.md-day { font-family: var(--font-head); font-size: 78px; line-height: .88; color: var(--white); letter-spacing: -.02em; text-shadow: 0 6px 22px rgba(0, 0, 0, .25); }
+.md-month { font-size: 16px; font-weight: 500; }
+/* Ring: Fortschritt des Jahres, innen die Kalenderwoche */
+.md-ring { position: relative; flex: none; width: 46px; height: 46px; display: grid; place-items: center; align-content: center; line-height: 1; }
+.md-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.md-ring circle { fill: none; stroke: rgba(168, 190, 167, .22); stroke-width: 3; }
+.md-ring circle.on { stroke: var(--green-l); stroke-linecap: round; }
+.md-ring em { font-style: normal; font-size: 8.5px; font-weight: 700; letter-spacing: .06em; opacity: .8; }
+.md-ring b { font-size: 15px; color: var(--white); }
+/* Groß: Tag im Jahr */
+.md-year { display: flex; flex-direction: column; gap: 5px; width: 100%; }
+.md-year > span { height: 4px; border-radius: 2px; background: rgba(168, 190, 167, .2); overflow: hidden; }
+.md-year i { display: block; height: 100%; border-radius: 2px; background: linear-gradient(90deg, rgba(168, 190, 167, .6), var(--green-l)); }
+.md-year small { font-size: 12px; font-weight: 500; opacity: .85; }
 /* Datum groß: laufende Woche */
-.mt-date > .mt-dweek { display: flex; align-items: flex-end; justify-content: space-between; width: 100%; padding-top: 10px; border-top: 1px solid rgba(168, 190, 167, .25); font-size: 15px; font-weight: 600; color: var(--white); }
-.mt-dweek em { font-style: normal; font-size: 12px; color: var(--green-l); align-self: center; }
-.mt-dweek > span { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 24px; padding: 3px 0; border-radius: 10px; }
+.mt-date > .mt-dweek { display: flex; align-items: flex-end; justify-content: space-between; width: 100%; padding-top: 8px; border-top: 1px solid rgba(168, 190, 167, .22); font-size: 15px; font-weight: 600; color: var(--white); }
+.mt-dweek > span { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 26px; padding: 3px 0; border-radius: 10px; }
 .mt-dweek small { font-size: 10px; color: var(--green-l); opacity: .8; }
-.mt-dweek .now { background: var(--green-l); color: var(--ink); }
+.mt-dweek .now { background: var(--green-l); color: var(--ink); box-shadow: 0 4px 12px rgba(0, 0, 0, .25); }
 .mt-dweek .now small { color: var(--ink); opacity: 1; }
-.mt-date.sz-s > small { font-size: 14px; }
-.mt-date.sz-s > b { font-size: 44px; }
-.mt-date.sz-m { flex-direction: row; align-items: center; justify-content: flex-start; gap: 14px; }
-.mt-date.sz-m > b { font-size: 60px; order: -1; }
+.mt-date.sz-s .md-wd { font-size: 14px; }
+.mt-date.sz-s .md-day { font-size: 44px; }
+.mt-date.sz-s .md-ring { width: 38px; height: 38px; }
+.mt-date.sz-s .md-ring b { font-size: 13px; }
+/* Mittel (breit, niedrig): Tag links, rechts Wochentag, Monat und Ring */
+.mt-date.sz-m { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto 1fr; column-gap: 16px; align-items: center; }
+.mt-date.sz-m .md-day { grid-row: 1 / 3; font-size: 64px; }
+.mt-date.sz-m .md-top { grid-column: 2; }
+.mt-date.sz-m .md-month { grid-column: 2; align-self: start; }
 /* Bearbeiten: Kacheln wackeln, Knopf für die Größe in der Ecke */
 .mtiles.editing .mt { animation: jiggle .28s ease-in-out infinite alternate; cursor: grab; }
 .mtiles.editing .mt:nth-child(even) { animation-delay: -.14s; }
@@ -320,8 +339,8 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 }
 @media (min-width: 600px) {
   .mtiles { grid-auto-rows: 140px; gap: 14px; }
-  .mt-date.sz-l > b { font-size: 110px; }
-  .mt-date.sz-m > b { font-size: 76px; }
+  .mt-date.sz-l .md-day { font-size: 112px; }
+  .mt-date.sz-m .md-day { font-size: 78px; }
 }
 
 .dash-day[data-act] { cursor: pointer; }

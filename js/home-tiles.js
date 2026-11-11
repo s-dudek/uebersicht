@@ -117,16 +117,20 @@ const line = (x) => (typeof x === 'object'
   ? `<li class="mt-todo"><button class="tcheck" data-act="toggle" data-id="${x.id}" aria-label="Erledigt"></button><span>${esc(x.text)}</span></li>`
   : `<li>${esc(x)}</li>`);
 
-// Kalender: Datum; am Desktop Mittel zusätzlich die Termine des Tages, Groß der Tag als Zeitleiste
-// Datum: Wochentag und Tag groß (dunkel)
-// Groß zusätzlich die laufende Woche (Kalenderwoche, Tage mit heute hervorgehoben)
+// Datum (dunkel): Wochentag, Tag groß, Monat; Ring mit Kalenderwoche zeigt, wie weit das Jahr ist;
+// Groß zusätzlich Tag im Jahr als Balken und die laufende Woche
 function dateBody(size, d) {
-  if (size === 's' && !isDesktop()) return `<small>${d.toLocaleDateString('de-AT', { weekday: 'short' })}</small><b>${d.getDate()}</b>`;
-  const week = size === 'l' && !isDesktop() ? `<span class="mt-dweek"><em>KW ${isoWeek(ymd(d))}</em>${Array.from({ length: 7 }, (_, k) => {
+  if (size === 's' && !isDesktop()) return `<small class="md-wd">${d.toLocaleDateString('de-AT', { weekday: 'short' })}</small><b class="md-day">${d.getDate()}</b>`;
+  const y = d.getFullYear(), days = (new Date(y + 1, 0, 1) - new Date(y, 0, 1)) / 864e5;
+  const nth = Math.floor((new Date(y, d.getMonth(), d.getDate()) - new Date(y, 0, 1)) / 864e5) + 1, part = nth / days;
+  const ring = `<span class="md-ring" title="${nth}. Tag des Jahres"><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15.5"/><circle class="on" cx="18" cy="18" r="15.5" pathLength="100" stroke-dasharray="${(part * 100).toFixed(1)} 100"/></svg><em>KW</em><b>${isoWeek(ymd(d))}</b></span>`;
+  const year = size === 'l' ? `<span class="md-year"><span><i style="width:${(part * 100).toFixed(1)}%"></i></span><small>Tag ${nth} von ${days} · noch ${days - nth} Tage</small></span>` : '';
+  const week = size === 'l' && !isDesktop() ? `<span class="mt-dweek">${Array.from({ length: 7 }, (_, k) => {
     const x = addDays(mondayOf(d), k);
     return `<span class="${x === ymd(d) ? 'now' : ''}"><small>${['M', 'D', 'M', 'D', 'F', 'S', 'S'][k]}</small>${+x.slice(8)}</span>`;
   }).join('')}</span>` : '';
-  return `<small>${d.toLocaleDateString('de-AT', { weekday: 'long' })}</small><b>${d.getDate()}</b><span>${d.toLocaleDateString('de-AT', { month: 'long', year: 'numeric' })}</span>${week}`;
+  return `<span class="md-top"><small class="md-wd">${d.toLocaleDateString('de-AT', { weekday: 'long' })}</small>${ring}</span>
+    <b class="md-day">${d.getDate()}</b><span class="md-month">${d.toLocaleDateString('de-AT', { month: 'long', year: 'numeric' })}</span>${year}${week}`;
 }
 
 // Termine des Tages als Zeilen (nur die für die Startseite eingeschalteten Abschnitte)
@@ -137,21 +141,19 @@ function calRows(today) {
 
 // Inhalt je Kachel und Größe: klein nur Symbol und Name, größer mit Vorschau
 // Klein: Symbol, Name und große Kennzahl; Mittel/Groß: Liste und unten eine Grafik (Wochenleiste, Fortschritt …);
-// dahinter groß und blass das Symbol, damit keine leere Fläche bleibt
 function body(t, size, today, d) {
   if (t.key === 'date') return dateBody(size, d);
   if (t.key === 'cal' && size === 'l' && isDesktop()) return calDayBody(today);   // Desktop groß: Tag als Zeitleiste
   const head = `<span class="mt-h"><span class="mt-ic">${t.icon}</span><span>${esc(t.label)}</span></span>`;
-  const mark = `<span class="mt-wm" aria-hidden="true">${t.icon}</span>`;
   if (size === 's') {
     const s = t.stat?.() || { big: '', sub: '' };
     // schmal (Handy): Name steht vor der Angabe unten statt neben dem Symbol
-    return `${mark}${head}<span class="mt-stat ${s.word ? 'word' : ''}">${s.big ? `<b>${esc(s.big)}</b>` : ''}<small><em>${esc(t.label)}</em><span>${esc(s.sub)}</span></small></span>`;
+    return `${head}<span class="mt-stat ${s.word ? 'word' : ''}">${s.big ? `<b>${esc(s.big)}</b>` : ''}<small><em>${esc(t.label)}</em><span>${esc(s.sub)}</span></small></span>`;
   }
   const lines = t.lines(), n = previewRows(size);
   const badge = t.badge && lines.length ? `<i>${lines.length}</i>` : '';
   const preview = n ? `<ul class="mt-list">${(lines.length ? lines : [t.empty]).slice(0, n).map(line).join('')}</ul>` : '';
-  return `${mark}${badge}${head}${preview}${t.foot ? `<span class="mt-fill"></span>${t.foot(size)}` : ''}`;
+  return `${badge}${head}${preview}${t.foot ? `<span class="mt-fill"></span>${t.foot(size)}` : ''}`;
 }
 
 export function renderTiles(today, d) {
