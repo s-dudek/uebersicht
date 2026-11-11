@@ -40,6 +40,11 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   Abhaken: Zeile bleibt kurz markiert (`.just-done`, `toggleTodo` in data.js), nochmal tippen nimmt zurück.
 - Reine Canvas-Ordner (`categories.canvas_only`, `isCanvasOnly`/`inkMode` in core.js): öffnen direkt den Canvas, ohne Notizen-Liste und ohne Notizen-Bereich;
   wählbar beim Anlegen („Art“) und im Ordner-Fenster.
+- Erinnerungen (`remind-page.js`, Bereich `reminders` in NAV, Kachel „Erinnerungen“): alle Einträge mit `remind_at`; eigene als Typ `reminder`
+  (Titel, Zeit, `meta.fid` = Canvas-Ordner); oben schnell stellen (Schnellwahl bzw. Zeit wählen, Enter = in 1 Std.).
+  Canvas: Auswahl → „Erinnern“ legt eine Erinnerung an und setzt ein Glocken-Feld (Element `b`: `rem`, Kopie `tt`, Größe `sz`; ink-remind.js) daneben;
+  Feld antippen = Erinnerung im Bereich Erinnerungen. Termin- und Glocken-Feld merken den Rückweg (`state.backTo`, `goFromCanvas` in nav.js):
+  Pfeil „Zurück zum Canvas“ in der Kopfleiste von Kalender/Erinnerungen (`backToCanvas` in ink.js zeigt das Feld wieder).
 - Geteilte Einträge anderer: „Für mich entfernen“ (Menü, Fenster) blendet nur bei mir aus (cat_order 'hidden'), zurück im Papierkorb.
 - Papierkorb (`trash.js`): Löschen setzt nur `deleted_at` (items, categories); `loadAll` trennt in `state.trash`; nach 30 Tagen endgültig (beim Laden),
   Kategorie endgültig löschen nimmt Canvas und Bilder mit, Einträge bleiben ohne Kategorie. Geöffnet über Seitenleiste bzw. Einstellungen.

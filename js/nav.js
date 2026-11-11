@@ -12,8 +12,18 @@ export const NAV = [
   { key: 'meals', label: 'Gerichte', icon: 'pot' },
   { key: 'calendar', label: 'Kalender', icon: 'calendar' },
   { key: 'training', label: 'Training', icon: 'dumbbell' },
+  { key: 'reminders', label: 'Erinnerungen', icon: 'bell' },
   { key: 'quick', label: 'Neue Notiz', icon: 'notePlus' },
 ];
+
+// aus dem Canvas in einen Bereich wechseln; back = Rückweg ({ fid, match }) für den Pfeil in der Kopfleiste
+export function goFromCanvas(k, back) {
+  closeSheet();
+  Object.assign(state, { tab: k, backTo: back });
+  render();
+  document.querySelector('.main')?.scrollTo({ top: 0 });
+  if (k === 'calendar') scrollCal();
+}
 
 // transition: Funktion, die den Seitenwechsel animiert ausführt (Steuerknopf), sonst sofort
 export function navigate(k, transition = (fn) => fn()) {
@@ -22,6 +32,7 @@ export function navigate(k, transition = (fn) => fn()) {
   if (w.soon) return toast(`${w.label} kommt als Nächstes.`);
   if (k === 'quick') return openQuickNote();
   closeSheet();
+  state.backTo = null;   // eigener Wechsel: kein Rückweg in den Canvas mehr
   // nochmal derselbe Bereich: aus einer geöffneten Liste zurück zur Übersicht
   if (state.tab === k && (k === 'todos' || k === 'notes') && state.list !== null) { state.list = null; return render(); }
   if (state.tab === k) return;

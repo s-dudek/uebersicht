@@ -880,6 +880,25 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .ig.on { background: var(--ink); color: var(--green-l); }
 .remind-quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .remind-quick .chip { padding: 5px 12px; }
+/* Bereich Erinnerungen (remind-page.js): oben schnell stellen, darunter alle Erinnerungen */
+.main > .rm-quick, .main > .rm-list { max-width: 760px; margin: 0 auto 14px; }
+.rm-quick { padding: 14px; }
+.rm-form { display: flex; align-items: center; gap: 10px; padding: 4px 4px 10px; border-bottom: 1px solid var(--soft); }
+.rm-form input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; font-size: 17px; font-weight: 600; color: var(--ink); outline: none; }
+.rm-ic { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 11px; background: color-mix(in srgb, #D9873E 15%, var(--white)); color: #D9873E; }
+.rm-ic svg { width: 18px; height: 18px; }
+.rm-pick { position: relative; padding: 2px 4px 2px 10px; }
+.rm-pick input { border: 0; background: none; font: inherit; font-size: 13px; color: var(--ink); max-width: 190px; }
+.rm-list { padding: 6px; }
+.rm-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px; border-radius: 14px; text-align: left; }
+.rm-row + .rm-row { border-top: 1px solid var(--soft); border-radius: 0 0 14px 14px; }
+.rm-row:hover { background: var(--pale); }
+.rm-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.rm-t b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rm-t small { font-size: 12.5px; color: var(--grey); }
+.rm-at { flex: none; font-size: 13px; font-weight: 700; color: #B86A26; }
+.rm-row.done .rm-at, .rm-row.done b { color: var(--grey); }
+.rm-h { padding: 8px 10px 4px; font-size: 13px; font-weight: 700; color: var(--mid); }
 .rbanner { position: fixed; z-index: 95; left: 50%; top: calc(var(--safe-top) + 12px); translate: -50% 0; width: min(440px, calc(100% - 24px));
   display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px; border-radius: 20px; background: var(--white);
   box-shadow: 0 0 0 1.5px var(--ink), 0 16px 34px rgba(12,55,65,.28); animation: rbIn .35s cubic-bezier(.2,.9,.3,1.2); }
@@ -1277,6 +1296,9 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .icp-r i { flex: none; width: 4px; height: 22px; border-radius: 2px; }
 .icp-r span { flex: none; width: 70px; font-size: 13px; color: var(--grey); }
 .icp-r b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+/* Erinnerungs-Feld (b): Glocke in Bernstein */
+.ink-card-b .icl-h b { color: var(--cc); }
+.ink-card-b.sz-s .icl-t { font-size: 1.05em; }
 .icl-w { color: var(--grey); font-size: .9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ink-notes { position: absolute; padding: .9em 1em 1em; border-radius: .9em; background: rgba(255, 255, 255, .96); box-shadow: 0 0 0 1px rgba(12, 55, 65, .08), 0 .4em 1.4em rgba(12, 55, 65, .06); cursor: default; }
 .ink-ntab { position: absolute; left: 0; bottom: 100%; margin-bottom: .25em; padding: .15em .6em; border-radius: .4em; font-size: .75em; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;

@@ -81,6 +81,7 @@ export function serialize(items, h, w) {
     items: items.map((it) => {
       const g = it.g ? { g: it.g } : {};
       if (it.t === 'n') return { t: 'n', x: it.x, y: it.y };
+      if (it.t === 'b') return { t: 'b', x: it.x, y: it.y, sz: it.sz, rem: it.rem, tt: it.tt };   // Erinnerungs-Feld
       if (it.t === 'c') {   // Termin-Feld: Verweis und Kopie für unterwegs
         const c = { t: 'c', x: it.x, y: it.y, sz: it.sz, d: it.d, tt: it.tt };
         for (const k of ['ev', 'xo', 'tm']) if (it[k]) c[k] = it[k];
@@ -140,6 +141,9 @@ export function deserialize(data) {
         if (Object.keys(lf).length) out.lf = lf;
       }
     } else if (it?.t === 'x') out = textIn(it);   // Text
+    else if (it?.t === 'b' && UUID.test(it.rem || '')) {   // Erinnerungs-Feld
+      out = { t: 'b', x: num(it.x, -1e6, 1e6, 0), y: num(it.y, -1e6, 1e6, 0), sz: ['s', 'm', 'l'].includes(it.sz) ? it.sz : 's', rem: it.rem, tt: typeof it.tt === 'string' ? it.tt.slice(0, 200) : '' };
+    }
     else if (it?.t === 'c' && DAY.test(it.d || '') && (UUID.test(it.ev || '') || EXT_OCC.test(it.xo || ''))) {   // Termin-Feld
       out = { t: 'c', x: num(it.x, -1e6, 1e6, 0), y: num(it.y, -1e6, 1e6, 0), sz: ['s', 'm', 'l'].includes(it.sz) ? it.sz : 'm', d: it.d,
         tt: typeof it.tt === 'string' ? it.tt.slice(0, 200) : '', ...(it.ev ? { ev: it.ev } : { xo: it.xo }), ...(TIME.test(it.tm || '') ? { tm: it.tm } : {}) };

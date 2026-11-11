@@ -11,6 +11,7 @@ import { ICON, LOGO_MARK, LOGO_WORD } from './icons.js';
 import { renderMeals } from './meals.js';
 import { renderTraining } from './training.js';
 import { NAV } from './nav.js';
+import { remindCount, renderReminders } from './remind-page.js';
 import { selectBar, selecting } from './note-select.js';
 import { notesIn, renderNotes } from './notes.js';
 import { splashReady } from './splash.js';
@@ -19,7 +20,7 @@ import { renderTodos, todosIn } from './todos.js';
 // Dudek-Zeichen als Wasserzeichen hinter allem
 const WATERMARK = `<div class="watermark" aria-hidden="true">${LOGO_MARK}</div>`;
 
-const PAGES = { home: renderHome, todos: renderTodos, notes: renderNotes, meals: renderMeals, training: renderTraining, calendar: renderCalendar };
+const PAGES = { home: renderHome, todos: renderTodos, notes: renderNotes, meals: renderMeals, training: renderTraining, calendar: renderCalendar, reminders: renderReminders };
 
 export function render() {
   if (!state.me || !state.loaded) return;
@@ -55,8 +56,8 @@ export function render() {
     : `<div class="app">
         ${WATERMARK}
         ${home ? homeBar() : pageHead(tab, false)}
-        <main class="main ${home ? 'is-home' : inkOn ? '' : 'has-dock'} ${ink}">${content}</main>
-        ${home || inkOn ? '' : `<nav class="dock" aria-label="Aktionen">${actionsFor(tab)}</nav>`}
+        <main class="main ${home ? 'is-home' : inkOn || !actionsFor(tab) ? '' : 'has-dock'} ${ink}">${content}</main>
+        ${home || inkOn || !actionsFor(tab) ? '' : `<nav class="dock" aria-label="Aktionen">${actionsFor(tab)}</nav>`}
       </div>`;
   ctl.show(!desk && !home);   // Startseite hat die Bereiche als Kacheln, sonst Steuerknopf unten rechts
   if (inkOn) mountInk();
@@ -125,11 +126,12 @@ function actionsFor(tab) {
 }
 
 // ---------- Kopfleiste (hängt am oberen Rand) ----------
-const TITLES = { todos: 'Todos', notes: 'Notizen', meals: 'Gerichte', training: 'Training', calendar: 'Kalender' };
+const TITLES = { todos: 'Todos', notes: 'Notizen', meals: 'Gerichte', training: 'Training', calendar: 'Kalender', reminders: 'Erinnerungen' };
 
 function pageCount(tab) {
   if (tab === 'todos') return state.items.filter((i) => i.type === 'todo' && !i.done).length;
   if (tab === 'notes') return state.items.filter((i) => i.type === 'note').length;
+  if (tab === 'reminders') return remindCount();
   if (tab === 'meals') return state.items.filter((i) => i.type === 'meal' && i.due_date >= state.weekStart && i.due_date <= addDays(state.weekStart, 6)).length;
   if (tab === 'training') return state.items.filter((i) => i.type === 'training' && i.due_date >= state.weekStart && i.due_date <= addDays(state.weekStart, 6)).length;
   return 0;
@@ -165,5 +167,8 @@ function pageHead(tab, desk) {
   } else {
     left = `<b>${TITLES[tab]}</b>${cnt(pageCount(tab))}`;
   }
-  return `<header class="pagehead ${isInkView() ? 'is-ink' : ''}"><div class="ph-in ${tab === 'calendar' ? 'wide' : ''}">${left}${tools}</div></header>`;
+  // aus dem Canvas gekommen (Termin- oder Erinnerungs-Feld): Pfeil zurück dorthin
+  const back = state.backTo && (tab === 'calendar' || tab === 'reminders')
+    ? `<button class="ph-back ph-canvas" data-act="back-canvas" aria-label="Zurück zum Canvas" title="Zurück zum Canvas">${ICON.chevL}</button>` : '';
+  return `<header class="pagehead ${isInkView() ? 'is-ink' : ''}"><div class="ph-in ${tab === 'calendar' ? 'wide' : ''}">${back}${left}${tools}</div></header>`;
 }

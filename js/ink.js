@@ -2,7 +2,7 @@
 // (beliebig tief). Auf der Startseite steht der Notizen-Bereich mit den Notizen des Ordners; jede Notiz hat eine
 // Unterseite mit ihrer Beschreibung. Bereiche (A4) lassen sich speichern (PDF, PNG, JPEG).
 import { $app, askConfirm, catById, esc, isCanvasOnly, itemById, safeColor, state, store, toast } from './core.js';
-import { createNote, deleteItem } from './data.js';
+import { createNote, deleteItem, trashItems } from './data.js';
 import { ICON } from './icons.js';
 import { createBoard } from './ink-board.js';
 import { FONTS, GRID, NOTES_W, SHAPES, union, WEIGHTS } from './ink-draw.js';
@@ -12,6 +12,8 @@ import { clampSize, cleanText, KINDS, openPenPanel, PALETTE } from './ink-pen.js
 import { deletePageTree, deserialize, loadChild, loadRoot, removeImages, savePage, serialize, titleIn, uploadImage } from './ink-store.js';
 import { openTree, titleSvg } from './ink-tree.js';
 import { calCardHtml, calColor, drawCalCard, nextCalSize, openCalOf, pickCalEvent } from './ink-cal.js';
+import { bellCardHtml, bellColor, drawBellCard, openBellOf } from './ink-remind.js';
+import { askReminder, createReminder } from './remind-page.js';
 import { openItem } from './items.js';
 import { dropMenu } from './menu.js';
 import { notesIn } from './notes.js';
@@ -92,8 +94,14 @@ function openPage(row, note = null) {
     onExport: (n) => openExport([n]),
     onEditLayout: editLayoutSheet,
     // Termin-Felder (ink-cal.js)
-    calCard: calCardHtml, calColor, nextCalSize, drawCal: drawCalCard,
-    onCal: (it) => { flushAll(); openCalOf(it); },
+    // Felder: Termin (c, ink-cal.js) und Erinnerung (b, ink-remind.js)
+    cardHtml: (it) => (it.t === 'b' ? bellCardHtml(it) : calCardHtml(it)),
+    cardColor: (it) => (it.t === 'b' ? bellColor(it) : calColor(it)),
+    drawCard: (ctx, it) => (it.t === 'b' ? drawBellCard(ctx, it) : drawCalCard(ctx, it)),
+    nextSize: nextCalSize,
+    onCard: (it) => { flushAll(); if (it.t === 'b') openBellOf(it); else openCalOf(it); },
+    onCardDelete: (it) => { if (it.t === 'b' && itemById(it.rem)) trashItems([it.rem]); },   // Feld weg = Erinnerung in den Papierkorb
+    onRemind: (box, text) => remindSelection(page, box, text),
   });
   page.board.imagePaths().forEach((p) => page.atOpen.add(p));
   stack.push(page);
@@ -352,7 +360,7 @@ const remember = (c) => { ui.recent = [c, ...ui.recent.filter((x) => x !== c)].s
 // ---------- Eigenschaften-Leiste unten (wie in Illustrator): zeigt, was zum Werkzeug bzw. zur Auswahl passt ----------
 const TOOL_LABEL = { pen: 'Stift', marker: 'Textmarker', text: 'Text', shape: 'Form', dim: 'Bemaßung', eraser: 'Radierer', lasso: 'Auswahl' };
 const ACTION = { title: ['chevR', 'Als Titel'], edit: ['pen', 'Bearbeiten'], crop: ['crop', 'Zuschneiden'], unerase: ['undo', 'Radiertes zurück'],
-  group: ['stack', 'Gruppieren'], ungroup: ['stack', 'Aufheben'], delete: ['trash', 'Löschen'] };
+  group: ['stack', 'Gruppieren'], ungroup: ['stack', 'Aufheben'], remind: ['bell', 'Erinnern'], delete: ['trash', 'Löschen'] };
 const ERASERS = [[5, 'Fein'], [9, 'Mittel'], [18, 'Breit']];
 
 // was die Leiste gerade einstellt: { kind, val } aus der Auswahl oder dem Werkzeug (null: nichts mit Farbe)
@@ -445,7 +453,7 @@ export async function inkAction(act, id, btn) {
     case 'ink-undo': b?.undo(); return;
     case 'ink-redo': b?.redo(); return;
     case 'ink-img': picker.click(); return;
-    case 'ink-cal': pickCalEvent().then((c) => { if (c) top()?.board.addCal(c); }); return;
+    case 'ink-cal': pickCalEvent().then((c) => { if (c) top()?.board.addCard(c); }); return;
     case 'ink-frame': openFrameChoice(btn); return;
     case 'ink-fold': toggleBar(); return;
     case 'ink-export': flushAll(); openExport(); return;
@@ -641,7 +649,27 @@ export function mountInk() {
   slot.prepend(page.board.el);
   page.board.attach();
   page.board.refreshNotes();   // Notizen können sich inzwischen geändert haben (auch durch die andere Person)
+  if (focusOn && stack.length === 1) { page.board.showMatch(focusOn); focusOn = null; }
   updateTools();
+}
+
+// ---------- Erinnerungen an Markiertes; Rückweg aus Kalender und Erinnerungen ----------
+// Auswahl erinnern: Text vorschlagen, Zeit wählen, Glocken-Feld rechts neben die Auswahl setzen
+async function remindSelection(page, box, text) {
+  const r = await askReminder(text);
+  if (!r) return;
+  const it = await createReminder({ ...r, fid: cat ?? '', page: page.id });
+  if (it) page.board.addCard({ t: 'b', sz: 's', rem: it.id, tt: it.title }, [box[2] + GRID, box[1]]);
+}
+
+// Pfeil „Zurück zum Canvas“: Ordner wieder öffnen und das Feld zeigen, von dem man kam
+let focusOn = null;
+export function backToCanvas() {
+  const b = state.backTo;
+  if (!b) return;
+  focusOn = b.match;
+  Object.assign(state, { backTo: null, tab: 'notes', list: b.fid ?? '', noteMode: 'ink', keepList: true });
+  render();
 }
 
 // Canvas verlassen (anderer Ordner, Notizen-Ansicht, anderer Bereich, Abmelden):

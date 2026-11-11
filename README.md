@@ -39,6 +39,8 @@ js/
   ink-draw.js       Canvas: Geometrie und Zeichnen (Striche, Formen, Maße, Bilder, Kästchen)
   ink-crop.js       Canvas: Bild zuschneiden
   ink-cal.js        Canvas: Termin-Feld (Verweis auf einen Termin, Auswahl, Karte für den Export)
+  ink-remind.js     Canvas: Erinnerungs-Feld (Glocke bei Markiertem, öffnet die Erinnerung)
+  remind-page.js    Bereich Erinnerungen: alle Erinnerungen, schnell stellen, Fenster einer Erinnerung
   ink-pen.js        Canvas: Fenster für Farbe und Stärke (Stift, Textmarker, Text)
   ink-tree.js       Canvas: Gliederung (Bereiche, Titel und Unterseiten)
   ink-store.js      Canvas: Datenbank und Bilder (Supabase Storage)

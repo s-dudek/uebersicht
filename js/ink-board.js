@@ -33,6 +33,8 @@ const PEN_LOST = 1500;   // meldet der aufgesetzte Stift so lange nichts, gilt e
 //         Notizen (nur Startseite): notes() -> [{ id, title }], onNote(id), onNoteAdd(), onNoteDelete(id),
 //         Notiz-Unterseite: desc() -> Beschreibungstext, onDesc() }
 // ====================================================================
+const isCard = (it) => it.t === 'c' || it.t === 'b';   // Felder als HTML: Termin, Erinnerung
+
 export function createBoard(opts) {
   let items = opts.items;
   let tool = 'pen', shape = 'line', finger = false, eraseR = ERASE_R, gridOn = true;
@@ -276,7 +278,7 @@ export function createBoard(opts) {
       if (it.ly) drawFrameLayout(ctx, bbox(it), it.ly, it.lf);
       return;
     }
-    if (it.t === 'n' || it.t === 'c') return;                                        // Notizen-Bereich und Termin-Felder sind HTML
+    if (it.t === 'n' || isCard(it)) return;                                          // Notizen-Bereich und Felder sind HTML
     if (it.t === 'x') return drawText(ctx, it);
     if (it.t === 's') return drawStroke(ctx, it);
     if (it.t === 't') { it.s.forEach((s) => drawStroke(ctx, s)); (it.tx || []).forEach((t) => drawText(ctx, t)); return; }
@@ -356,26 +358,26 @@ export function createBoard(opts) {
     else if (b?.classList.contains('ink-desc')) opts.onDesc();
   });
 
-  // ---------- Termin-Felder (ink-cal.js): HTML auf der Fläche, Inhalt immer aktuell aus dem Kalender ----------
-  // ziehen verschiebt (auf den Kästchen), antippen öffnet die Wochenansicht; Knöpfe: Größe, Entfernen
+  // ---------- Felder: Termin (c, ink-cal.js) und Erinnerung (b, ink-remind.js) – HTML auf der Fläche, Inhalt immer aktuell ----------
+  // ziehen verschiebt (auf den Kästchen), antippen öffnet Kalender bzw. Erinnerung; Knöpfe: Größe, Entfernen
   let calSig = '';
   function renderCals(force = false) {
-    const cards = items.map((it, idx) => [it, idx]).filter(([it]) => it.t === 'c');
-    const html = cards.map(([it]) => opts.calCard?.(it) || '');
+    const cards = items.map((it, idx) => [it, idx]).filter(([it]) => isCard(it));
+    const html = cards.map(([it]) => opts.cardHtml?.(it) || '');
     const sig = JSON.stringify([cards.map(([it, idx]) => [idx, it.x, it.y, it.sz]), html, scale]);
     if (!force && sig === calSig) return;
     calSig = sig;
     calLayer.innerHTML = cards.map(([it, idx], k) => {
       const [x0, y0, x1, y1] = bbox(it);
-      return `<div class="ink-cal sz-${esc(it.sz || 'm')}" data-cal="${idx}" role="button" tabindex="0" style="left:${x0 * scale}px;top:${y0 * scale}px;width:${(x1 - x0) * scale}px;height:${(y1 - y0) * scale}px;font-size:${16 * scale}px;--cc:${opts.calColor?.(it) || '#3E7CA8'}">${html[k]}</div>`;
+      return `<div class="ink-cal ink-card-${it.t} sz-${esc(it.sz || 'm')}" data-cal="${idx}" role="button" tabindex="0" style="left:${x0 * scale}px;top:${y0 * scale}px;width:${(x1 - x0) * scale}px;height:${(y1 - y0) * scale}px;font-size:${16 * scale}px;--cc:${opts.cardColor?.(it) || '#3E7CA8'}">${html[k]}</div>`;
     }).join('');
   }
   calLayer.addEventListener('click', (e) => {
     const b = e.target.closest('button'), card = e.target.closest('.ink-cal');
     const it = card && items[+card.dataset.cal];
-    if (!b || it?.t !== 'c') return;
-    if ('csz' in b.dataset) replace(it, { ...it, sz: opts.nextCalSize(it.sz) });
-    else if ('cdel' in b.dataset) commit(items.filter((o) => o !== it));
+    if (!b || !it || !isCard(it)) return;
+    if ('csz' in b.dataset) replace(it, { ...it, sz: opts.nextSize(it.sz) });
+    else if ('cdel' in b.dataset) { opts.onCardDelete?.(it); commit(items.filter((o) => o !== it)); }
     renderCals(true);
   });
 
@@ -655,7 +657,7 @@ export function createBoard(opts) {
     let best = null, bestD = r;
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
-      if (it.t === 'f' || it.t === 'n' || it.t === 'c') continue;
+      if (it.t === 'f' || it.t === 'n' || isCard(it)) continue;
       let d = distTo(it, x, y);
       if (it.t === 'i') d = d ? Infinity : r * .75;
       if (d < bestD || (!best && d <= bestD)) { best = it; bestD = d; }
@@ -906,11 +908,14 @@ export function createBoard(opts) {
       single('i')?.er?.length && 'unerase',
       list.length > 1 && !oneGroup && 'group',
       oneGroup && 'ungroup',
+      'remind',
       'delete',
     ].filter(Boolean);
   }
   const ACTIONS = { title: () => makeTitle(), edit: () => editSingle(), crop: () => cropImage(single('i')), unerase: () => unerase(),
-    group: () => group(), ungroup: () => ungroup(), delete: () => deleteSel() };
+    group: () => group(), ungroup: () => ungroup(), delete: () => deleteSel(), remind: () => opts.onRemind?.(sel.box, selectionText()) };
+  // Text der Auswahl (Texte und Texte in Titeln) als Vorschlag für die Erinnerung
+  const selectionText = () => [...sel.set].flatMap((it) => (it.t === 'x' ? [it.txt] : it.tx ? it.tx.map((t) => t.txt) : [])).join(' ').replace(/\s+/g, ' ').trim().slice(0, 120);
 
   // ---------- Eingabe: Stift und Maus schreiben, Finger verschieben und zoomen (wahlweise schreibt ein Finger) ----------
   let act = null;               // laufende Geste
@@ -1375,7 +1380,7 @@ export function createBoard(opts) {
     }
     else if (a.kind === 'cmove') {
       a.el.style.translate = '';
-      if (!a.moved) opts.onCal?.(a.it);
+      if (!a.moved) opts.onCard?.(a.it);
       else if (a.dx || a.dy) replace(a.it, { ...a.it, x: a.it.x + a.dx, y: a.it.y + a.dy });
     }
     else if (a.kind === 'nmove') {
@@ -1457,12 +1462,20 @@ export function createBoard(opts) {
       redrawAll();
     },
     addFrame,
-    // Termin-Feld in der Mitte des sichtbaren Bereichs einfügen (auf den Kästchen)
-    addCal(c) {
+    // Feld einfügen (auf den Kästchen): an der Stelle at [x, y] oder in der Mitte des sichtbaren Bereichs
+    addCard(c, at = null) {
       const [w, h] = bbox({ ...c, x: 0, y: 0 }).slice(2);
       const snap = (v) => Math.round(v / GRID) * GRID;
-      commit([...items, { ...c, x: snap(view.x + sc.clientWidth / 2 / cur() - w / 2), y: snap(view.y + sc.clientHeight / 2 / cur() - h / 2) }]);
+      const [x, y] = at || [view.x + sc.clientWidth / 2 / cur() - w / 2, view.y + sc.clientHeight / 2 / cur() - h / 2];
+      commit([...items, { ...c, x: snap(x), y: snap(y) }]);
       renderCals(true);
+    },
+    // Feld zeigen, das zu match passt (z. B. { rem: id }), nach der Rückkehr aus Kalender oder Erinnerungen
+    showMatch(match) {
+      const it = items.find((o) => isCard(o) && Object.entries(match).every(([k, v]) => o[k] === v));
+      if (!it) return;
+      const v = fitView(bbox(it));
+      goTo(v.x, v.y, Math.min(v.z, 1));
     },
     // Bereiche für den Export: Name und Rechteck in Einheiten
     frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, bg: f.bg || (f.ly ? 'blank' : 'grid'), ly: f.ly, lf: f.lf, box: bbox(f) })),
@@ -1514,7 +1527,7 @@ export function createBoard(opts) {
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       drawList(ctx, inside);
-      inside.filter((it) => it.t === 'c').forEach((it) => opts.drawCal?.(ctx, it));   // Termin-Felder als Karte
+      inside.filter(isCard).forEach((it) => opts.drawCard?.(ctx, it));   // Felder als Karte
       return cv;
     },
     imagePaths: () => items.filter((it) => it.t === 'i').map((it) => it.src),

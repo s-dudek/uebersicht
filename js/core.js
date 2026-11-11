@@ -128,6 +128,7 @@ export const state = {
   calView: store('calView') || 'week',   // 'day' | 'week' | 'month'
   inkSideOff: store('inkSideOff') === '1',   // Canvas am Desktop: Seitenleiste eingefahren
   homeDay: null,
+  backTo: null,        // Rückweg in den Canvas ({ fid, match }), wenn man von dort in Kalender/Erinnerungen kam
   homeEdit: false,
   noteSel: null,                         // Notizen: Mehrfachauswahl { fid, ids: Set }                       // Startseite (schmal): Kacheln bearbeiten (wackeln)                         // Startseite: gezeigter Tag (null = heute)
   calAllOpen: false,                     // Ganztägiges: alle Zeilen zeigen

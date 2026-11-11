@@ -9,7 +9,7 @@ import { addDays, parseYmd, ymd } from './dates.js';
 import { evTitle, isYearly } from './events.js';
 import { ICON } from './icons.js';
 import { CAL_SIZES } from './ink-draw.js';
-import { navigate } from './nav.js';
+import { goFromCanvas } from './nav.js';
 import { closeSheet, openSheet, sheetActs } from './sheet.js';
 
 const BLUE = '#3E7CA8';
@@ -52,7 +52,7 @@ export function openCalOf(it) {
   const d = calInfo(it).day;
   Object.assign(state, { calDate: d, calView: 'week' });
   store('calView', 'week');
-  navigate('calendar');
+  goFromCanvas('calendar', { fid: state.list, match: it.ev ? { ev: it.ev } : { xo: it.xo } });   // Pfeil zurück zum Feld
 }
 
 // für Speichern als PDF/Bild: das Feld als Karte zeichnen

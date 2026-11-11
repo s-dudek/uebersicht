@@ -21,6 +21,8 @@ import { openEvent, showEvent } from './events.js';
 import { ICON } from './icons.js';
 import { openMeal } from './meals.js';
 import { openTraining } from './training.js';
+import { canvasShow } from './ink-remind.js';
+import { openReminder } from './remind-page.js';
 import { pushOn, pushSupport, remindHint } from './reminders.js';
 import { render } from './render.js';
 import { categoryOptions, clearSheetClose, closeSheet, colorPick, openSheet, sheetActs } from './sheet.js';
@@ -60,6 +62,7 @@ export function openItem(id, { isNew = false, edit = false } = {}) {
   if (!i) return;
   if (i.type === 'meal') return openMeal(id);
   if (i.type === 'training') return openTraining(id);
+  if (i.type === 'reminder') return openReminder(id, { onShow: canvasShow(i) });
   if (i.type === 'event') return isNew || edit ? openEvent(id, { isNew }) : showEvent(id);
   if (i.type === 'note' && !isNew && !edit) return openNoteView(id);
   const isNote = i.type === 'note';

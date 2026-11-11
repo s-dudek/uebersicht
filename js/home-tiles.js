@@ -6,7 +6,8 @@
 // Im Bearbeiten-Modus wackeln die Kacheln, lassen sich sofort ziehen und haben einen Knopf für die Größe.
 import { dayContent, hm } from './calendar.js';
 import { catById, esc, isDesktop, isTodoList, safeColor, state, store } from './core.js';
-import { addDays, isoWeek, mondayOf, ymd } from './dates.js';
+import { addDays, isoWeek, mondayOf, remindLabel, ymd } from './dates.js';
+import { evTitle } from './events.js';
 import { catOrder, catSym, saveCatOrder } from './folders.js';
 import { ICON } from './icons.js';
 import { calDayBody } from './home.js';
@@ -50,6 +51,7 @@ function nextToday(today) {
 function allTiles(today) {
   const todos = () => state.items.filter((i) => i.type === 'todo' && !i.done);
   const notes = () => state.items.filter((i) => i.type === 'note').sort(byNewest);
+  const upcoming = () => state.items.filter((i) => i.remind_at && !i.reminded && !i.done).sort((a, b) => a.remind_at.localeCompare(b.remind_at));
   const trainingOn = (d) => state.items.filter((i) => i.type === 'training' && i.due_date === d);
   const base = [
     { key: 'date', label: 'Datum', size: 'l', desk: 's', act: `data-act="home-cal" data-id="${today}"` },
@@ -68,6 +70,9 @@ function allTiles(today) {
       lines: () => mealsOn(today).map((m) => (slotName(m) ? `${slotName(m)}: ${m.title}` : m.title)), empty: 'Heute nichts geplant',
       stat: () => { const m = mealsOn(today)[0]; return m ? { big: slotName(m) || 'Heute', sub: m.title, word: true } : { big: '–', sub: 'nichts geplant' }; },
       foot: () => weekStrip(today, (d) => (mealsOn(d).length ? 1 : 0)) },
+    { key: 'reminders', label: 'Erinnerungen', icon: ICON.bell, accent: '#D9873E', size: 's', act: 'data-act="nav" data-id="reminders"', badge: true,
+      lines: () => upcoming().map((i) => `${remindLabel(i.remind_at)} · ${i.type === 'event' ? evTitle(i) : i.title || 'Erinnerung'}`), empty: 'Keine Erinnerungen',
+      stat: () => { const n = upcoming()[0]; return n ? { big: remindLabel(n.remind_at).split(' ').pop(), sub: n.type === 'event' ? evTitle(n) : n.title || 'Erinnerung' } : { big: '0', sub: 'keine gestellt' }; } },
     { key: 'training', label: 'Training', icon: ICON.dumbbell, accent: '#C2575A', size: 's', act: 'data-act="nav" data-id="training"',
       lines: () => titles(trainingOn(today)), empty: 'Heute frei',
       stat: () => { const t = trainingOn(today)[0]; return t ? { big: t.done ? 'Erledigt' : 'Heute', sub: t.title, word: true } : { big: 'Frei', sub: 'kein Training heute', word: true }; },

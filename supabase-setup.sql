@@ -460,3 +460,7 @@ alter table public.categories add column if not exists canvas_only boolean not n
 
 -- (Termin an eine Person kopieren wurde ersetzt durch Kopieren in einen anderen Kalender-Abschnitt)
 drop function if exists public.give_event(uuid, text, text, date, text, text, text);
+
+-- Erinnerungen als eigener Eintrag (z. B. aus dem Canvas oder schnell gestellt)
+alter table public.items drop constraint if exists items_type_check;
+alter table public.items add constraint items_type_check check (type in ('todo', 'note', 'meal', 'event', 'training', 'reminder'));

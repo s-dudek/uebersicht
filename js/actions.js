@@ -15,7 +15,8 @@ import { togglePin } from './pins.js';
 import { importPlan, shopCat } from './meals.js';
 import { openPlanImport } from './plan-import.js';
 import { openCatalog } from './training.js';
-import { inkAction } from './ink.js';
+import { backToCanvas, inkAction } from './ink.js';
+import { remindAction } from './remind-page.js';
 import { openFolderDrop } from './menu.js';
 import { render } from './render.js';
 
@@ -67,11 +68,16 @@ export function initActions() {
       case 'list-edit': openCategory(id); break;
       case 'new-note': createNote(); break;
       case 'note-mode': state.noteMode = id === 'ink' ? 'ink' : 'text'; render(); break;
+      case 'rem-quick': case 'rem-open': remindAction(t.dataset.act, id, t); break;
+      case 'back-canvas': backToCanvas(); break;
       default: if (t.dataset.act.startsWith('ink-')) inkAction(t.dataset.act, id, t);
     }
   });
 
+  // Erinnerungen: Zeit selbst gewählt bzw. Eingabe mit Enter (= in einer Stunde)
+  $app.addEventListener('change', (e) => { if (e.target.id === 'rm-at') remindAction('rem-at', null, e.target); });
   $app.addEventListener('submit', async (e) => {
+    if (e.target.id === 'rm-form') { e.preventDefault(); return remindAction('rem-quick', 'h1'); }
     const form = e.target.closest('.addrow[data-list]');
     if (!form) return;
     e.preventDefault();

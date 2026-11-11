@@ -55,8 +55,8 @@ Deno.serve(async (req) => {
     }
 
     const { data: subs } = await sb.from('push_subscriptions').select('id, endpoint, p256dh, auth').in('user_id', [...users]);
-    let title = item.title || (item.type === 'note' ? 'Notiz' : 'Todo');
-    let body = item.type === 'note' ? (item.body || '').slice(0, 140) : 'Erinnerung zu deinem Todo';
+    let title = item.title || (item.type === 'note' ? 'Notiz' : item.type === 'reminder' ? 'Erinnerung' : 'Todo');
+    let body = item.type === 'note' ? (item.body || '').slice(0, 140) : item.type === 'reminder' ? (item.body || 'Erinnerung').slice(0, 140) : 'Erinnerung zu deinem Todo';
     if (item.type === 'event') {
       const when = meta.remind === '1' ? 'Morgen' : meta.remind === '7' ? 'In einer Woche' : meta.remind === 'h' ? 'In einer Stunde' : 'Heute';
       title = meta.kind === 'birthday' ? `🎂 ${item.title || 'Jemand'} hat Geburtstag` : item.title || 'Termin';

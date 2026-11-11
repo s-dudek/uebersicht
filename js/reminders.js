@@ -67,6 +67,7 @@ function remindText(i) {
     const when = r === '1' ? 'Morgen' : r === '7' ? 'In einer Woche' : r === 'h' ? 'In einer Stunde' : 'Heute';
     return { title: evTitle(i), body: `${when}${!isBday(i) && i.meta?.time ? ' um ' + i.meta.time + ' Uhr' : ''}${i.body ? ' · ' + i.body.slice(0, 80) : ''}` };
   }
+  if (i.type === 'reminder') return { title: i.title || 'Erinnerung', body: (i.body || 'Erinnerung').slice(0, 120) };
   return { title: i.title || (i.type === 'note' ? 'Notiz' : 'Todo'), body: i.type === 'note' ? (i.body || '').slice(0, 120) : 'Erinnerung zu deinem Todo' };
 }
 

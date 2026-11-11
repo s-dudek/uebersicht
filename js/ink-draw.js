@@ -1,11 +1,12 @@
 // Canvas: Geometrie und Zeichnen (ohne Zustand der Zeichenfläche)
 // Elemente: s = Strich (m: Textmarker), t = Titel (Striche s, Texte tx), i = Bild, f = Bereich (A4), d = Bemaßung, x = Text,
-// n = Notizen-Bereich (nur Lage; die Liste der Notizen ist HTML darüber), c = Termin-Feld (HTML, ink-cal.js)
+// n = Notizen-Bereich (nur Lage; die Liste der Notizen ist HTML darüber), c = Termin-Feld (HTML, ink-cal.js), b = Erinnerungs-Feld (ink-remind.js)
 import { FRAMES } from './ink-store.js';
 
 export const GRID = 25;   // Kästchengröße in Einheiten
 export const NOTES_W = 600;   // Breite des Notizen-Bereichs in Einheiten (die Höhe wächst mit den Notizen)
 export const CAL_SIZES = { s: [225, 100], m: [325, 150], l: [450, 200] };   // Termin-Feld (c): Klein, Mittel, Groß
+export const BELL_SIZES = { s: [250, 75], m: [300, 100], l: [375, 125] };   // Erinnerungs-Feld (b)
 
 // ---------- Drehen: Bilder und Texte tragen einen Winkel r (Bogenmaß, um ihre Mitte) ----------
 const TAU = Math.PI * 2;
@@ -55,6 +56,7 @@ export function bbox(it) {
   else if (it.t === 'x') { const [w, h] = textSize(it.txt, it); b = rotBox(it.x, it.y, w, h, it.r); }
   else if (it.t === 'n') b = [it.x, it.y, it.x + NOTES_W, it.y + 300];
   else if (it.t === 'c') { const [w, h] = CAL_SIZES[it.sz] || CAL_SIZES.m; b = [it.x, it.y, it.x + w, it.y + h]; }
+  else if (it.t === 'b') { const [w, h] = BELL_SIZES[it.sz] || BELL_SIZES.s; b = [it.x, it.y, it.x + w, it.y + h]; }
   else if (it.t === 'd') {
     const m = dimSize(it).fs * 1.6 + 10;
     b = [Math.min(it.a[0], it.b[0]) - m, Math.min(it.a[1], it.b[1]) - m, Math.max(it.a[0], it.b[0]) + m, Math.max(it.a[1], it.b[1]) + m];
@@ -89,7 +91,7 @@ export function inPolygon(x, y, poly) {
 
 // Anteil eines Elements innerhalb der Lasso-Linie (0–1)
 export function share(it, poly) {
-  if (it.t === 'f' || it.t === 'n' || it.t === 'c') return 0;   // Bereiche und Felder werden direkt verschoben, nicht ausgewählt
+  if (it.t === 'f' || it.t === 'n' || it.t === 'c' || it.t === 'b') return 0;   // Bereiche und Felder werden direkt verschoben, nicht ausgewählt
   if (it.t === 'i' || it.t === 'x') { const b = bbox(it); return inPolygon((b[0] + b[2]) / 2, (b[1] + b[3]) / 2, poly) ? 1 : 0; }
   if (it.t === 'd') return (inPolygon(it.a[0], it.a[1], poly) + inPolygon(it.b[0], it.b[1], poly)) / 2;
   let n = 0, hit = 0;
@@ -145,7 +147,7 @@ export function transform(it, ox, oy, k, dx, dy) {
   const st = (s) => ({ ...s, w: s.w * k, pts: s.pts.map((v, i) => (i % 3 === 0 ? tx(v) : i % 3 === 1 ? ty(v) : v)) });
   if (it.t === 's') return st(it);
   if (it.t === 't') return { ...it, s: it.s.map(st), ...(it.tx ? { tx: it.tx.map((t) => transform(t, ox, oy, k, dx, dy)) } : {}) };
-  if (it.t === 'f' || it.t === 'c') return { ...it, x: it.x + dx, y: it.y + dy };   // Bereiche und Termin-Felder werden nur verschoben
+  if (it.t === 'f' || it.t === 'c' || it.t === 'b') return { ...it, x: it.x + dx, y: it.y + dy };   // Bereiche und Termin-Felder werden nur verschoben
   if (it.t === 'd') return { ...it, w: it.w * k, a: [tx(it.a[0]), ty(it.a[1])], b: [tx(it.b[0]), ty(it.b[1])] };
   if (it.t === 'x') return { ...it, x: tx(it.x), y: ty(it.y), fs: it.fs * k };
   return { ...it, x: tx(it.x), y: ty(it.y), w: it.w * k, h: it.h * k };   // Zuschnitt und Radierung sind relativ und wandern mit
