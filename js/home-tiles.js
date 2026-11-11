@@ -5,7 +5,7 @@
 // Langes Drücken: Menü mit Größe und „Home-Bildschirm bearbeiten“ (menu.js), weiterziehen = verschieben (drag.js).
 // Im Bearbeiten-Modus wackeln die Kacheln, lassen sich sofort ziehen und haben einen Knopf für die Größe.
 import { dayContent, hm } from './calendar.js';
-import { catById, esc, isDesktop, isTodoList, safeColor, state, store } from './core.js';
+import { catById, esc, isDesktop, isTodoList, safeColor, sketchSrc, state, store } from './core.js';
 import { addDays, isoWeek, mondayOf, remindLabel, ymd } from './dates.js';
 import { evTitle } from './events.js';
 import { catOrder, catSym, saveCatOrder } from './folders.js';
@@ -89,6 +89,7 @@ function allTiles(today) {
     const i = obj;
     return { key, label: i.type === 'note' ? i.title || 'Notiz' : 'Todo', icon: i.type === 'note' ? ICON.notes : ICON.todos, accent: i.type === 'note' ? '#7FA08A' : '#4E7569', size: 's', act: `data-act="open" data-id="${i.id}"`,
       lines: () => (i.type === 'note' ? String(i.body || '').split('\n').filter(Boolean) : checks([i])), empty: i.type === 'note' ? 'Kein Text' : '',
+      img: i.type === 'note' ? sketchSrc(i) : '',   // Skizze aus dem Canvas
       stat: () => (i.type === 'note' ? { big: '', sub: String(i.body || '').split('\n').find(Boolean) || 'Kein Text' } : { big: '', sub: i.title || 'Ohne Titel' }) };
   });
   // Standardgröße: am Desktop teils größer (mehr Platz für Inhalt)
@@ -124,8 +125,9 @@ function dateBody(size, d) {
   const y = d.getFullYear(), days = (new Date(y + 1, 0, 1) - new Date(y, 0, 1)) / 864e5;
   const nth = Math.floor((new Date(y, d.getMonth(), d.getDate()) - new Date(y, 0, 1)) / 864e5) + 1, part = nth / days;
   const ring = `<span class="md-ring" title="${nth}. Tag des Jahres"><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15.5"/><circle class="on" cx="18" cy="18" r="15.5" pathLength="100" stroke-dasharray="${(part * 100).toFixed(1)} 100"/></svg><em>KW</em><b>${isoWeek(ymd(d))}</b></span>`;
-  const year = size === 'l' ? `<span class="md-year"><span><i style="width:${(part * 100).toFixed(1)}%"></i></span><small>Tag ${nth} von ${days} · noch ${days - nth} Tage</small></span>` : '';
-  const week = size === 'l' && !isDesktop() ? `<span class="mt-dweek">${Array.from({ length: 7 }, (_, k) => {
+  const tall = size === 'l' || (size === 'm' && isDesktop());   // genug Höhe für Jahresbalken und Woche
+  const year = tall ? `<span class="md-year"><span><i style="width:${(part * 100).toFixed(1)}%"></i></span><small>Tag ${nth} von ${days} · noch ${days - nth} Tage</small></span>` : '';
+  const week = tall ? `<span class="mt-dweek">${Array.from({ length: 7 }, (_, k) => {
     const x = addDays(mondayOf(d), k);
     return `<span class="${x === ymd(d) ? 'now' : ''}"><small>${['M', 'D', 'M', 'D', 'F', 'S', 'S'][k]}</small>${+x.slice(8)}</span>`;
   }).join('')}</span>` : '';
@@ -145,6 +147,7 @@ function body(t, size, today, d) {
   if (t.key === 'date') return dateBody(size, d);
   if (t.key === 'cal' && size === 'l' && isDesktop()) return calDayBody(today);   // Desktop groß: Tag als Zeitleiste
   const head = `<span class="mt-h"><span class="mt-ic">${t.icon}</span><span>${esc(t.label)}</span></span>`;
+  if (t.img) return `${head}<img class="mt-img" src="${esc(t.img)}" alt="">`;   // Notiz mit Skizze: das Bild füllt die Kachel
   if (size === 's') {
     const s = t.stat?.() || { big: '', sub: '' };
     // schmal (Handy): Name steht vor der Angabe unten statt neben dem Symbol

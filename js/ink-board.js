@@ -11,7 +11,7 @@ import {
   FRAME_BG, FRAME_COLORS, forgetBox, forgetErased, fullRect, GRID, LINE_H, nearItem, NOTES_W, rotateItem, shapeStrokes, share, TEXT_FS, textSize, transform, union,
 } from './ink-draw.js';
 import { drawFrameLayout, FRAME_LAYOUTS } from './ink-layout.js';
-import { FRAMES, getImage, newId } from './ink-store.js';
+import { FRAME_NAMES, FRAMES, getImage, newId } from './ink-store.js';
 
 const VIEW = 1000;       // so viele Einheiten passen bei 100 % in die Breite
 const TILE_PX = 512;     // Kachelgröße in Bildschirmpunkten
@@ -34,6 +34,7 @@ const PEN_LOST = 1500;   // meldet der aufgesetzte Stift so lange nichts, gilt e
 //         Notiz-Unterseite: desc() -> Beschreibungstext, onDesc() }
 // ====================================================================
 const isCard = (it) => it.t === 'c' || it.t === 'b';   // Felder als HTML: Termin, Erinnerung
+let clipboard = null;   // Kopiertes (gilt für alle Seiten und Ordner, bis zum Neuladen)
 
 export function createBoard(opts) {
   let items = opts.items;
@@ -406,7 +407,7 @@ export function createBoard(opts) {
 
   // ---------- Bereiche (A4): gestrichelter Rahmen mit Reiter zum Verschieben ----------
   const frameList = () => items.filter((it) => it.t === 'f');
-  const fmtName = (f) => (f.fmt === 'a4l' ? 'A4 quer' : 'A4 hoch');
+  const fmtName = (f) => FRAME_NAMES[f.fmt] || 'A4 hoch';
   const frameName = (f, n) => f.n || f.lf?.t || `${fmtName(f)} · ${n}`;
 
   function renderFrames() {
@@ -825,6 +826,7 @@ export function createBoard(opts) {
       ${list.length > 1 && !oneGroup ? item('group', 'stack', 'Gruppieren') : ''}
       ${oneGroup ? item('ungroup', 'stack', 'Gruppierung aufheben') : ''}
       ${canTitle ? item('title', 'chevR', 'Als Titel') : ''}
+      ${list.some(copyable) ? item('copy', 'copy', 'Kopieren') : ''}
       ${item('delete', 'trash', 'Löschen', 'danger')}`, (m, i) => {
       if (m === 'color') recolor(opts.colors[+i]);
       else if (m === 'crop') cropImage(img);
@@ -833,6 +835,7 @@ export function createBoard(opts) {
       else if (m === 'group') group();
       else if (m === 'ungroup') ungroup();
       else if (m === 'title') makeTitle();
+      else if (m === 'copy') copySel();
       else if (m === 'delete') deleteSel();
     });
   }
@@ -871,7 +874,12 @@ export function createBoard(opts) {
     const inSel = sel && x >= sel.box[0] - 6 && x <= sel.box[2] + 6 && y >= sel.box[1] - 6 && y <= sel.box[3] + 6;
     if (!inSel) {
       const hit = hitAt(x, y, touch);
-      if (!hit) { clearSel(); closeMenu(); return; }
+      if (!hit) {
+        clearSel(); closeMenu();
+        // freie Stelle: Kopiertes hier einfügen
+        if (clipboard?.length) showMenu(cx, cy, `<button class="cm-i" data-m="paste">${ICON.copy}<span>Einfügen</span></button>`, () => paste(x, y));
+        return;
+      }
       setSel(withGroups([hit]));
     }
     openMenu(cx, cy);
@@ -908,12 +916,32 @@ export function createBoard(opts) {
       single('i')?.er?.length && 'unerase',
       list.length > 1 && !oneGroup && 'group',
       oneGroup && 'ungroup',
+      list.some(copyable) && 'copy',
       'remind',
       'delete',
     ].filter(Boolean);
   }
   const ACTIONS = { title: () => makeTitle(), edit: () => editSingle(), crop: () => cropImage(single('i')), unerase: () => unerase(),
-    group: () => group(), ungroup: () => ungroup(), delete: () => deleteSel(), remind: () => opts.onRemind?.(sel.box, selectionText()) };
+    group: () => group(), ungroup: () => ungroup(), delete: () => deleteSel(), copy: () => copySel(), remind: () => opts.onRemind?.(sel.box, selectionText()) };
+  // Kopieren: Auswahl merken und gleich versetzt daneben einfügen; Einfügen geht auch später (langes Drücken auf freie Stelle)
+  const copyable = (it) => it.t !== 't' && it.t !== 'f';   // Titel (Unterseiten) und Bereiche nicht
+  function copySel() {
+    clipboard = [...sel.set].filter(copyable).map((it) => structuredClone(it));
+    if (!clipboard.length) return;
+    paste(sel.box[0] + GRID * 2, sel.box[1] + GRID * 2);
+  }
+  function paste(x, y) {
+    if (!clipboard?.length) return;
+    const b = union(clipboard), groups = new Map();
+    const copies = clipboard.map((it) => {
+      const c = transform(structuredClone(it), 0, 0, 1, x - b[0], y - b[1]);
+      if (c.g) { if (!groups.has(c.g)) groups.set(c.g, newId()); c.g = groups.get(c.g); }   // eigene Gruppen
+      return c;
+    });
+    commit([...items, ...copies]);
+    redrawAll();
+    setSel(copies);
+  }
   // Text der Auswahl (Texte und Texte in Titeln) als Vorschlag für die Erinnerung
   const selectionText = () => [...sel.set].flatMap((it) => (it.t === 'x' ? [it.txt] : it.tx ? it.tx.map((t) => t.txt) : [])).join(' ').replace(/\s+/g, ' ').trim().slice(0, 120);
 
@@ -1478,7 +1506,20 @@ export function createBoard(opts) {
       goTo(v.x, v.y, Math.min(v.z, 1));
     },
     // Bereiche für den Export: Name und Rechteck in Einheiten
-    frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, bg: f.bg || (f.ly ? 'blank' : 'grid'), ly: f.ly, lf: f.lf, box: bbox(f) })),
+    frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, bg: f.bg || (f.ly ? 'blank' : 'grid'), ly: f.ly, lf: f.lf, nid: f.nid, box: bbox(f) })),
+    // Skizzen-Rahmen einer Notiz zeigen bzw. in der Mitte des sichtbaren Bereichs anlegen
+    sketchFrame(nid, name) {
+      const f = frameList().find((x) => x.nid === nid);
+      if (!f) {
+        const [w, h] = FRAMES.note, snap = (v) => Math.round(v / GRID) * GRID;
+        commit([...items, { t: 'f', fmt: 'note', nid, n: String(name || 'Notiz').slice(0, 40), x: snap(view.x + sc.clientWidth / 2 / cur() - w / 2), y: snap(view.y + sc.clientHeight / 2 / cur() - h / 2) }]);
+        redrawAll();
+        renderOverlays();
+        return;
+      }
+      const v = fitView(bbox(f));
+      goTo(v.x, v.y, Math.min(v.z, 1.5));
+    },
     renameFrame(n, name) { const f = frameList()[n]; if (f) setFrame(f, { n: name.trim().slice(0, 40) }); },
     showOutline,
     selectionKind,

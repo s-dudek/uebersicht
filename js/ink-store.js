@@ -72,7 +72,8 @@ const strokeOut = (s) => ({ c: s.c, w: s.w, p: encodePts(s.pts), ...(s.m ? { m: 
 const strokeIn = (s) => ({ t: 's', c: safeColor(s?.c, '#0C3741'), w: num(s?.w, .5, 60, 2.2), pts: decodePts(s?.p), ...(s?.m === 1 ? { m: 1 } : {}) });
 
 // Seiteninhalt für die Datenbank
-export const FRAMES = { a4p: [850, 1200], a4l: [1200, 850] };   // A4 hoch/quer, genau auf den Kästchen (25 Einheiten)
+export const FRAMES = { a4p: [850, 1200], a4l: [1200, 850], note: [500, 300] };   // A4 hoch/quer, Notiz-Skizze; genau auf den Kästchen (25 Einheiten)
+export const FRAME_NAMES = { a4p: 'A4 hoch', a4l: 'A4 quer', note: 'Notiz-Skizze' };
 const FRAME_BGS = ['lines', 'dots', 'blank'];                   // Hintergründe eines Bereichs (ohne: kariert wie die Fläche)
 
 export function serialize(items, h, w) {
@@ -89,7 +90,7 @@ export function serialize(items, h, w) {
       }
       if (it.t === 'f') {
         const f = { t: 'f', fmt: it.fmt, x: it.x, y: it.y };
-        for (const k of ['n', 'bg', 'fc', 'ly', 'lf']) if (it[k]) f[k] = it[k];
+        for (const k of ['n', 'bg', 'fc', 'ly', 'lf', 'nid']) if (it[k]) f[k] = it[k];
         return f;
       }
       if (it.t === 'x') return { ...textOut(it), ...g };
@@ -134,6 +135,7 @@ export function deserialize(data) {
       if (typeof it.n === 'string' && it.n.trim()) out.n = it.n.trim().slice(0, 40);   // eigener Name
       if (FRAME_BGS.includes(it.bg)) out.bg = it.bg;                                    // Hintergrund
       if (safeColor(it.fc)) out.fc = it.fc;                                             // Farbe von Rahmen und Reiter
+      if (UUID.test(it.nid || '')) out.nid = it.nid;                                    // Skizze einer Notiz (Bild in ihrer Kachel)
       if (FRAME_LAYOUTS.some(([k]) => k && k === it.ly)) out.ly = it.ly;                // Layout im Dudek-CI
       if (it.lf && typeof it.lf === 'object') {                                         // Angaben im Layout
         const lf = {};

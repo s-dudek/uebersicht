@@ -1,7 +1,7 @@
 // Canvas der Notiz-Ordner: jede Kategorie hat eine eigene Startseite mit Titeln, jeder Titel öffnet eine eigene Seite
 // (beliebig tief). Auf der Startseite steht der Notizen-Bereich mit den Notizen des Ordners; jede Notiz hat eine
 // Unterseite mit ihrer Beschreibung. Bereiche (A4) lassen sich speichern (PDF, PNG, JPEG).
-import { $app, askConfirm, catById, esc, isCanvasOnly, itemById, safeColor, state, store, toast } from './core.js';
+import { $app, askConfirm, catById, esc, isCanvasOnly, itemById, safeColor, sb, state, store, toast } from './core.js';
 import { createNote, deleteItem, trashItems } from './data.js';
 import { ICON } from './icons.js';
 import { createBoard } from './ink-board.js';
@@ -9,7 +9,7 @@ import { FONTS, GRID, NOTES_W, SHAPES, union, WEIGHTS } from './ink-draw.js';
 import { deliver, exportWidth, fileName, toImage, toPdf } from './ink-export.js';
 import { FRAME_LAYOUTS, LAYOUT_FIELDS } from './ink-layout.js';
 import { clampSize, cleanText, KINDS, openPenPanel, PALETTE } from './ink-pen.js';
-import { deletePageTree, deserialize, loadChild, loadRoot, removeImages, savePage, serialize, titleIn, uploadImage } from './ink-store.js';
+import { deletePageTree, deserialize, FRAME_NAMES, loadChild, loadRoot, removeImages, savePage, serialize, titleIn, uploadImage } from './ink-store.js';
 import { openTree, titleSvg } from './ink-tree.js';
 import { calCardHtml, calColor, drawCalCard, nextCalSize, openCalOf, pickCalEvent } from './ink-cal.js';
 import { bellCardHtml, bellColor, drawBellCard, openBellOf } from './ink-remind.js';
@@ -267,7 +267,30 @@ async function flush(page) {
   const { list, hh, ww } = page.pending;
   page.pending = null;
   const err = await savePage(page.id, list, hh, ww);
-  if (err) { page.pending ??= { list, hh, ww }; toast('Speichern fehlgeschlagen: ' + err.message, 4000); }
+  if (err) { page.pending ??= { list, hh, ww }; toast('Speichern fehlgeschlagen: ' + err.message, 4000); return; }
+  if (page === stack[0]) updateSketches(page);
+}
+
+// Skizzen-Rahmen von Notizen (Startseite des Canvas): Bild für Notiz und Kachel aktualisieren, still ohne Neuzeichnen
+const SKETCH_W = 360;   // Breite des Bildes in Pixel
+async function updateSketches(page) {
+  for (const f of page.board.frames().filter((x) => x.nid)) {
+    const note = itemById(f.nid);
+    if (!note) continue;
+    const url = (await page.board.renderBox(f.box, SKETCH_W, 'blank')).toDataURL('image/jpeg', .75);
+    if (note.meta?.sketch === url) continue;
+    note.meta = { ...(note.meta || {}), sketch: url };
+    sb.from('items').update({ meta: note.meta }).eq('id', note.id).then(() => {});
+  }
+}
+
+// Notiz → Skizze im Canvas ihres Ordners: Rahmen zeigen bzw. anlegen (nach dem Laden der Seite)
+let sketchFor = null;
+export function openSketch(note) {
+  sketchFor = { nid: note.id, name: note.title };
+  const fid = note.category_id && catById(note.category_id) ? note.category_id : '';
+  Object.assign(state, { tab: 'notes', list: fid, noteMode: 'ink', keepList: true });
+  render();
 }
 
 const flushAll = () => stack.forEach(flush);
@@ -360,7 +383,7 @@ const remember = (c) => { ui.recent = [c, ...ui.recent.filter((x) => x !== c)].s
 // ---------- Eigenschaften-Leiste unten (wie in Illustrator): zeigt, was zum Werkzeug bzw. zur Auswahl passt ----------
 const TOOL_LABEL = { pen: 'Stift', marker: 'Textmarker', text: 'Text', shape: 'Form', dim: 'Bemaßung', eraser: 'Radierer', lasso: 'Auswahl' };
 const ACTION = { title: ['chevR', 'Als Titel'], edit: ['pen', 'Bearbeiten'], crop: ['crop', 'Zuschneiden'], unerase: ['undo', 'Radiertes zurück'],
-  group: ['stack', 'Gruppieren'], ungroup: ['stack', 'Aufheben'], remind: ['bell', 'Erinnern'], delete: ['trash', 'Löschen'] };
+  group: ['stack', 'Gruppieren'], ungroup: ['stack', 'Aufheben'], copy: ['copy', 'Kopieren'], remind: ['bell', 'Erinnern'], delete: ['trash', 'Löschen'] };
 const ERASERS = [[5, 'Fein'], [9, 'Mittel'], [18, 'Breit']];
 
 // was die Leiste gerade einstellt: { kind, val } aus der Auswahl oder dem Werkzeug (null: nichts mit Farbe)
@@ -512,7 +535,7 @@ function openExport(preselect) {
       <div class="exp-h">Bereiche</div>
       <div class="exp-list">${frames.map((x) => `<div class="exp-item ${x.n === cur ? 'cur' : ''}">
         <button class="exp-chk ${chosen.has(x.n) ? 'on' : ''}" data-chk="${x.n}" aria-label="Mitspeichern" title="Mitspeichern">${ICON.check}</button>
-        <button class="exp-name" data-show="${x.n}"><span>${esc(x.name)}</span><small>${x.fmt === 'a4l' ? 'A4 quer' : 'A4 hoch'}</small></button></div>`).join('')}</div>
+        <button class="exp-name" data-show="${x.n}"><span>${esc(x.name)}</span><small>${FRAME_NAMES[x.fmt] || 'A4 hoch'}</small></button></div>`).join('')}</div>
       <div class="exp-h">Vorlage <small>für „${esc(f.name)}“</small></div>
       <div class="pp-chips">${FRAME_LAYOUTS.map(([k, l]) => `<button type="button" class="pp-chip ${(f.ly || '') === k ? 'on' : ''}" data-ly="${k}">${esc(l.replace('Dudek · ', ''))}</button>`).join('')}</div>
       ${f.ly ? `<div class="exp-fields">${LAYOUT_FIELDS.map(([k, l]) => `<label><span>${l}</span><input class="input" data-lf="${k}" maxlength="80" value="${esc(f.lf?.[k] || '')}"></label>`).join('')}</div>` : ''}
@@ -650,6 +673,7 @@ export function mountInk() {
   page.board.attach();
   page.board.refreshNotes();   // Notizen können sich inzwischen geändert haben (auch durch die andere Person)
   if (focusOn && stack.length === 1) { page.board.showMatch(focusOn); focusOn = null; }
+  if (sketchFor && stack.length === 1) { page.board.sketchFrame(sketchFor.nid, sketchFor.name); sketchFor = null; }
   updateTools();
 }
 

@@ -4,7 +4,7 @@
 import { esc, toast } from './core.js';
 import { ICON } from './icons.js';
 import { bbox, fontCss, LINE_H, textSize } from './ink-draw.js';
-import { deserialize, loadTree } from './ink-store.js';
+import { deserialize, FRAME_NAMES, loadTree } from './ink-store.js';
 import { closeSheet, openSheet, sheetActs } from './sheet.js';
 
 // Titel als Bild aus den eigenen Strichen und Texten (nur Zahlen, geprüfte Farben und maskierter Text).
@@ -32,7 +32,7 @@ export function titleSvg({ s: strokes = [], tx = [] }, cls = 'ink-ttl') {
   return `<svg class="${cls}" viewBox="${(x0 - pad).toFixed(1)} ${(y0 - pad).toFixed(1)} ${(x1 - x0 + pad * 2).toFixed(1)} ${(y1 - y0 + pad * 2).toFixed(1)}" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Handschriftlicher Titel">${paths}</svg>`;
 }
 
-const fmtName = (f) => (f.fmt === 'a4l' ? 'A4 quer' : 'A4 hoch');
+const fmtName = (f) => FRAME_NAMES[f.fmt] || 'A4 hoch';
 const frameName = (f, n) => f.n || f.lf?.t || `${fmtName(f)} · ${n + 1}`;
 
 // cat: Ordner; open: IDs der geöffneten Seiten (Startseite zuerst);

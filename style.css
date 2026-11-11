@@ -231,6 +231,14 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 .mt-prog > span { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--ac) 14%, var(--white)); overflow: hidden; }
 .mt-prog i { display: block; height: 100%; border-radius: 3px; background: var(--ac); }
 .mt-prog small, .mt-foot { font-size: 12.5px; font-weight: 500; color: var(--grey); }
+/* Notiz mit Skizze (Canvas-Rahmen): Bild füllt den Rest der Kachel */
+.mt-img { flex: 1; width: 100%; min-height: 0; object-fit: contain; border-radius: 12px; background: var(--white); box-shadow: inset 0 0 0 1px var(--soft); }
+/* Skizze in der Notiz */
+.nv-sketch { display: block; width: 100%; margin-top: 14px; padding: 0; border-radius: 16px; overflow: hidden; box-shadow: 0 0 0 1px var(--soft), var(--tile-shadow); background: var(--white); }
+.nv-sketch img { display: block; width: 100%; height: auto; }
+.nv-sketch-btn { display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 10px; padding: 10px 12px; border-radius: 14px; background: var(--pale); color: var(--ink); font-size: 15px; font-weight: 600; text-align: left; }
+.nv-sketch-btn svg { width: 22px; height: 22px; flex: none; }
+.nv-sketch-btn img { width: 96px; height: 58px; object-fit: contain; border-radius: 8px; background: var(--white); flex: none; }
 .mt-stat em { display: none; font-style: normal; color: var(--ink); font-weight: 600; }
 /* Handy: kleine Kacheln kompakt (Name unten bei der Angabe), mittlere ohne Grafik unten (zu wenig Höhe) */
 @media (max-width: 599px) {
@@ -341,6 +349,13 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
   .mtiles { grid-auto-rows: 140px; gap: 14px; }
   .mt-date.sz-l .md-day { font-size: 112px; }
   .mt-date.sz-m .md-day { font-size: 78px; }
+}
+/* Desktop: Datum Mittel/Groß wie am Handy untereinander, mit Jahresbalken und Woche */
+@media (min-width: 1024px) {
+  /* Datum Mittel/Groß: wie am Handy untereinander, mit Jahresbalken und Woche */
+  .mt-date.sz-m, .mt-date.sz-l { display: flex; align-items: flex-start; padding: 18px 22px; }
+  .mt-date.sz-m .md-day, .mt-date.sz-l .md-day { font-size: 96px; }
+  .mt-date.sz-l .mt-dweek > span { min-width: 54px; }
 }
 
 .dash-day[data-act] { cursor: pointer; }

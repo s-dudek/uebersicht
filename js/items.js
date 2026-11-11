@@ -1,20 +1,5 @@
 // Todo- und Notiz-Fenster sowie Teilen
-import {
-  canDeleteItem,
-  catById,
-  debounce,
-  esc,
-  isCatShared,
-  isItemShared,
-  itemById,
-  membersOf,
-  nameOf,
-  safeColor,
-  sb,
-  sharesOf,
-  state,
-  toast,
-} from './core.js';
+import { canDeleteItem, catById, debounce, esc, isCatShared, isItemShared, itemById, membersOf, nameOf, safeColor, sb, sharesOf, sketchSrc, state, toast } from './core.js';
 import { deleteItem, loadAll, saveItem, silentDelete } from './data.js';
 import { remindLabel, toLocalInput } from './dates.js';
 import { openEvent, showEvent } from './events.js';
@@ -23,6 +8,7 @@ import { openMeal } from './meals.js';
 import { openTraining } from './training.js';
 import { canvasShow } from './ink-remind.js';
 import { openReminder } from './remind-page.js';
+import { openSketch } from './ink.js';
 import { pushOn, pushSupport, remindHint } from './reminders.js';
 import { render } from './render.js';
 import { categoryOptions, clearSheetClose, closeSheet, colorPick, openSheet, sheetActs } from './sheet.js';
@@ -49,11 +35,13 @@ function openNoteView(id) {
     </div>
     <article class="note-view"${n.meta?.color ? ` style="--ic:${safeColor(n.meta.color)}"` : ''}>
       <h2 class="nv-title">${esc(n.title) || '<span class="muted">Ohne Titel</span>'}</h2>
-      ${n.body.trim() ? `<div class="nv-body">${readable(n.body)}</div>` : '<p class="muted">Kein Text.</p>'}
+      ${n.body.trim() ? `<div class="nv-body">${readable(n.body)}</div>` : sketchSrc(n) ? '' : '<p class="muted">Kein Text.</p>'}
+      ${sketchSrc(n) ? `<button class="nv-sketch" type="button" id="v-sketch" aria-label="Skizze im Canvas öffnen"><img src="${esc(sketchSrc(n))}" alt=""></button>` : ''}
     </article>`, { full: n.body.length > 400 });   // lange Notizen bekommen das ganze Fenster
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
   const edit = () => openItem(id, { edit: true });
   sheet.querySelector('[data-edit]').addEventListener('click', edit);
+  sheet.querySelector('#v-sketch')?.addEventListener('click', () => { closeSheet(); openSketch(n); });
   sheet.querySelector('.note-view').addEventListener('dblclick', edit);   // Doppelklick am Desktop
 }
 
@@ -78,7 +66,8 @@ export function openItem(id, { isNew = false, edit = false } = {}) {
     </div>
     <div class="f-colrow">${colorPick(i.meta?.color || '', 'f-col')}</div>
     ${isNote
-      ? `<textarea class="note-body" id="f-body" placeholder="Notiz …">${esc(i.body)}</textarea>`
+      ? `<textarea class="note-body" id="f-body" placeholder="Notiz …">${esc(i.body)}</textarea>
+         <button class="nv-sketch-btn" type="button" id="f-sketch">${sketchSrc(i) ? `<img src="${esc(sketchSrc(i))}" alt="">` : ICON.ink}<span>${sketchSrc(i) ? 'Skizze im Canvas bearbeiten' : 'Skizze im Canvas hinzufügen'}</span></button>`
       : `<div class="field" style="margin-top:12px"><label>Notiz</label><textarea class="textarea" id="f-body" style="min-height:90px" placeholder="Details (optional)">${esc(i.body)}</textarea></div>
          <div class="field"><label>Fällig am</label><input class="input" type="date" id="f-due" value="${esc(i.due_date || '')}"></div>`}
     <div class="field" ${isNote ? 'style="margin-top:12px"' : ''}><label>Kategorie</label><select class="select" id="f-cat">${categoryOptions(i.category_id)}</select></div>
@@ -148,6 +137,14 @@ export function openItem(id, { isNew = false, edit = false } = {}) {
   sheet.querySelector('[data-close]').addEventListener('click', () => {
     if (isNew) { saveText.flush = () => {}; clearSheetClose(); silentDelete(id); }
     closeSheet();
+  });
+  // Skizze: gespeicherten Eintrag behalten und in den Canvas des Ordners wechseln (Rahmen dort zeigen bzw. anlegen)
+  sheet.querySelector('#f-sketch')?.addEventListener('click', () => {
+    saveText.flush();
+    isNew = false;
+    closeSheet();
+    const cur = itemById(id);
+    if (cur) openSketch(cur);
   });
   sheet.querySelector('#f-hide')?.addEventListener('click', () => { saveText.flush(); closeSheet(); hideForMe(id); });
   sheet.querySelector('[data-del]')?.addEventListener('click', async () => {

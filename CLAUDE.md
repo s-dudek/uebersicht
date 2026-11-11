@@ -29,7 +29,7 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   Einstellungen, Abmelden) und Kacheln (`home-tiles.js`, wie Widgets am iPhone: Größe Klein/Mittel/Groß und Reihenfolge je Person in
   cat_order 'tiles'/'tilesz'; langes Drücken = Menü, weiterziehen = verschieben, „Home-Bildschirm bearbeiten“ = wackeln mit Größen-Knopf, „Fertig“); Angeheftetes („Zu Home hinzufügen“) ist dort ebenfalls eine Kachel
   (keine eigene Pinnwand am Handy); Notizen- und Notiz-Ordner-Kacheln mit Knopf direkt in den Canvas (zuletzt benutzter Ordner: `inkFolder`).
-  Kachel-Gestaltung: Akzentfarbe `accent` (`--ac`), Symbol im Farbkreis, keine Wasserzeichen; Klein = Kennzahl (`stat`), Mittel/Groß = Liste plus Grafik unten (`foot`: Wochenleiste, Fortschritt, zuletzt bearbeitet; am Handy bei Mittel ausgeblendet), Datum aufwendiger (Verlauf, Ring = Jahresfortschritt mit KW, groß zusätzlich Tag im Jahr und laufende Woche).
+  Kachel-Gestaltung: Akzentfarbe `accent` (`--ac`), Symbol im Farbkreis, keine Wasserzeichen; Klein = Kennzahl (`stat`), Mittel/Groß = Liste plus Grafik unten (`foot`: Wochenleiste, Fortschritt, zuletzt bearbeitet; am Handy bei Mittel ausgeblendet), Datum aufwendiger (Verlauf, Ring = Jahresfortschritt mit KW; Groß und am Desktop auch Mittel zusätzlich Tag im Jahr und laufende Woche).
   Freie Fläche der Startseite: Rechtsklick bzw. langes Drücken = „Home-Bildschirm bearbeiten“ (menu.js).
   Kopfleisten der Bereiche schmal im selben Dunkelgrün, gleiche Höhe (44 px) und Schrift in Salbei (außer Canvas). Einen eigenen Bereich „Kategorien“ gibt es nicht mehr (Ordner in Todos/Notizen).
 - Fenster (Sheets): oben rechts runde Knöpfe aus `sheetActs()` (sheet.js) – Bearbeiten, Speichern ✓, Schließen ✕, Löschen; Kopf bleibt beim Scrollen oben.
@@ -59,6 +59,9 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   unendliche Fläche (verschieben, zoomen 25–400 %, „Ursprungsansicht“), Werkzeugleiste unter der Kopfleiste (einfahrbar), Ordnerwahl über den Titel,
   Formen (als Striche), Textmarker (Strich mit `m`), Text (Element `x`), Bemaßung (Element `d`), Bilder mit Zuschnitt `cr` und Radierspuren `er`,
   Drehen über den Griff oben an der Auswahl (Striche/Formen/Bemaßung: Punkte gedreht; Bilder und Texte: Winkel `r` um die Mitte; gedrehte Bilder nicht zuschneiden),
+  Notiz-Skizze: im Notiz-Fenster „Skizze im Canvas“ → Bereich `fmt: 'note'` (500×300) mit `nid` auf der Startseite des Ordner-Canvas (`openSketch`, `sketchFrame`);
+  nach jedem Speichern wird der Rahmen als JPEG in `meta.sketch` der Notiz gelegt (`updateSketches`, still ohne Neuzeichnen; Anzeige nur über `sketchSrc` geprüft) – zu sehen in der Notiz und ihrer Home-Kachel.
+  Kopieren: Auswahl → „Kopieren“ (Leiste/Menü) legt eine Kopie versetzt daneben und merkt sie; langes Drücken/Rechtsklick auf freie Stelle → „Einfügen“ (auch in anderen Ordnern; ohne Titel und Bereiche).
   Termin-Feld (Element `c`, ink-cal.js: Verweis `ev` bzw. `xo` plus Kopie `tt`/`d`/`tm`, Größe `sz` s/m/l wie Kacheln, HTML-Ebene; ziehen = verschieben, antippen = Wochenansicht des Tages, Inhalt immer aktuell aus dem Kalender),
   Bereiche mit Name `n`, Hintergrund `bg` (lines/dots/blank), Farbe `fc`, Layout `ly` im Dudek-CI (ink-layout.js) mit Angaben `lf` (Titel, Projekt, Nr., Kontakt), Gliederung (Notizen zuerst, Titel unter ihrem Bereich, „Auf der Fläche zeigen“),
   Werkzeugleiste: Umschalter Text/Zeichnen/Radieren, Auswahl als eigener Knopf (solange aktiv ruhen die anderen Werkzeuge),

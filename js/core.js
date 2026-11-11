@@ -138,6 +138,8 @@ export const state = {
 };
 
 export const catById = (id) => state.categories.find((c) => c.id === id);
+// Skizze einer Notiz (Bild aus ihrem Canvas-Rahmen, meta.sketch): nur echtes JPEG als data-URL zulassen
+export const sketchSrc = (i) => { const s = i?.meta?.sketch; return typeof s === 'string' && s.length < 600000 && /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(s) ? s : ''; };
 // Reiner Canvas-Ordner: zeigt nur den Canvas, keine Notizen-Liste
 export const isCanvasOnly = (id) => !!(id && catById(id)?.canvas_only);
 // Notiz-Ordner im Canvas (Knopf „Canvas“ oder reiner Canvas-Ordner)
