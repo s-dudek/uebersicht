@@ -458,20 +458,5 @@ alter table public.categories add column if not exists deleted_at timestamptz;
 -- Reine Canvas-Ordner: Notiz-Ordner öffnet direkt den Canvas (ohne Liste)
 alter table public.categories add column if not exists canvas_only boolean not null default false;
 
--- Kalender: Termin an eine andere Person kopieren (gehört dann ihr; nur Termine, Felder geprüft)
-create or replace function public.give_event(target uuid, p_title text, p_body text, p_day date, p_time text, p_end text, p_kind text)
-returns text language plpgsql security definer set search_path = public as $$
-begin
-  if auth.uid() is null then return 'not_allowed'; end if;
-  if target = auth.uid() then return 'self'; end if;
-  if not exists (select 1 from public.profiles where id = target) then return 'not_found'; end if;
-  if p_day is null or coalesce(p_time, '') !~ '^(\d{2}:\d{2})?$' or coalesce(p_end, '') !~ '^(\d{2}:\d{2})?$' then return 'invalid'; end if;
-  insert into public.items (id, owner_id, type, title, body, due_date, meta)
-  values (gen_random_uuid(), target, 'event', left(coalesce(p_title, ''), 300), left(coalesce(p_body, ''), 4000), p_day,
-    jsonb_build_object('kind', case when p_kind = 'birthday' then 'birthday' else 'event' end,
-      'repeat', case when p_kind = 'birthday' then 'yearly' else '' end, 'remind', '',
-      'time', coalesce(p_time, ''), 'end', coalesce(p_end, ''), 'from', auth.uid()));
-  return 'ok';
-end $$;
-revoke all on function public.give_event(uuid, text, text, date, text, text, text) from public, anon;
-grant execute on function public.give_event(uuid, text, text, date, text, text, text) to authenticated;
+-- (Termin an eine Person kopieren wurde ersetzt durch Kopieren in einen anderen Kalender-Abschnitt)
+drop function if exists public.give_event(uuid, text, text, date, text, text, text);

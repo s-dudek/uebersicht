@@ -1,5 +1,6 @@
 // Bereich Kalender: Tag, Woche (Zeitraster wie bei Google), Monat; Abschnitte ein- und ausblenden, verknüpfte Kalender
 import { calDragBusy } from './cal-drag.js';
+import { calSections, createIn } from './cal-menu.js';
 import { addCalendar, calendars, calOf, ensureExternal, EXT_COLORS, extOn, extOcc, feedError, google, isShown, reloadGoogle, removeCalendar, SECTIONS, toggleSection, unlinkGoogle } from './cal-sources.js';
 import { $app, askConfirm, canDeleteItem, esc, state, toast } from './core.js';
 import { addDays, dayName, isoWeek, mondayOf, parseYmd, ymd } from './dates.js';
@@ -350,6 +351,6 @@ function openExtEvent(id) {
     title: o.title, when: whenText(o.start, o.end, o.allDay), location: o.location, desc: o.desc,
     calName: c?.name || 'Verknüpfter Kalender', color: c?.color || EXT_COLORS[0],
     hint: edit ? '' : 'Nur zum Ansehen – ändern im Ursprungskalender.',
-    onEdit: edit ? () => openGoogleEvent(o, { color: c.color, name: c.name, onDone: reloadGoogle }) : null,
+    onEdit: edit ? () => openGoogleEvent(o, { color: c.color, name: c.name, onDone: reloadGoogle, sections: calSections(), toSection: (key, d) => createIn(d, key) }) : null,
   });
 }

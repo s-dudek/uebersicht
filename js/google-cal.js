@@ -75,19 +75,19 @@ export const addGoogle = (gcal, event) => call('save', { cal: gcal, event });
 export const deleteGoogle = (o) => call('delete', { cal: o.gcal, id: o.gid });
 
 // Bearbeiten-Fenster: o = vorhandenes Vorkommen (mit gcal) oder null für neu.
-// Beim Anlegen: cals = beschreibbare Kalender, sel = vorgewählter, pre = schon Eingetipptes,
-// toApp(pre) wechselt zum Termin in der App. onDone(gcal) lädt den Kalender neu.
-export function openGoogleEvent(o, { day = ymd(new Date()), time = '', cals = [], sel = '', pre = {}, toApp = null, color = G_BLUE, name = 'Google', onDone } = {}) {
-  const isNew = !o;
-  const pick = isNew && (cals.length > 1 || toApp);
+// sections = Abschnitte zum Wählen ({ key, name, color }; Google-Kalender als 'g:<id>'), sel = vorgewählter beim Anlegen,
+// pre = schon Eingetipptes. toSection(key, daten) legt den Termin in einem App-Abschnitt an (beim Anlegen sofort,
+// beim Bearbeiten nach „Speichern“; danach wird er hier gelöscht). onDone(gcal) lädt den Kalender neu.
+export function openGoogleEvent(o, { day = ymd(new Date()), time = '', sections = [], sel = '', pre = {}, toSection = null, color = G_BLUE, name = 'Google', onDone } = {}) {
+  const isNew = !o, here = o ? 'g:' + o.gcal : sel;
   const st = o ? o.start : new Date(`${day}T${time || '09:00'}`);
   const en = o ? (o.allDay ? new Date(o.end - 864e5) : o.end) : new Date(st.getTime() + 36e5);
   const allDay = o ? o.allDay : false;
-  const head = isNew ? cals.find((c) => c.gcal === sel) || cals[0] || { name: 'Google', color: G_BLUE } : { name, color };
+  const head = sections.find((c) => c.key === here) || { name, color };
   const sheet = openSheet(`<div class="sheet-head"><span class="status"><i class="src-dot" style="background:${safeColor(head.color, G_BLUE)}"></i>${esc(head.name)}</span><button class="link-btn" data-close>Abbrechen</button></div>
     <form id="ge-form">
-      ${pick ? `<div class="field"><label for="ge-cal">Kalender</label><select class="select" id="ge-cal">
-        ${toApp ? '<option value="">Übersicht (App)</option>' : ''}${cals.map((c) => `<option value="${esc(c.gcal)}" ${c.gcal === head.gcal ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>` : ''}
+      ${sections.length > 1 ? `<div class="field"><label for="ge-cal">Abschnitt</label><select class="select" id="ge-cal">
+        ${sections.map((c) => `<option value="${esc(c.key)}" ${c.key === here ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>` : ''}
       <input class="title-input" id="ge-title" placeholder="Was steht an?" value="${esc(o?.title || pre.title || '')}" autocomplete="off" maxlength="300">
       <button class="menu-item" id="ge-all" type="button" style="margin-top:12px">Ganztägig<span class="sw ${allDay ? 'on' : ''}"></span></button>
       <div class="field"><label>Beginn</label><div class="row-inline"><input class="input" type="date" id="ge-d1" value="${ymd(st)}" required><input class="input ge-t" type="time" id="ge-t1" value="${hhmm(st)}"></div></div>
@@ -95,7 +95,7 @@ export function openGoogleEvent(o, { day = ymd(new Date()), time = '', cals = []
       <div class="field"><label for="ge-loc">Ort</label><input class="input" id="ge-loc" maxlength="300" value="${esc(o?.location || '')}"></div>
       <div class="field"><label for="ge-desc">Beschreibung</label><textarea class="textarea" id="ge-desc" style="min-height:80px" maxlength="4000">${esc(o?.desc || pre.desc || '')}</textarea></div>
       ${o?.recurring ? '<p class="hint">Wiederkehrender Termin: geändert wird nur dieser eine Termin.</p>' : ''}
-      <button class="btn block" id="ge-save">${isNew ? 'In Google anlegen' : 'Speichern'}</button>
+      <button class="btn block" id="ge-save">${isNew ? 'Anlegen' : 'Speichern'}</button>
       ${isNew ? '' : `<button class="btn danger block" type="button" id="ge-del" style="margin-top:10px">Termin löschen</button>`}
     </form>`);
   let all = allDay;
@@ -103,17 +103,15 @@ export function openGoogleEvent(o, { day = ymd(new Date()), time = '', cals = []
   const showTimes = () => sheet.querySelectorAll('.ge-t').forEach((t) => { t.hidden = all; });
   showTimes();
   $('[data-close]').addEventListener('click', closeSheet);
-  // anderer Kalender gewählt: merken (gilt fürs nächste Anlegen); „Übersicht“ wechselt zum Termin in der App
+  const form = () => ({ title: $('#ge-title').value.trim(), desc: $('#ge-desc').value, location: $('#ge-loc').value.trim(), day: $('#ge-d1').value || day,
+    time: all ? '' : $('#ge-t1').value, end: all ? '' : $('#ge-t2').value, allDay: all });
+  // anderer Abschnitt: Kopfzeile anpassen; beim Anlegen merken (gilt fürs nächste Mal), ein App-Abschnitt wechselt gleich dorthin
   $('#ge-cal')?.addEventListener('change', (e) => {
-    if (!e.target.value) {
-      store('calTarget', 'app');
-      const p = { title: $('#ge-title').value, desc: $('#ge-desc').value, day: $('#ge-d1').value || day, time: all ? '' : $('#ge-t1').value };
-      closeSheet();
-      return toApp(p);
-    }
-    store('calTarget', e.target.value);
-    const c = cals.find((x) => x.gcal === e.target.value);
-    if (c) { $('.sheet-head .src-dot').style.background = c.color; $('.sheet-head .status').lastChild.textContent = c.name; }
+    const key = e.target.value, c = sections.find((x) => x.key === key);
+    if (c) { $('.sheet-head .src-dot').style.background = safeColor(c.color, G_BLUE); $('.sheet-head .status').lastChild.textContent = c.name; }
+    if (!isNew) return;
+    store('calTarget', key.startsWith('g:') ? key.slice(2) : 'app');
+    if (!key.startsWith('g:')) { const p = form(); closeSheet(); toSection?.(key, p); }
   });
   $('#ge-all').addEventListener('click', () => { all = !all; $('#ge-all .sw').classList.toggle('on', all); showTimes(); });
   // Beginn verschoben: Ende mitziehen, wenn es sonst davor läge
@@ -131,8 +129,17 @@ export function openGoogleEvent(o, { day = ymd(new Date()), time = '', cals = []
       : { allDay: false, start: `${d1}T${t1}:00`, end: `${d2}T${t2}:00` };
     if (!all && event.end <= event.start) return toast('Das Ende liegt vor dem Beginn.', 3000);
     Object.assign(event, { title: $('#ge-title').value.trim(), location: $('#ge-loc').value.trim(), desc: $('#ge-desc').value });
-    const gcal = o ? o.gcal : $('#ge-cal')?.value || cals[0]?.gcal || 'primary';
-    busy($('#ge-save'), () => call('save', { cal: gcal, id: o?.gid, event }), gcal);
+    const key = $('#ge-cal')?.value || here, gcal = key.startsWith('g:') ? key.slice(2) : '';
+    if (isNew) return busy($('#ge-save'), () => call('save', { cal: gcal || 'primary', event }), gcal);
+    if (key === here) return busy($('#ge-save'), () => call('save', { cal: o.gcal, id: o.gid, event }), o.gcal);
+    // in einen anderen Abschnitt verschieben: dort anlegen, hier löschen
+    const span = all ? Math.max(1, Math.round((new Date(event.end) - new Date(event.start)) / 864e5)) : 1;
+    busy($('#ge-save'), async () => {
+      if (gcal) await call('save', { cal: gcal, event }); else await toSection(key, { ...form(), span });
+      await call('delete', { cal: o.gcal, id: o.gid });
+      if (gcal) await onDone?.(gcal);
+      toast('Verschoben');
+    }, o.gcal);
   });
   $('#ge-del')?.addEventListener('click', async () => {
     if (!(await askConfirm(`„${o.title}“ löschen?`, 'Löschen', 'Der Termin wird auch in Google gelöscht.'))) return;

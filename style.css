@@ -972,6 +972,10 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .cm-what { display: flex; flex-direction: column; gap: 2px; margin: 0 2px 14px; }
 .cm-what b { font-size: 17px; }
 .cm-what span { font-size: 14px; color: var(--grey); }
+.cm-secs { display: flex; flex-direction: column; gap: 6px; }
+.cm-sec { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border-radius: 14px; background: var(--white); box-shadow: inset 0 0 0 1.5px var(--soft); text-align: left; font-size: 15px; font-weight: 600; }
+.cm-sec i { flex: none; width: 12px; height: 12px; border-radius: 50%; }
+.cm-sec:hover { background: var(--pale); }
 .cblk-rs { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; cursor: ns-resize; }
 .cblk-rs::after { content: ''; position: absolute; left: 50%; bottom: 2px; width: 18px; height: 3px; margin-left: -9px; border-radius: 2px; background: currentColor; opacity: 0; transition: opacity .15s; }
 .cblk[data-mv]:hover .cblk-rs::after, .cblk.moving .cblk-rs::after { opacity: .5; }
