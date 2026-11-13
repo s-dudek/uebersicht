@@ -5,6 +5,7 @@ import { addDays, ymd } from './dates.js';
 import { disconnectGoogle, googleStatus, listGoogle } from './google-cal.js';
 import { expand, parseIcs } from './ics.js';
 import { render } from './render.js';
+import { busy } from './loader.js';
 
 // eigene Abschnitte: Schlüssel, Name, Farbe
 export const SECTIONS = [
@@ -44,7 +45,7 @@ let loading = null, listAt = 0;
 export function ensureExternal(force = false) {
   if (!state.me || loading) return loading;
   if (!force && Date.now() - listAt < STALE) return null;
-  loading = refresh(force).finally(() => { loading = null; });
+  loading = busy(refresh(force)).finally(() => { loading = null; });
   return loading;
 }
 

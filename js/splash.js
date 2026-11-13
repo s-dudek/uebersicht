@@ -1,16 +1,16 @@
-// Startbild: Dudek-Zeichen hell auf dunkel. Zum Schluss klappt nur das Zeichen zusammen wie das Bild eines alten
+// Startbild: Dudek-Zeichen als laufendes Ladesymbol hell auf dunkel (loader.js). Zum Schluss klappt nur das Zeichen zusammen wie das Bild eines alten
 // Fernsehers: es wird zu einem leuchtenden Strich (dabei verschwindet schon der dunkle Grund und die App ist zu sehen),
 // der Strich zieht sich zu einem Punkt, der verlischt. Läuft einmal pro App-Start.
-import { LOGO_MARK } from './icons.js';
+import { LOADER } from './loader.js';
 
 const el = document.getElementById('splash');
-const MIN_SHOW = 700;            // so lange steht das Zeichen mindestens
+const MIN_SHOW = 1500;           // so lange läuft das Ladesymbol mindestens (knapp eine Runde)
 const started = performance.now();
 let done = false;
 
 export function initSplash() {
   if (!el) return;
-  el.innerHTML = LOGO_MARK;
+  el.innerHTML = LOADER;
   el.firstElementChild.animate(
     [{ opacity: 0, transform: 'scale(.85)' }, { opacity: 1, transform: 'scale(1)' }],
     { duration: 260, easing: 'ease-out', fill: 'both' });

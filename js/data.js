@@ -2,6 +2,7 @@
 import { askConfirm, debounce, itemById, sb, state, toast } from './core.js';
 import { ICON } from './icons.js';
 import { openItem } from './items.js';
+import { busy } from './loader.js';
 import { deletePageTree } from './ink-store.js';
 import { checkReminders } from './reminders.js';
 import { render } from './render.js';
@@ -11,14 +12,14 @@ import { purgeCategory } from './trash.js';
 // Daten laden + Live-Updates
 // ====================================================================
 export async function loadAll() {
-  const [c, m, i, s, p, h] = await Promise.all([
+  const [c, m, i, s, p, h] = await busy(Promise.all([
     sb.from('categories').select('*').order('name'),
     sb.from('category_members').select('*'),
     sb.from('items').select('*').order('created_at', { ascending: false }),
     sb.from('item_shares').select('*'),
     sb.from('profiles').select('*'),
     sb.from('ink_pages').select('category_id, home_img').is('parent_id', null),
-  ]);
+  ]));
   const err = c.error || m.error || i.error || s.error || p.error;
   if (err) { toast('Laden fehlgeschlagen: ' + err.message, 4000); return; }
   // Papierkorb: Markiertes getrennt halten; Einträge einer gelöschten Kategorie erscheinen bis dahin „ohne Kategorie“

@@ -51,6 +51,8 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
 - Notizen: Mehrfachauswahl (`note-select.js`, Knopf „Auswählen“ im Ordner): antippen markiert, dann Verschieben (Ordner wählen) oder Löschen (mit Canvas-Seiten).
 - Menü (`menu.js`): Rechtsklick (Maus) bzw. langes Drücken auf Ordner/Karten am Touchscreen (drag.js; weiterziehen = umsortieren),
   mit „Verschieben“ (Reihenfolge) und „Zu Home hinzufügen“.
+- Ladesymbol (`loader.js`, nach Simons GIF): Zeichen als feine Linie, ein kräftiger Abschnitt läuft rundum (je Bogen ein Pfad, Keyframes ld-top/-right/-left);
+  im Startbild (mind. 1,5 s), statt „Lädt …“ und klein unten beim Nachladen (`busy()` um loadAll, verknüpfte Kalender, Canvas laden).
 - Startbild (`splash.js`): nur das Zeichen klappt wie ein altes Fernsehbild zu Strich und Punkt zusammen; beim Aufleuchten blendet der dunkle Grund schon aus.
 - `render()` baut die Ansicht neu auf; während Gesten `render.hold = true` setzen, danach `render.pending` abarbeiten.
 - Canvas (früher „Handschrift“, Code `js/ink*.js`): je Notiz-Ordner eine Startseite in `ink_pages`, Titel führen zu Unterseiten, A4-Bereiche auf dem 25er-Raster.

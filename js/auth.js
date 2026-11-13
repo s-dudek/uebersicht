@@ -6,6 +6,7 @@ import { ICON, LOGO_MARK, LOGO_WORD } from './icons.js';
 import { resetInk } from './ink.js';
 import { closeSheet } from './sheet.js';
 import { splashReady } from './splash.js';
+import { LOADER } from './loader.js';
 
 // ====================================================================
 // Anmeldung
@@ -94,7 +95,7 @@ export function initAuth() {
     if (uid === state.me) return;
     state.me = uid;
     if (uid) {
-      $app.innerHTML = '<div class="center">Lädt …</div>';
+      $app.innerHTML = `<div class="center loading">${LOADER}</div>`;
       // ausserhalb des Auth-Callbacks starten (vermeidet Blockieren in supabase-js)
       setTimeout(() => { loadAll(); subscribe(); }, 0);
     } else {

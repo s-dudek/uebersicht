@@ -15,6 +15,7 @@ import { calCardHtml, calColor, drawCalCard, nextCalSize, openCalOf, pickCalEven
 import { bellCardHtml, bellColor, drawBellCard, openBellOf } from './ink-remind.js';
 import { askReminder, createReminder } from './remind-page.js';
 import { openItem } from './items.js';
+import { busy, LOADER } from './loader.js';
 import { isPinned, pinKey, togglePin } from './pins.js';
 import { dropMenu } from './menu.js';
 import { notesIn } from './notes.js';
@@ -129,7 +130,7 @@ async function start(fid) {
   cat = fid;
   status = 'loading';
   try {
-    const row = await loadRoot(fid);
+    const row = await busy(loadRoot(fid));
     if (cat !== fid) return;   // inzwischen anderer Ordner
     openPage(row);
     status = 'ready';
@@ -656,7 +657,7 @@ async function runExport(b, list) {
 export function renderInk(fid) {
   if (cat !== fid) { leaveInk(); start(fid); }
   if (status === 'error') return '<div class="ink-slot"><p class="empty ink-msg">Der Canvas ist gerade nicht erreichbar. Bitte später nochmal versuchen.</p></div>';
-  if (!top()) return '<div class="ink-slot"><p class="center muted ink-msg">Lädt …</p></div>';
+  if (!top()) return `<div class="ink-slot"><div class="center loading ink-msg">${LOADER}</div></div>`;
   return `${inkBar()}<div class="ink-slot">
     <div class="ink-ctx" role="toolbar" aria-label="Eigenschaften">${contextHtml()}</div>
   </div>`;
