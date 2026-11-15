@@ -1,8 +1,9 @@
-// Bereich Gerichte: Wochenplan, Einkaufsliste, Übernahme aus einem Code
+// Bereich Essen: Wochenplan (Gerichte), Einkaufsliste, Übernahme aus einem Code; Rezepte in recipes.js
 import { canDeleteItem, debounce, esc, itemById, sb, state, toast } from './core.js';
 import { deleteItem, insertCategory, loadAll, saveItem } from './data.js';
 import { addDays, dayName, isoWeek, parseYmd, ymd } from './dates.js';
 import { ICON } from './icons.js';
+import { openRecipe, renderRecipes } from './recipes.js';
 import { render } from './render.js';
 import { closeSheet, openSheet, sheetActs } from './sheet.js';
 
@@ -17,7 +18,7 @@ export function groupBySection(items, row) {
 }
 
 // ---------- Wochenplan: Abteilungen, Mahlzeiten, Datum ----------
-const SECTIONS = [
+export const SECTIONS = [
   ['Obst & Gemüse', 'leaf'], ['Brot & Backwaren', 'bread'], ['Kühlregal', 'milk'], ['Fleisch & Fisch', 'meat'],
   ['Tiefkühl', 'snow'], ['Trockenware & Konserven', 'jar'], ['Gewürze & Öle', 'spice'], ['Getränke', 'bottle'],
   ['Süßes & Snacks', 'candy'], ['Drogerie & Haushalt', 'spray'], ['Sonstiges', 'dots'],
@@ -54,7 +55,15 @@ export function mealRow(m, { compact = false } = {}) {
   </button>`;
 }
 
-export function renderMeals() {
+// Bereich Essen: oben Umschalter Wochenplan / Rezepte (gemerkt im Browser)
+export function renderFood() {
+  const tab = state.foodTab === 'recipes' ? 'recipes' : 'week';
+  const seg = `<div class="seg-view food-seg">${[['week', 'calendar', 'Wochenplan'], ['recipes', 'book', 'Rezepte']].map(([k, ic, l]) =>
+    `<button class="${tab === k ? 'on' : ''}" data-act="food-tab" data-id="${k}">${ICON[ic]}<span>${l}</span></button>`).join('')}</div>`;
+  return seg + (tab === 'recipes' ? renderRecipes() : renderMeals());
+}
+
+function renderMeals() {
   const days = Array.from({ length: 7 }, (_, k) => addDays(state.weekStart, k));
   const today = ymd(new Date());
   const weekMeals = days.flatMap(mealsOn);
@@ -114,6 +123,7 @@ export function openMeal(id) {
     ${(meta.ingredients || []).length ? `<div class="field"><label>Zutaten${meta.servings ? ` für ${esc(meta.servings)} Portionen` : ''}</label><ul class="ing">${meta.ingredients.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
     ${(meta.steps || []).length ? `<div class="field"><label>Zubereitung</label><ol class="steps">${meta.steps.map((x) => `<li>${esc(x)}</li>`).join('')}</ol></div>` : ''}
     ${meta.note ? `<div class="field"><label>Hinweis</label><p class="m-note">${esc(meta.note)}</p></div>` : ''}
+    ${meta.recipe && itemById(meta.recipe) ? `<button class="btn secondary block" type="button" id="m-recipe" style="margin-bottom:14px">${ICON.book} Rezept öffnen</button>` : ''}
     <div class="row-inline" style="margin-bottom:14px">
       <div class="field" style="flex:1;margin:0"><label>Essen am</label><input class="input" type="date" id="m-date" value="${esc(m.due_date || '')}"></div>
       <div class="field" style="flex:1;margin:0"><label>Kochen am</label><input class="input" type="date" id="m-cook" value="${esc(meta.cook_date || m.due_date || '')}"></div>
@@ -126,6 +136,7 @@ export function openMeal(id) {
   sheet.querySelector('#m-cook').addEventListener('change', (e) => saveItem(id, { meta: { ...(itemById(id).meta || {}), cook_date: e.target.value || null } }));
   sheet.querySelector('[data-save]').addEventListener('click', closeSheet);   // Titel wird beim Schließen gespeichert
   sheet.querySelector('[data-del]')?.addEventListener('click', async () => { if (await deleteItem(id)) closeSheet(); });
+  sheet.querySelector('#m-recipe')?.addEventListener('click', () => { saveTitle.flush(); openRecipe(meta.recipe); });
 }
 
 // ---------- Wochenplan aus einem Code übernehmen (Fenster: plan-import.js) ----------
@@ -134,15 +145,7 @@ export async function importPlan(plan) {
   const einkauf = (plan.einkauf || []).filter((e) => e && e.name);
 
   // 1. Kategorie "Wocheneinkauf" sicherstellen (als Todo-Liste)
-  let cat = shopCat();
-  if (!cat) {
-    const { data, error } = await insertCategory({ name: SHOP_NAME, color: '#7FA08A', todo_list: true });
-    if (error) throw error;
-    state.categories.push(data); cat = data;
-    toast('Liste „Wocheneinkauf“ angelegt. Teilen kannst du sie in den Todos über „Bearbeiten“.', 5000);
-  } else if (!cat.todo_list && cat.owner_id === state.me) {
-    await sb.from('categories').update({ todo_list: true }).eq('id', cat.id); cat.todo_list = true;
-  }
+  const cat = await ensureShopCat();
 
   // 2. Abgehakte Einkäufe löschen
   for (const i of state.items.filter((x) => x.type === 'todo' && x.category_id === cat.id && x.done)) {
@@ -172,9 +175,30 @@ export async function importPlan(plan) {
   if (mealRows.length) { const { error } = await sb.from('items').insert(mealRows); if (error) throw error; }
 
   // 4. Einkauf: gleiche offene Artikel zusammenführen, Rest neu
+  const { added, merged } = await addToShop(einkauf, cat);
+  return { meals: mealRows.length, added, merged, firstDate: gerichte.map((g) => g.datum).sort()[0] };
+}
+
+// Liste „Wocheneinkauf“ (Todo-Liste, geteilt): gibt es sie nicht, wird sie angelegt
+export async function ensureShopCat() {
+  let cat = shopCat();
+  if (!cat) {
+    const { data, error } = await insertCategory({ name: SHOP_NAME, color: '#7FA08A', todo_list: true });
+    if (error) throw error;
+    state.categories.push(data); cat = data;
+    toast('Liste „Wocheneinkauf“ angelegt. Teilen kannst du sie in den Todos über „Bearbeiten“.', 5000);
+  } else if (!cat.todo_list && cat.owner_id === state.me) {
+    await sb.from('categories').update({ todo_list: true }).eq('id', cat.id); cat.todo_list = true;
+  }
+  return cat;
+}
+
+// Artikel auf die Einkaufsliste: [{ name, menge, abteilung, fuer }]; gleiche offene Artikel werden zusammengeführt
+export async function addToShop(entries, cat = null) {
+  cat ??= await ensureShopCat();
   const openByName = new Map(state.items.filter((x) => x.type === 'todo' && x.category_id === cat.id && !x.done).map((x) => [x.title.trim().toLowerCase(), x]));
   const newRows = []; let merged = 0;
-  for (const e of einkauf) {
+  for (const e of entries.filter((x) => x && x.name)) {
     const key = String(e.name).trim().toLowerCase();
     const meta = { amount: e.menge || '', section: SECTIONS.some(([n]) => n === e.abteilung) ? e.abteilung : 'Sonstiges', for: e.fuer || '' };
     const ex = openByName.get(key);
@@ -185,7 +209,6 @@ export async function importPlan(plan) {
     } else newRows.push({ type: 'todo', title: String(e.name).slice(0, 120), category_id: cat.id, meta });
   }
   if (newRows.length) { const { error } = await sb.from('items').insert(newRows); if (error) throw error; }
-
   await loadAll();
-  return { meals: mealRows.length, added: newRows.length, merged, firstDate: gerichte.map((g) => g.datum).sort()[0] };
+  return { added: newRows.length, merged };
 }

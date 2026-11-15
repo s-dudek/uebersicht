@@ -129,6 +129,7 @@ export const state = {
   inkSideOff: store('inkSideOff') === '1',   // Canvas am Desktop: Seitenleiste eingefahren
   homeDay: null,
   homeImgs: {},        // Homescreen-Ausschnitt je Canvas-Ordner (ink_pages.home_img der Startseite), Schlüssel = Ordner-ID
+  foodTab: store('foodTab') || 'week',   // Bereich Essen: 'week' (Wochenplan) oder 'recipes'
   backTo: null,        // Rückweg in den Canvas ({ fid, match }), wenn man von dort in Kalender/Erinnerungen kam
   homeEdit: false,
   noteSel: null,                         // Notizen: Mehrfachauswahl { fid, ids: Set }                       // Startseite (schmal): Kacheln bearbeiten (wackeln)                         // Startseite: gezeigter Tag (null = heute)

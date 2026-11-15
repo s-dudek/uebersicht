@@ -8,7 +8,7 @@ import { homeBar, renderHome } from './home.js';
 import { trashCount } from './trash.js';
 import { inkHead, inkHeadTools, leaveInk, mountInk } from './ink.js';
 import { ICON, LOGO_MARK, LOGO_WORD } from './icons.js';
-import { renderMeals } from './meals.js';
+import { renderFood } from './meals.js';
 import { renderTraining } from './training.js';
 import { NAV } from './nav.js';
 import { remindCount, renderReminders } from './remind-page.js';
@@ -20,7 +20,7 @@ import { renderTodos, todosIn } from './todos.js';
 // Dudek-Zeichen als Wasserzeichen hinter allem
 const WATERMARK = `<div class="watermark" aria-hidden="true">${LOGO_MARK}</div>`;
 
-const PAGES = { home: renderHome, todos: renderTodos, notes: renderNotes, meals: renderMeals, training: renderTraining, calendar: renderCalendar, reminders: renderReminders };
+const PAGES = { home: renderHome, todos: renderTodos, notes: renderNotes, meals: renderFood, training: renderTraining, calendar: renderCalendar, reminders: renderReminders };
 
 export function render() {
   if (!state.me || !state.loaded) return;
@@ -116,6 +116,7 @@ function actionsFor(tab) {
     if (selecting()) return selectBar();
     return `${actBtn('close-list', 'chevL', 'Ordner')}${actBtn('new-note-in', 'plus', 'Notiz', { id: state.list, primary: true })}${notesIn(state.list).length ? actBtn('note-sel', 'check', 'Auswählen', { text: false }) : ''}${state.list ? actBtn('list-edit', 'dots', 'Ordner bearbeiten', { id: state.list, text: false }) : ''}`;
   }
+  if (tab === 'meals' && state.foodTab === 'recipes') return actBtn('import-plan', 'plus', 'Code') + actBtn('new-recipe', 'plus', 'Rezept', { primary: true });
   if (tab === 'meals') {
     return `${actBtn('week-prev', 'chevL', 'Vorige Woche', { text: false })}<button class="dk wk-now" data-act="week-today"><span>KW ${isoWeek(state.weekStart)}</span></button>${actBtn('week-next', 'chevR', 'Nächste Woche', { text: false })}${actBtn('import-plan', 'plus', 'Code', { primary: true })}`;
   }
@@ -126,12 +127,13 @@ function actionsFor(tab) {
 }
 
 // ---------- Kopfleiste (hängt am oberen Rand) ----------
-const TITLES = { todos: 'Todos', notes: 'Notizen', meals: 'Gerichte', training: 'Training', calendar: 'Kalender', reminders: 'Erinnerungen' };
+const TITLES = { todos: 'Todos', notes: 'Notizen', meals: 'Essen', training: 'Training', calendar: 'Kalender', reminders: 'Erinnerungen' };
 
 function pageCount(tab) {
   if (tab === 'todos') return state.items.filter((i) => i.type === 'todo' && !i.done).length;
   if (tab === 'notes') return state.items.filter((i) => i.type === 'note').length;
   if (tab === 'reminders') return remindCount();
+  if (tab === 'meals' && state.foodTab === 'recipes') return state.items.filter((i) => i.type === 'recipe').length;
   if (tab === 'meals') return state.items.filter((i) => i.type === 'meal' && i.due_date >= state.weekStart && i.due_date <= addDays(state.weekStart, 6)).length;
   if (tab === 'training') return state.items.filter((i) => i.type === 'training' && i.due_date >= state.weekStart && i.due_date <= addDays(state.weekStart, 6)).length;
   return 0;

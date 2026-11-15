@@ -16,6 +16,7 @@ import { importPlan, shopCat } from './meals.js';
 import { openPlanImport } from './plan-import.js';
 import { openCatalog } from './training.js';
 import { backToCanvas, inkAction } from './ink.js';
+import { editRecipe, filterRecipes } from './recipes.js';
 import { remindAction } from './remind-page.js';
 import { openFolderDrop } from './menu.js';
 import { render } from './render.js';
@@ -57,6 +58,8 @@ export function initActions() {
       case 'new-list': openNewList(); break;
       case 'new-cat': openNewList({ folder: true }); break;
       case 'import-plan': openPlanImport(); break;
+      case 'food-tab': state.foodTab = id; store('foodTab', id); render(); break;
+      case 'new-recipe': editRecipe(); break;
       case 'training-catalog': openCatalog(); break;
       case 'week-prev': state.weekStart = addDays(state.weekStart, -7); render(); break;
       case 'week-next': state.weekStart = addDays(state.weekStart, 7); render(); break;
@@ -76,6 +79,7 @@ export function initActions() {
 
   // Erinnerungen: Zeit selbst gewählt bzw. Eingabe mit Enter (= in einer Stunde)
   $app.addEventListener('change', (e) => { if (e.target.id === 'rm-at') remindAction('rem-at', null, e.target); });
+  $app.addEventListener('input', (e) => { if (e.target.id === 'rc-q') filterRecipes(e.target.value); });   // Rezepte suchen
   $app.addEventListener('submit', async (e) => {
     if (e.target.id === 'rm-form') { e.preventDefault(); return remindAction('rem-quick', 'h1'); }
     const form = e.target.closest('.addrow[data-list]');

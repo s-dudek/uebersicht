@@ -1,9 +1,10 @@
-// Code einfügen: Gerichte (mit Einkaufsliste) und/oder Training – für einen Tag oder eine ganze Woche.
+// Code einfügen: Gerichte (mit Einkaufsliste), Rezepte und/oder Training – für einen Tag oder eine ganze Woche.
 // Den Code stellt Claude im Chat zusammen; das Format steht in CLAUDE.md („Codes für Gerichte und Training“).
 import { esc, state, toast } from './core.js';
 import { dayName, mondayOf, parseYmd } from './dates.js';
 import { ICON } from './icons.js';
 import { importPlan } from './meals.js';
+import { importRecipes, validRecipes } from './recipes.js';
 import { render } from './render.js';
 import { closeSheet, openSheet, sheetActs } from './sheet.js';
 import { importTraining, validTraining } from './training.js';
@@ -13,7 +14,7 @@ function parseCode(text) {
   const short = expandTrainingCode(text);   // kurzer Code aus der Übungs-Datenbank (TR-…)
   if (short) {
     if (!short.length) throw new Error('In diesem Code sind nur freie Tage.');
-    return { plan: {}, meals: [], shop: [], training: validTraining(short) };
+    return { plan: {}, meals: [], shop: [], recipes: [], training: validTraining(short) };
   }
   const a = text.indexOf('{'), b = text.lastIndexOf('}');
   if (a < 0 || b < a) throw new Error('Kein Code gefunden. Bitte den ganzen Code aus dem Chat einfügen.');
@@ -22,8 +23,9 @@ function parseCode(text) {
   const meals = Array.isArray(plan.gerichte) ? plan.gerichte.filter((g) => g && g.datum && g.titel) : [];
   const shop = Array.isArray(plan.einkauf) ? plan.einkauf.filter((e) => e && e.name) : [];
   const training = validTraining(plan.training);
-  if (!meals.length && !shop.length && !training.length) throw new Error('Im Code sind weder Gerichte noch Einkäufe noch Training.');
-  return { plan, meals, shop, training };
+  const recipes = validRecipes(plan.rezepte);
+  if (!meals.length && !shop.length && !training.length && !recipes.length) throw new Error('Im Code sind weder Gerichte, Einkäufe, Rezepte noch Training.');
+  return { plan, meals, shop, recipes, training };
 }
 
 // Zeitraum als kurzer Text: „Mo 10.11.“ oder „Mo 10.11. bis So 16.11.“
@@ -51,9 +53,10 @@ export function openPlanImport() {
     if (!$t.value.trim()) { $p.innerHTML = ''; return; }
     try {
       code = parseCode($t.value);
-      const { meals, shop, training } = code;
+      const { meals, shop, recipes, training } = code;
       const lines = [];
       if (meals.length || shop.length) lines.push(`<b>${meals.length} Gerichte, ${shop.length} Einkäufe</b><small>${esc(span(meals.map((g) => g.datum)))}</small><small>Gerichte an denselben Tagen und Mahlzeiten werden ersetzt, abgehakte Einkäufe gelöscht.</small>`);
+      if (recipes.length) lines.push(`<b>${recipes.length === 1 ? '1 Rezept' : `${recipes.length} Rezepte`}</b><small>${esc(recipes.map((x) => x.titel).join(', '))}</small>`);
       if (training.length) lines.push(`<b>${training.length} Trainingseinheiten</b><small>${esc(span(training.map((t) => t.datum)))}</small><small>Deine bisherigen Einheiten an diesen Tagen werden ersetzt.</small>`);
       $p.innerHTML = `<div class="imp-ok">${ICON.check}<div>${lines.join('<hr>')}</div></div>`;
       $go.disabled = false;
@@ -72,6 +75,10 @@ export function openPlanImport() {
         const r = await importPlan(code.plan);
         msg.push(`${r.meals} Gerichte, ${r.added} Einkäufe`);
         first = r.firstDate; tab = 'meals';
+      }
+      if (code.recipes.length) {
+        msg.push(`${await importRecipes(code.recipes)} Rezepte`);
+        if (!code.meals.length) { tab = 'meals'; state.foodTab = 'recipes'; }
       }
       if (code.training.length) {
         const r = await importTraining(code.training);

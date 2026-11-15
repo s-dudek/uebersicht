@@ -7,7 +7,7 @@ import { ICON } from './icons.js';
 import { removeFolderImages } from './ink-store.js';
 import { closeSheet, openSheet, sheetActs } from './sheet.js';
 
-const KIND = { note: ['Notiz', 'notes'], todo: ['Todo', 'todos'], event: ['Termin', 'calendar'], meal: ['Gericht', 'pot'], training: ['Training', 'dumbbell'] };
+const KIND = { note: ['Notiz', 'notes'], todo: ['Todo', 'todos'], event: ['Termin', 'calendar'], meal: ['Gericht', 'pot'], recipe: ['Rezept', 'book'], training: ['Training', 'dumbbell'] };
 const dateDe = (d) => d.toLocaleDateString('de-AT', { day: 'numeric', month: 'long' });
 const left = (x) => dateDe(new Date(new Date(x.deleted_at).getTime() + TRASH_DAYS * 864e5));
 // Kategorien darf nur ihr Besitzer löschen und wiederherstellen – daher nur die eigenen

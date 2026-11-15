@@ -263,6 +263,22 @@ export function getImage(path) {
   return cache.get(path);
 }
 
+// Bild als data-URL für <img> (die CSP erlaubt data:, aber keine blob:-Adressen); '' wenn nicht ladbar
+const urls = new Map();
+export function imageUrl(path) {
+  if (!IMG_PATH.test(path || '')) return Promise.resolve('');
+  if (!urls.has(path)) {
+    urls.set(path, sb.storage.from(BUCKET).download(path).then(({ data, error }) => (error || !data ? '' : new Promise((res) => {
+      const r = new FileReader();
+      r.onload = () => res(String(r.result));
+      r.onerror = () => res('');
+      r.readAsDataURL(data);
+    }))).catch(() => ''));
+  }
+  return urls.get(path);
+}
+export const isImagePath = (p) => IMG_PATH.test(p || '');
+
 export async function removeImages(paths) {
   const list = paths.filter((p) => IMG_PATH.test(p));
   if (!list.length) return;

@@ -9,7 +9,7 @@ export const NAV = [
   { key: 'home', label: 'Home', icon: 'home' },
   { key: 'todos', label: 'Todos', icon: 'todos' },
   { key: 'notes', label: 'Notizen', icon: 'notes' },
-  { key: 'meals', label: 'Gerichte', icon: 'pot' },
+  { key: 'meals', label: 'Essen', icon: 'pot' },
   { key: 'calendar', label: 'Kalender', icon: 'calendar' },
   { key: 'training', label: 'Training', icon: 'dumbbell' },
   { key: 'reminders', label: 'Erinnerungen', icon: 'bell' },

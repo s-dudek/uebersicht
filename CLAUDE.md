@@ -40,6 +40,10 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   Abhaken: Zeile bleibt kurz markiert (`.just-done`, `toggleTodo` in data.js), nochmal tippen nimmt zurück.
 - Reine Canvas-Ordner (`categories.canvas_only`, `isCanvasOnly`/`inkMode` in core.js): öffnen direkt den Canvas, ohne Notizen-Liste und ohne Notizen-Bereich;
   wählbar beim Anlegen („Art“) und im Ordner-Fenster.
+- Bereich Essen (früher Gerichte, Tab `meals`): oben Umschalter Wochenplan / Rezepte (`state.foodTab`, gemerkt). Rezepte (`recipes.js`): Typ `recipe` im Ordner „Wocheneinkauf“ (geteilt),
+  meta { servings, minutes, tags, ingredients [{n, q, s}], steps, note, rating 0–5, nutrition pro Portion, photos (Storage `c/<wocheneinkauf>/…`, Anzeige als data-URL über `imageUrl`), source };
+  Ansicht mit Fotos, Sternen, Portionen umrechnen (`scaleQty`), Zutaten → Einkaufsliste (`addToShop` in meals.js), „In den Wochenplan“ (Gericht mit `meta.recipe`), Notiz; Anlegen/Bearbeiten von Hand (eine Zutat je Zeile) oder per Code („rezepte“).
+  Wir kaufen beim Hofer ein: Rezepte vor dem Eintragen mit Simon abstimmen (Zutaten/Mengen so, wie sie es wirklich machen).
 - Erinnerungen (`remind-page.js`, Bereich `reminders` in NAV, Kachel „Erinnerungen“): alle Einträge mit `remind_at`; eigene als Typ `reminder`
   (Titel, Zeit, `meta.fid` = Canvas-Ordner); oben schnell stellen (Schnellwahl bzw. Zeit wählen, Enter = in 1 Std.).
   Canvas: Auswahl → „Erinnern“ legt eine Erinnerung an und setzt ein Glocken-Feld (Element `b`: `rem`, Kopie `tt`, Größe `sz`; ink-remind.js) daneben;
@@ -80,8 +84,8 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   Export als PDF/PNG/JPEG (eigener PDF-Schreiber in `ink-export.js`). Bilder im privaten Storage-Bucket `ink` (`c/<ordner-id>/…`, `u/<user-id>/…`).
 
 ## Codes für Gerichte und Training
-Simon stellt mit Claude im Chat Essen oder Training zusammen; Claude gibt einen Code aus, den Simon in der App unter
-Gerichte bzw. Training → „Code einfügen“ einfügt (`js/plan-import.js`). Ein Code kann Gerichte, Einkauf und Training enthalten,
+Simon stellt mit Claude im Chat Essen oder Training zusammen bzw. schickt ein Rezept-Foto; Claude gibt einen Code aus, den Simon in der App unter
+Essen bzw. Training → „Code einfügen“ einfügt (`js/plan-import.js`). Ein Code kann Gerichte, Einkauf, Rezepte und Training enthalten,
 für einen Tag oder eine Woche. Format (JSON, Text davor wie `PLAN` ist egal, Datum immer `JJJJ-MM-TT`):
 ```
 PLAN {
@@ -89,7 +93,9 @@ PLAN {
                  "tags": [], "naehrwerte": { "kcal", "eiweiss", "fett", "kohlenhydrate" }, "zutaten": [], "zubereitung": [], "hinweis" }],
   "einkauf":  [{ "name", "menge", "abteilung": "Obst & Gemüse|Brot & Backwaren|Kühlregal|Fleisch & Fisch|Tiefkühl|Trockenware & Konserven|Gewürze & Öle|Getränke|Süßes & Snacks|Drogerie & Haushalt|Sonstiges", "fuer" }],
   "training": [{ "datum", "titel", "art": "kraft|ausdauer|mobilitaet|sport|ruhe", "dauer_min", "fuer",
-                 "aufwaermen": [], "uebungen": [{ "name", "saetze", "wdh", "gewicht", "dauer", "pause", "hinweis" }], "abschluss": [], "hinweis" }]
+                 "aufwaermen": [], "uebungen": [{ "name", "saetze", "wdh", "gewicht", "dauer", "pause", "hinweis" }], "abschluss": [], "hinweis" }],
+  "rezepte":  [{ "titel", "portionen", "dauer_min", "tags": [], "naehrwerte": { "kcal", "eiweiss", "fett", "kohlenhydrate" },
+                 "zutaten": [{ "name", "menge", "abteilung" }], "zubereitung": [], "hinweis", "quelle" }]
 }
 ```
 **Kurze Trainings-Codes (bevorzugt):** Übungs-Datenbank in `js/training-catalog.js` mit festen Nummern

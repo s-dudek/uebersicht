@@ -59,6 +59,7 @@ js/
   ics.js            ICS-Abos lesen (Wiederholungen, Zeitzonen)
   google-cal.js     Google-Kalender verbinden und Termine bearbeiten
   meals.js          Gerichte, Wochenplan, Einkaufsliste
+  recipes.js        Essen → Rezepte: Fotos, Bewertung, Notiz, Portionen, Nährwerte, Einkaufsliste, Wochenplan
   training.js       Training: Woche, Einheiten mit Übungen zum Abhaken
   trash.js          Papierkorb: wiederherstellen, endgültig löschen (30 Tage)
   plan-import.js    Code einfügen: Gerichte, Einkauf und Training (Tag oder Woche)
