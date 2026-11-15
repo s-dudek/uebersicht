@@ -41,8 +41,8 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
 - Reine Canvas-Ordner (`categories.canvas_only`, `isCanvasOnly`/`inkMode` in core.js): öffnen direkt den Canvas, ohne Notizen-Liste und ohne Notizen-Bereich;
   wählbar beim Anlegen („Art“) und im Ordner-Fenster.
 - Bereich Essen (früher Gerichte, Tab `meals`): oben Umschalter Wochenplan / Rezepte (`state.foodTab`, gemerkt). Rezepte (`recipes.js`): Typ `recipe` im Ordner „Wocheneinkauf“ (geteilt),
-  meta { servings, minutes, tags, ingredients [{n, q, s}], steps, note, rating 0–5, nutrition pro Portion, photos (Storage `c/<wocheneinkauf>/…`, Anzeige als data-URL über `imageUrl`), source };
-  Ansicht mit Fotos, Sternen, Portionen umrechnen (`scaleQty`), Zutaten → Einkaufsliste (`addToShop` in meals.js), „In den Wochenplan“ (Gericht mit `meta.recipe`), Notiz; Anlegen/Bearbeiten von Hand (eine Zutat je Zeile) oder per Code („rezepte“).
+  meta { servings, unit (z. B. „Kastenkuchen“), minutes, tags, ingredients [{n, q, s}], steps, note, rating 0–5, photos (Storage `c/<wocheneinkauf>/…`, Anzeige als data-URL über `imageUrl`), source };
+  keine Nährwerte (kommt evtl. später als eigene App); Ansicht mit Fotos, Sternen, Menge umrechnen (`scaleQty`), „Schritt für Schritt kochen“ (`cook.js`: Vollbild, Timer aus Zeitangaben im Schritt, Stoppuhr, Bildschirm bleibt an), Zutaten → Einkaufsliste (`addToShop` in meals.js), „In den Wochenplan“ (Gericht mit `meta.recipe`), Notiz; Anlegen/Bearbeiten von Hand (eine Zutat je Zeile) oder per Code („rezepte“).
   Wir kaufen beim Hofer ein: Rezepte vor dem Eintragen mit Simon abstimmen (Zutaten/Mengen so, wie sie es wirklich machen).
 - Erinnerungen (`remind-page.js`, Bereich `reminders` in NAV, Kachel „Erinnerungen“): alle Einträge mit `remind_at`; eigene als Typ `reminder`
   (Titel, Zeit, `meta.fid` = Canvas-Ordner); oben schnell stellen (Schnellwahl bzw. Zeit wählen, Enter = in 1 Std.).
@@ -94,7 +94,7 @@ PLAN {
   "einkauf":  [{ "name", "menge", "abteilung": "Obst & Gemüse|Brot & Backwaren|Kühlregal|Fleisch & Fisch|Tiefkühl|Trockenware & Konserven|Gewürze & Öle|Getränke|Süßes & Snacks|Drogerie & Haushalt|Sonstiges", "fuer" }],
   "training": [{ "datum", "titel", "art": "kraft|ausdauer|mobilitaet|sport|ruhe", "dauer_min", "fuer",
                  "aufwaermen": [], "uebungen": [{ "name", "saetze", "wdh", "gewicht", "dauer", "pause", "hinweis" }], "abschluss": [], "hinweis" }],
-  "rezepte":  [{ "titel", "portionen", "dauer_min", "tags": [], "naehrwerte": { "kcal", "eiweiss", "fett", "kohlenhydrate" },
+  "rezepte":  [{ "titel", "portionen", "einheit", "dauer_min", "tags": [],
                  "zutaten": [{ "name", "menge", "abteilung" }], "zubereitung": [], "hinweis", "quelle" }]
 }
 ```

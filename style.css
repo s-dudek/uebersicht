@@ -1060,6 +1060,41 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .rc-ing input { accent-color: var(--ink); width: 18px; height: 18px; flex: none; align-self: center; }
 .rc-ing .rc-q { flex: none; min-width: 64px; font-weight: 700; color: var(--ink); }
 .rc-src { font-size: 13px; margin: 0 2px 12px; }
+.rc-cook { margin-bottom: 12px; }
+/* Kochmodus (cook.js): Vollbild, ein Schritt groß, unten Timer, Stoppuhr und Blättern */
+.cookmode { position: fixed; inset: 0; z-index: 1200; display: flex; flex-direction: column; gap: 14px; padding: calc(var(--safe-top) + 14px) max(18px, env(safe-area-inset-right, 0px)) calc(var(--safe-bottom) + 16px) max(18px, env(safe-area-inset-left, 0px));
+  background: radial-gradient(120% 70% at 100% 0%, rgba(168, 190, 167, .18), transparent 60%), linear-gradient(170deg, #124b57, var(--ink) 60%); color: var(--white); }
+.ck-head { display: flex; align-items: center; gap: 12px; }
+.ck-head b { flex: 1; min-width: 0; font-size: 17px; color: var(--green-l); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ck-x { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(168, 190, 167, .5); color: var(--white); }
+.ck-x svg { width: 20px; height: 20px; }
+.ck-prog { display: flex; gap: 5px; }
+.ck-prog i { flex: 1; height: 4px; border-radius: 2px; background: rgba(168, 190, 167, .25); }
+.ck-prog i.done { background: rgba(168, 190, 167, .6); }
+.ck-prog i.on { background: var(--green-l); }
+.ck-main { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px; min-height: 0; overflow-y: auto; max-width: 760px; width: 100%; margin: 0 auto; }
+.ck-main small { font-size: 14px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--green-l); }
+.ck-step { margin: 0; font-size: clamp(22px, 5.2vw, 34px); line-height: 1.35; font-weight: 500; }
+.ck-sug { display: flex; gap: 8px; flex-wrap: wrap; }
+.ck-sug .chip, .ck-ingbtn { padding: 8px 14px; background: var(--green-l); color: var(--ink); border: 0; }
+.ck-sug .chip svg, .ck-ingbtn svg { width: 16px; height: 16px; }
+.ck-tools { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: center; max-width: 760px; width: 100%; margin: 0 auto; }
+.ck-clock { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 14px; border-radius: 999px; background: rgba(255, 255, 255, .08); box-shadow: inset 0 0 0 1px rgba(168, 190, 167, .25); }
+.ck-clock span { font-size: 12px; font-weight: 700; color: var(--green-l); text-transform: uppercase; letter-spacing: .04em; }
+.ck-clock b { min-width: 52px; font-family: var(--font-head); font-size: 22px; font-variant-numeric: tabular-nums; }
+.ck-clock .cbtn { width: 34px; height: 34px; background: rgba(168, 190, 167, .2); color: var(--white); font-size: 12px; }
+.ck-clock .cbtn svg { width: 16px; height: 16px; }
+.ck-clock.idle b { color: rgba(255, 255, 255, .45); }
+.ck-clock.ring { background: #D9873E; animation: ck-ring .8s ease-in-out infinite alternate; cursor: pointer; }
+@keyframes ck-ring { to { box-shadow: 0 0 0 8px rgba(217, 135, 62, .35); } }
+.ck-nav { display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px; max-width: 760px; width: 100%; margin: 0 auto; }
+.ck-nav .btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 14px; font-size: 17px; }
+.ck-nav .btn svg { width: 20px; height: 20px; }
+.ck-nav .btn:not(.secondary) { background: var(--green-l); color: var(--ink); }
+.ck-ings { position: absolute; inset: 0; display: grid; place-items: end center; background: rgba(0, 0, 0, .35); }
+.ck-ings[hidden] { display: none; }
+.ck-ings-in { width: 100%; max-width: 680px; max-height: 80%; overflow-y: auto; padding: 18px 20px calc(var(--safe-bottom) + 18px); border-radius: 26px 26px 0 0; background: var(--white); color: var(--ink); }
+.ck-ings-in ul { margin: 10px 0 16px; padding-left: 20px; font-size: 18px; line-height: 1.7; }
 .rc-act { display: flex; align-items: center; justify-content: center; gap: 8px; }
 .rc-act svg { width: 19px; height: 19px; flex: none; }
 .rc-line .utag { display: inline-flex; align-items: center; gap: 4px; }
