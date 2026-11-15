@@ -1,4 +1,5 @@
-// Kochmodus: Rezept Schritt für Schritt im Vollbild – große Schrift, Zutaten zum Nachschauen,
+// Kochmodus: Rezept Schritt für Schritt im Vollbild – Schritt 1 ist immer „Alle Zutaten herrichten“ (zum Abhaken),
+// danach steht in jedem Schritt die Menge gleich bei der Zutat (z. B. „Mehl 160 g“).
 // Timer aus den Zeitangaben im Schritt (z. B. „40–50 Minuten“ → Knöpfe 40 und 50 Min.) und eine Stoppuhr.
 // Wischen oder Pfeiltasten blättern; der Bildschirm bleibt an, solange der Kochmodus offen ist.
 import { esc } from './core.js';
@@ -6,6 +7,27 @@ import { ICON } from './icons.js';
 
 const DURATION = /(\d+)(?:\s*[–-]\s*(\d+))?\s*(Minuten|Minute|Min\.?|Stunden|Stunde|Std\.?)/gi;
 const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+// ---------- Mengen im Schritt: Wörter, die zu einer Zutat passen, bekommen ihre Menge dazu ----------
+// passt, wenn das Wort ein Wort der Zutat ist oder es abschließt („Mehl“ → „Weizenmehl glatt“, „Öl“ → „Sonnenblumenöl“)
+const STOP = new Set(['in', 'an', 'um', 'zu', 'es', 'so', 'ab', 'da', 'im', 'am', 'ca', 'den', 'dem', 'der', 'die', 'das', 'und', 'mit', 'eine', 'einen', 'alles', 'nur', 'bis', 'sich', 'nun', 'dann', 'gut']);
+const wordsOf = (s) => String(s).toLowerCase().split(/[^a-zäöüß]+/).filter((w) => w.length >= 3);
+function findIng(word, ings, used) {
+  const w = word.toLowerCase();
+  if (w.length < 2 || STOP.has(w)) return -1;
+  return ings.findIndex((x, i) => !used.has(i) && x.q && wordsOf(x.n).some((t) => t === w || (t.endsWith(w) && t.length > w.length)));
+}
+// Schritt als HTML: Text maskiert, passende Zutat einmal mit ihrer Menge hervorgehoben
+export function stepHtml(text, ings) {
+  const used = new Set();
+  return String(text).split(/([A-Za-zÄÖÜäöüß]+)/).map((part, i) => {
+    if (i % 2 === 0) return esc(part);
+    const k = findIng(part, ings, used);
+    if (k < 0) return esc(part);
+    used.add(k);
+    return `<span class="ck-amt">${esc(part)} <em>${esc(ings[k].q)}</em></span>`;
+  }).join('');
+}
 
 // Zeitangaben eines Schritts in Minuten (ohne Doppelte)
 function durations(text) {
@@ -34,8 +56,13 @@ function alarm() {
   });
 }
 
-export function openCook({ title, steps, ingredients }) {
-  if (!steps.length) return;
+// ingredients: [{ q Menge (schon umgerechnet), n Name }]
+export function openCook({ title, steps: given, ingredients }) {
+  if (!given.length) return;
+  const PREP = Symbol('Zutaten herrichten');
+  const steps = ingredients.length ? [PREP, ...given] : given;
+  const ready = new Set();   // im ersten Schritt abgehakte Zutaten
+  const line = (x) => [x.q, x.n].filter(Boolean).join(' ');
   let k = 0, lock = null, tick = 0;
   const timer = { end: 0, left: 0, total: 0, run: false, done: false };   // Timer (Countdown)
   const watch = { start: 0, acc: 0, run: false };                         // Stoppuhr
@@ -56,8 +83,11 @@ export function openCook({ title, steps, ingredients }) {
       <div class="ck-prog">${steps.map((_, i) => `<i class="${i < k ? 'done' : i === k ? 'on' : ''}"></i>`).join('')}</div>
       <div class="ck-main">
         <small>Schritt ${k + 1} von ${steps.length}</small>
-        <p class="ck-step">${esc(step)}</p>
-        ${durations(step).length ? `<div class="ck-sug">${durations(step).map((m) => `<button class="chip" data-ck="timer" data-min="${m}">${ICON.clock} Timer ${m} Min.</button>`).join('')}</div>` : ''}
+        ${step === PREP ? `<p class="ck-step">Alle Zutaten herrichten</p>
+          <div class="ck-prep">${ingredients.map((x, i) => `<button class="ck-pi ${ready.has(i) ? 'on' : ''}" data-ck="ready" data-i="${i}">
+            <span class="ck-box">${ready.has(i) ? ICON.check : ''}</span><b>${esc(x.q)}</b><span>${esc(x.n)}</span></button>`).join('')}</div>`
+          : `<p class="ck-step">${stepHtml(step, ingredients)}</p>
+        ${durations(step).length ? `<div class="ck-sug">${durations(step).map((m) => `<button class="chip" data-ck="timer" data-min="${m}">${ICON.clock} Timer ${m} Min.</button>`).join('')}</div>` : ''}`}
       </div>
       <div class="ck-tools">
         <div class="ck-clock ${timer.total ? '' : 'idle'} ${timer.done ? 'ring' : ''}" id="ck-timer">
@@ -67,13 +97,13 @@ export function openCook({ title, steps, ingredients }) {
         <div class="ck-clock" id="ck-watch"><span>Stoppuhr</span><b>${mmss(watchTime())}</b>
           <button class="cbtn" data-ck="wtoggle" aria-label="${watch.run ? 'Anhalten' : 'Starten'}">${watch.run ? '❚❚' : '▶'}</button>
           ${watchTime() > 0 && !watch.run ? `<button class="cbtn" data-ck="wreset" aria-label="Zurücksetzen">${ICON.undo}</button>` : ''}</div>
-        ${ingredients.length ? `<button class="chip ck-ingbtn" data-ck="ings">${ICON.list} Zutaten</button>` : ''}
+        ${ingredients.length && step !== PREP ? `<button class="chip ck-ingbtn" data-ck="ings">${ICON.list} Zutaten</button>` : ''}
       </div>
       <div class="ck-nav">
         <button class="btn secondary" data-ck="prev" ${k ? '' : 'disabled'}>${ICON.chevL} Zurück</button>
         <button class="btn" data-ck="${last ? 'close' : 'next'}">${last ? `${ICON.check} Fertig` : `Weiter ${ICON.chevR}`}</button>
       </div>
-      <div class="ck-ings" hidden><div class="ck-ings-in"><b>Zutaten</b><ul>${ingredients.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+      <div class="ck-ings" hidden><div class="ck-ings-in"><b>Zutaten</b><ul>${ingredients.map((x) => `<li>${esc(line(x))}</li>`).join('')}</ul>
         <button class="btn block" data-ck="ings">Schließen</button></div></div>`;
   }
   // nur die Uhren aktualisieren (jede Viertelsekunde), nicht alles neu zeichnen
@@ -103,6 +133,7 @@ export function openCook({ title, steps, ingredients }) {
     if (a === 'next') go(1);
     else if (a === 'prev') go(-1);
     else if (a === 'ings') el.querySelector('.ck-ings').hidden = !el.querySelector('.ck-ings').hidden;
+    else if (a === 'ready') { const i = +b.dataset.i; if (ready.has(i)) ready.delete(i); else ready.add(i); draw(); }
     else if (a === 'timer') {
       try { audio ??= new window.AudioContext(); audio.resume(); } catch { audio = null; }   // Ton erst nach einem Tippen erlaubt
       Object.assign(timer, { total: +b.dataset.min * 60, end: Date.now() + +b.dataset.min * 60000, run: true, done: false });

@@ -1072,10 +1072,23 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .ck-prog i { flex: 1; height: 4px; border-radius: 2px; background: rgba(168, 190, 167, .25); }
 .ck-prog i.done { background: rgba(168, 190, 167, .6); }
 .ck-prog i.on { background: var(--green-l); }
-.ck-main { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px; min-height: 0; overflow-y: auto; max-width: 760px; width: 100%; margin: 0 auto; }
+.ck-main { flex: 1; display: flex; flex-direction: column; justify-content: safe center; gap: 14px; min-height: 0; overflow-y: auto; max-width: 760px; width: 100%; margin: 0 auto; }
 .ck-main small { font-size: 14px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--green-l); }
 .ck-step { margin: 0; font-size: clamp(22px, 5.2vw, 34px); line-height: 1.35; font-weight: 500; }
 .ck-sug { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Menge gleich bei der Zutat (im Kochmodus und in der Zubereitung des Rezepts) */
+.ck-amt { font-weight: 700; white-space: nowrap; }
+.ck-amt em { font-style: normal; padding: 0 .35em; border-radius: .4em; background: rgba(168, 190, 167, .3); }
+.steps .ck-amt em { background: var(--pale); color: var(--ink); }
+/* Schritt 1: alle Zutaten herrichten (zum Abhaken) */
+.ck-prep { display: flex; flex-direction: column; gap: 2px; }
+.ck-pi { display: flex; align-items: center; gap: 14px; width: 100%; padding: 10px 4px; border-bottom: 1px solid rgba(168, 190, 167, .2); text-align: left; color: var(--white); font-size: 19px; }
+.ck-pi b { flex: none; min-width: 84px; color: var(--green-l); }
+.ck-box { flex: none; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 8px; box-shadow: inset 0 0 0 2px rgba(168, 190, 167, .6); color: var(--ink); }
+.ck-box svg { width: 16px; height: 16px; }
+.ck-pi.on { opacity: .55; }
+.ck-pi.on .ck-box { background: var(--green-l); box-shadow: none; }
+.ck-pi.on span:last-child { text-decoration: line-through; }
 .ck-sug .chip, .ck-ingbtn { padding: 8px 14px; background: var(--green-l); color: var(--ink); border: 0; }
 .ck-sug .chip svg, .ck-ingbtn svg { width: 16px; height: 16px; }
 .ck-tools { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: center; max-width: 760px; width: 100%; margin: 0 auto; }

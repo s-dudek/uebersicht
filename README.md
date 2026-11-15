@@ -60,7 +60,7 @@ js/
   google-cal.js     Google-Kalender verbinden und Termine bearbeiten
   meals.js          Gerichte, Wochenplan, Einkaufsliste
   recipes.js        Essen → Rezepte: Fotos, Bewertung, Notiz, Portionen/Einheit umrechnen, Einkaufsliste, Wochenplan
-  cook.js           Kochmodus: Schritt für Schritt im Vollbild mit Timer (aus Zeitangaben) und Stoppuhr
+  cook.js           Kochmodus: Zutaten herrichten, dann Schritte mit Mengen, Timer (aus Zeitangaben) und Stoppuhr
   training.js       Training: Woche, Einheiten mit Übungen zum Abhaken
   trash.js          Papierkorb: wiederherstellen, endgültig löschen (30 Tage)
   plan-import.js    Code einfügen: Gerichte, Einkauf und Training (Tag oder Woche)

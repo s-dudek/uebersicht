@@ -8,7 +8,7 @@ import { deleteItem, saveItem } from './data.js';
 import { ymd } from './dates.js';
 import { ICON } from './icons.js';
 import { imageUrl, isImagePath, removeImages, uploadImage } from './ink-store.js';
-import { openCook } from './cook.js';
+import { openCook, stepHtml } from './cook.js';
 import { addToShop, ensureShopCat, SECTIONS, SLOTS } from './meals.js';
 import { render } from './render.js';
 import { closeSheet, openSheet, sheetActs } from './sheet.js';
@@ -75,6 +75,9 @@ export function openRecipe(id) {
   if (!r) return;
   const m = r.meta || {}, base = Math.max(1, +m.servings || 1);
   let servings = base;
+  // Zutaten für die gewählte Menge; die Schritte zeigen die Mengen gleich bei der Zutat (stepHtml in cook.js)
+  const scaled = () => (m.ingredients || []).map((x) => ({ q: scaleQty(x.q, servings / base), n: x.n }));
+  const stepsHtml = () => (m.steps || []).map((x) => `<li>${stepHtml(x, scaled())}</li>`).join('');
   const ingHtml = () => (m.ingredients || []).map((x, k) => `<label class="rc-ing"><input type="checkbox" data-ing="${k}" checked><span class="rc-q">${esc(scaleQty(x.q, servings / base))}</span><span>${esc(x.n)}</span></label>`).join('');
   const sheet = openSheet(`<div class="sheet-head"><span class="status">Rezept</span>${sheetActs({ edit: true, del: canDeleteItem(r), delLabel: 'Rezept löschen' })}</div>
     <div class="rc-photos">${photosOf(r).map((p) => `<span class="rc-ph"><img data-photo="${esc(p)}" alt=""><button type="button" class="rc-ph-x" data-unphoto="${esc(p)}" aria-label="Foto entfernen">${ICON.close}</button></span>`).join('')}
@@ -87,7 +90,7 @@ export function openRecipe(id) {
       <button class="btn secondary block rc-act" type="button" id="rc-shop">${ICON.cart} Auf die Einkaufsliste</button></div>` : ''}
     ${(m.steps || []).length ? `<div class="field"><label>Zubereitung</label>
       <button class="btn block rc-act rc-cook" type="button" id="rc-cook">${ICON.clock} Schritt für Schritt kochen</button>
-      <ol class="steps">${m.steps.map((x) => `<li>${esc(x)}</li>`).join('')}</ol></div>` : ''}
+      <ol class="steps" id="rc-steps">${stepsHtml()}</ol></div>` : ''}
     <div class="field"><label for="rc-note">Notiz</label><textarea class="textarea" id="rc-note" placeholder="Was wir anders machen, wie es geschmeckt hat …">${esc(m.note || '')}</textarea></div>
     ${m.source ? `<p class="muted rc-src">Quelle: ${esc(m.source)}</p>` : ''}
     <button class="btn block rc-act" type="button" id="rc-plan">${ICON.calendar} In den Wochenplan</button>`, { onClose: () => saveNote.flush() });
@@ -109,11 +112,13 @@ export function openRecipe(id) {
     servings = Math.max(1, Math.min(40, servings + +b.dataset.serv));
     sheet.querySelector('#rc-n').textContent = servings;
     sheet.querySelector('#rc-ings').innerHTML = ingHtml();
+    const st = sheet.querySelector('#rc-steps');
+    if (st) st.innerHTML = stepsHtml();
   }));
   // Kochmodus: ein Schritt nach dem anderen, mit Zutaten für die gewählte Menge, Timer und Stoppuhr
   sheet.querySelector('#rc-cook')?.addEventListener('click', () => {
     saveNote.flush();
-    openCook({ title: r.title, steps: m.steps || [], ingredients: (m.ingredients || []).map((x) => [scaleQty(x.q, servings / base), x.n].filter(Boolean).join(' ')) });
+    openCook({ title: r.title, steps: m.steps || [], ingredients: scaled() });
   });
   sheet.querySelector('#rc-shop')?.addEventListener('click', async (e) => {
     const btn = e.currentTarget;
