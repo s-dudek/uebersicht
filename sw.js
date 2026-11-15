@@ -1,6 +1,6 @@
 // Speichert die App-Dateien, damit sie auch bei schlechtem Netz schnell startet.
 // Bei jeder neuen Version die Nummer erhöhen.
-const CACHE = 'uebersicht-v75';
+const CACHE = 'uebersicht-v76';
 const FILES = [
   './', 'index.html', 'style.css', 'config.js', 'manifest.json',
   'icons/icon-192.png', 'icons/apple-touch-icon.png',
@@ -73,13 +73,13 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// Eigene Dateien: zuerst Netz (immer aktuell), sonst Cache. Supabase-Anfragen nie cachen.
+// Eigene Dateien: zuerst Netz (am Browser-Zwischenspeicher vorbei, damit neue Versionen sofort da sind), sonst Cache. Supabase-Anfragen nie cachen.
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET') return;
   if (url.origin === self.location.origin) {
     e.respondWith(
-      fetch(e.request)
+      fetch(e.request, { cache: 'no-cache' })
         .then((res) => {
           if (res.ok) {   // nur erfolgreiche Antworten merken
             const copy = res.clone();

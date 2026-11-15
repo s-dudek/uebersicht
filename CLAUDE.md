@@ -57,7 +57,8 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   mit „Verschieben“ (Reihenfolge) und „Zu Home hinzufügen“.
 - Ladesymbol (`loader.js`, nach Simons GIF): Zeichen als feine Linie, ein kräftiger Abschnitt läuft rundum (je Bogen ein Pfad, Keyframes ld-top/-right/-left);
   im Startbild, statt „Lädt …“ und klein unten beim Nachladen (`busy()` um loadAll, verknüpfte Kalender, Canvas laden).
-- Startbild (`splash.js`, mind. 0,9 s): laufender Abschnitt blendet aus, Zeichen steht kurz kräftig da, dann ziehen sich seine drei Linien (je ein Pfad `ld-base`) nacheinander zurück, während der dunkle Grund ausblendet.
+- Startbild (`splash.js`, mind. 0,9 s): laufender Abschnitt blendet aus, Zeichen steht kurz kräftig da, dann löst es sich weich auf (größer, unscharf, durchsichtig), während der dunkle Grund ausblendet. Kein Fernseh-Effekt (Zusammenklappen) mehr.
+- `sw.js` holt eigene Dateien mit `cache: 'no-cache'`, damit neue Versionen sofort ankommen.
 - `render()` baut die Ansicht neu auf; während Gesten `render.hold = true` setzen, danach `render.pending` abarbeiten.
 - Canvas (früher „Handschrift“, Code `js/ink*.js`): je Notiz-Ordner eine Startseite in `ink_pages`, Titel führen zu Unterseiten, A4-Bereiche auf dem 25er-Raster.
   Notizen-Bereich (Element `n`, nur Lage) zeigt die Notizen des Ordners als Liste (HTML); jede Notiz hat eine Unterseite mit gleicher ID

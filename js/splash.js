@@ -1,6 +1,6 @@
-// Startbild: Dudek-Zeichen als laufendes Ladesymbol hell auf dunkel (loader.js). Zum Schluss löst es sich passend zur Linie auf:
-// der laufende Abschnitt verschwindet, das Zeichen steht kurz kräftig da, dann ziehen sich seine drei Linien
-// nacheinander zurück, während der dunkle Grund ausblendet und die App freigibt. Läuft einmal pro App-Start.
+// Startbild: Dudek-Zeichen als laufendes Ladesymbol hell auf dunkel (loader.js). Zum Schluss löst es sich weich auf:
+// der laufende Abschnitt verschwindet, das Zeichen steht kurz vollständig da, dann wird es weit, unscharf und durchsichtig –
+// wie Nebel, der sich verzieht –, während der dunkle Grund ausblendet und die App freigibt. Läuft einmal pro App-Start.
 import { LOADER } from './loader.js';
 
 const el = document.getElementById('splash');
@@ -36,13 +36,11 @@ async function play() {
   await Promise.all(lines.map((l) => l.animate([{ strokeWidth: 3, opacity: .55 }, { strokeWidth: 10, opacity: 1 }],
     { duration: 220, easing: 'cubic-bezier(.3,0,.2,1)', fill: 'both' }).finished));
 
-  // 2. die Linien ziehen sich nacheinander zurück (oben, rechts, links), das Zeichen wächst leicht,
-  //    gleichzeitig blendet der dunkle Grund aus
-  lines.forEach((l) => { l.style.strokeDasharray = '100 100'; l.style.strokeLinecap = 'round'; });
-  el.animate([{ backgroundColor: bg }, { backgroundColor: 'rgba(0,0,0,0)' }], { duration: 420, easing: 'ease-in-out', fill: 'both' });
-  logo.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.12)' }], { duration: 460, easing: 'ease-out', fill: 'both' });
-  await Promise.all([0, 2, 1].map((k, i) => lines[k].animate(
-    [{ strokeDashoffset: 0, strokeWidth: 10 }, { strokeDashoffset: -100, strokeWidth: 4 }],
-    { duration: 340, delay: i * 60, easing: 'cubic-bezier(.6,0,.4,1)', fill: 'both' }).finished));
+  // 2. das Zeichen löst sich auf: weiter, unscharf, durchsichtig; gleichzeitig blendet der dunkle Grund aus
+  el.animate([{ backgroundColor: bg }, { backgroundColor: 'rgba(0,0,0,0)' }], { duration: 520, easing: 'ease-in-out', fill: 'both' });
+  await logo.animate([
+    { transform: 'scale(1)', filter: 'blur(0)', opacity: 1 },
+    { transform: 'scale(1.5)', filter: 'blur(14px)', opacity: 0 },
+  ], { duration: 560, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'both' }).finished;
   el.remove();
 }
