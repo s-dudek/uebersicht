@@ -80,7 +80,7 @@ html, body { margin: 0; height: 100%; position: fixed; inset: 0; width: 100%; ov
 #app { position: relative; z-index: 1; height: 100%; }
 body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: var(--safe-top); background: var(--white); z-index: 4; pointer-events: none; }
 
-/* Startbild: Zeichen hell auf dunkel; beim Start klappt das Zeichen wie ein altes Fernsehbild zusammen (js/splash.js) */
+/* Startbild: Ladesymbol hell auf dunkel; zum Schluss ziehen sich die Linien des Zeichens zurück (js/splash.js) */
 .splash { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: var(--ink); overflow: hidden; }
 .splash .loader { width: min(36vmin, 180px); height: auto; color: var(--green-l); }
 /* Ladesymbol (loader.js): feine Linie des Zeichens, darauf läuft ein kräftiger Abschnitt rundum */
