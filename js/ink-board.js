@@ -34,9 +34,12 @@ const PEN_LOST = 1500;   // meldet der aufgesetzte Stift so lange nichts, gilt e
 //         onExport(seite), onTool(tool), onFrames(), hold(bool), onAddPage(stelle), onConfirm(text) -> Promise<bool>,
 //         onSelect() nach jeder Änderung der Auswahl, onView(beiUrsprung) wenn die Ansicht zur Ursprungsansicht wird oder sie verlässt,
 //         Notizen (nur Startseite): notes() -> [{ id, title }], onNote(id), onNoteAdd(), onNoteDelete(id),
-//         Notiz-Unterseite: desc() -> Beschreibungstext, onDesc() }
+//         Notiz-Unterseite: desc() -> Beschreibungstext, onDesc(),
+//         Ebenen: layers [{ id, n, h, k }] (oben zuerst), fix { bg, pat, ly } (ausgeblendet), onLayers() nach jeder Änderung, onPage(n) beim Blättern }
 // ====================================================================
 const isCard = (it) => it.t === 'c' || it.t === 'b';   // Felder als HTML: Termin, Erinnerung
+const drawable = (it) => it.t === 's' || it.t === 'x' || it.t === 'i' || it.t === 'd' || it.t === 't';   // liegt auf einer Ebene
+const layerId = () => 'L' + Math.random().toString(36).slice(2, 10);
 let clipboard = null;   // Kopiertes (gilt für alle Seiten und Ordner, bis zum Neuladen)
 
 export function createBoard(opts) {
@@ -44,6 +47,14 @@ export function createBoard(opts) {
   let tool = 'pen', shape = 'line', finger = false, eraseR = ERASE_R;
   let pen = { c: '#0C3741', w: 2.2 }, marker = { c: '#F2D33B', w: 16 }, textStyle = { c: '#0C3741', ff: 'sans', fw: 400, i: false, fs: TEXT_FS };
   const past = [], future = [];
+  // Ebenen (oben zuerst): neue Elemente kommen auf die aktive; ausgeblendete werden nicht gezeichnet, gesperrte nicht bearbeitet.
+  // Feste Ebenen Hintergrund, Muster und Vorlage gehören zu den Seiten (fix: welche ausgeblendet sind)
+  let layers = opts.layers?.length ? opts.layers.map((l) => ({ ...l })) : [{ id: 'L1', n: 'Ebene 1' }];
+  const fix = { ...opts.fix };
+  let active = layers[0].id;
+  items.forEach((it) => { if (drawable(it) && !layers.some((l) => l.id === it.l)) it.l = layers[layers.length - 1].id; });
+  const layerOf = (it) => layers.find((l) => l.id === it.l) || layers[layers.length - 1];
+  const editable = (it) => !drawable(it) || (!layerOf(it).h && !layerOf(it).k);
   let sel = null;            // { set: Set<item>, box: [x0,y0,x1,y1] }
   let crop = null;           // laufendes Zuschneiden: { item, ui }
   // Ansicht: linke obere Ecke in Einheiten und Zoom (1 = 100 %)
@@ -91,11 +102,13 @@ export function createBoard(opts) {
     clampView();
     const s = cur();
     pg.style.transform = `translate(${-view.x * s}px, ${-view.y * s}px) scale(${s / scale})`;
+    const cp = currentPage();
+    if (cp !== lastPage) { lastPage = cp; opts.onPage?.(cp); }
     const o = originView();
     const atOrigin = Math.abs(view.z - o.z) < .005 && Math.abs(view.x - o.x) < 2 && Math.abs(view.y - o.y) < 2;
     if (atOrigin !== lastOrigin) { lastOrigin = atOrigin; opts.onView?.(atOrigin); }
   }
-  let lastOrigin = null;
+  let lastOrigin = null, lastPage = -1;
 
   // Ursprungsansicht: die erste Seite in voller Breite, oben beginnend
   function originView() {
@@ -299,8 +312,8 @@ export function createBoard(opts) {
   function drawItem(ctx, it) {
     if (it.t === 'f') {   // Seite: weißes Papier mit Muster und Vorlage (Homescreen-Ausschnitt: nur HTML-Rahmen darüber)
       if (it.fmt === 'home') return;
-      drawFrameBg(ctx, bbox(it), it.bg || (it.ly ? 'blank' : 'grid'), scale);
-      if (it.ly) drawFrameLayout(ctx, bbox(it), it.ly, it.lf);
+      drawFrameBg(ctx, bbox(it), it.bg || (it.ly ? 'blank' : 'grid'), scale, { pc: it.pc, mc: it.mc, paper: !fix.bg, pattern: !fix.pat });
+      if (it.ly && !fix.ly) drawFrameLayout(ctx, bbox(it), it.ly, it.lf);
       return;
     }
     if (it.t === 'n' || isCard(it)) return;                                          // Notizen-Bereich und Felder sind HTML
@@ -315,10 +328,17 @@ export function createBoard(opts) {
     getImage(it.src).then((bmp) => { if (bmp && !loaded.has(it.src)) { loaded.set(it.src, bmp); redrawBox(bbox(it)); renderSel(); } });
   }
 
-  // Reihenfolge: Hintergründe der Bereiche, dann Textmarker, dann alles andere
-  const layer = (it) => (it.t === 'f' ? 0 : it.m ? 1 : 2);
+  // Reihenfolge: Seiten (Hintergrund, Muster, Vorlage), dann die Ebenen von unten nach oben, je Ebene erst Textmarker, dann alles andere
   function drawList(ctx, list) {
-    for (let l = 0; l < 3; l++) for (const it of list) if (layer(it) === l) drawItem(ctx, it);
+    for (const it of list) if (it.t === 'f') drawItem(ctx, it);
+    const ids = new Set(layers.map((l) => l.id)), bottom = layers[layers.length - 1].id;
+    const lid = (it) => (ids.has(it.l) ? it.l : it.l ? bottom : active);   // noch nicht übernommen: aktive Ebene
+    for (let i = layers.length - 1; i >= 0; i--) {
+      if (layers[i].h) continue;
+      const id = layers[i].id;
+      for (const it of list) if (drawable(it) && it.m && lid(it) === id) drawItem(ctx, it);
+      for (const it of list) if (drawable(it) && !it.m && lid(it) === id) drawItem(ctx, it);
+    }
   }
 
   function drawTile(cv) {
@@ -532,6 +552,7 @@ export function createBoard(opts) {
   }
 
   function commit(next) {
+    for (const it of next) if (drawable(it) && !it.l) it.l = active;   // Neues kommt auf die aktive Ebene
     past.push(items);
     if (past.length > HISTORY) past.shift();
     future.length = 0;
@@ -549,6 +570,14 @@ export function createBoard(opts) {
     redrawAll();
     renderOverlays();
     opts.onCommit(items, ...extent());
+  }
+
+  // Ebenen geändert: neu zeichnen und speichern lassen (ohne Eintrag im Verlauf)
+  function layersChanged() {
+    redrawAll();
+    renderSel();
+    opts.onCommit(items, ...extent());
+    opts.onLayers?.();
   }
 
   // ein Element ersetzen (gleiche Stelle in der Reihenfolge)
@@ -708,7 +737,7 @@ export function createBoard(opts) {
     let best = null, bestD = r;
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
-      if (it.t === 'f' || it.t === 'n' || isCard(it)) continue;
+      if (it.t === 'f' || it.t === 'n' || isCard(it) || !editable(it)) continue;
       let d = distTo(it, x, y);
       if (it.t === 'i') d = d ? Infinity : r * .75;
       if (d < bestD || (!best && d <= bestD)) { best = it; bestD = d; }
@@ -988,6 +1017,7 @@ export function createBoard(opts) {
     const b = union(clipboard), groups = new Map();
     const copies = clipboard.map((it) => {
       const c = transform(structuredClone(it), 0, 0, 1, x - b[0], y - b[1]);
+      if (drawable(c)) c.l = active;   // Kopie kommt auf die aktive Ebene
       if (c.g) { if (!groups.has(c.g)) groups.set(c.g, newId()); c.g = groups.get(c.g); }   // eigene Gruppen
       return c;
     });
@@ -1346,7 +1376,7 @@ export function createBoard(opts) {
   // Radierer: Striche, Maße und Texte ganz, bei Bildern nur die überfahrene Stelle
   function erase(x, y) {
     const r = eraseR / view.z;
-    const gone = items.filter((it) => (it.t === 's' || it.t === 'd' || it.t === 'x') && nearItem(it, x, y, r));
+    const gone = items.filter((it) => (it.t === 's' || it.t === 'd' || it.t === 'x') && editable(it) && nearItem(it, x, y, r));
     if (gone.length) {
       act.hit = true;
       items = items.filter((it) => !gone.includes(it));
@@ -1354,7 +1384,7 @@ export function createBoard(opts) {
     }
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
-      if (it.t !== 'i' || x < it.x - r || x > it.x + it.w + r || y < it.y - r || y > it.y + it.h + r) continue;
+      if (it.t !== 'i' || !editable(it) || x < it.x - r || x > it.x + it.w + r || y < it.y - r || y > it.y + it.h + r) continue;
       const [fx, fy, fw, fh] = fullRect(it);
       let copy = it, path = act.paths.get(it);
       if (!path) {   // erstes Mal in diesem Zug: Kopie mit neuer Radierspur
@@ -1437,7 +1467,7 @@ export function createBoard(opts) {
         if (hit?.t === 'x' && single('x') === hit) editText(hit);
         else setSel(hit ? withGroups([hit]) : []);
       }
-      else setSel(withGroups(items.filter((it) => share(it, a.poly) >= .5)));
+      else setSel(withGroups(items.filter((it) => editable(it) && share(it, a.poly) >= .5)));
     } else if (a.kind === 'move') {
       applySel(a.dx, a.dy, 1);
       if (a.title) clearSel();   // verschobener Titel bleibt antippbar
@@ -1542,7 +1572,7 @@ export function createBoard(opts) {
       goTo(v.x, v.y, Math.min(v.z, 1));
     },
     // Seiten für Export und Übersicht: Name und Rechteck in Einheiten
-    frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, cov: !!f.cov, bg: f.bg || (f.ly ? 'blank' : 'grid'), ly: f.ly, lf: f.lf, box: bbox(f) })),
+    frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, cov: !!f.cov, bg: f.bg || (f.ly ? 'blank' : 'grid'), ly: f.ly, lf: f.lf, pc: f.pc, mc: f.mc, box: bbox(f) })),
     // Homescreen-Ausschnitt auf der Deckseite zeigen
     showHome() { const f = homeItem(); if (f) { const v = fitView(bbox(f)); goTo(v.x, v.y, v.z); } },
     // Rechteck des Homescreen-Ausschnitts, wenn darin etwas steht (sonst null)
@@ -1580,17 +1610,18 @@ export function createBoard(opts) {
       const dy = r.bottom > v.bottom - m ? v.bottom - m - r.bottom : r.top < v.top + m ? v.top + m - r.top : 0;
       if (dy) panBy(0, dy);
     },
-    // Seite bzw. Rechteck als Bild zeichnen; bg: 'grid' (Kästchen), 'lines', 'dots', 'blank' (alle auf Weiß) oder 'none' (durchsichtig)
-    async renderBox(box, pxW, bg, ly, lf) {
+    // Seite bzw. Rechteck als Bild zeichnen (ohne ausgeblendete Ebenen); look: bg 'grid' (Kästchen), 'lines', 'dots', 'blank'
+    // oder 'none' (durchsichtig), ly Vorlage mit Angaben lf, pc Farbe des Papiers, mc Farbe des Musters
+    async renderBox(box, pxW, { bg = 'grid', ly, lf, pc, mc } = {}) {
       const [x0, y0, x1, y1] = box, k = pxW / (x1 - x0);
       const cv = document.createElement('canvas');
       cv.width = Math.round(pxW);
       cv.height = Math.round((y1 - y0) * k);
-      const inside = items.filter((it) => { const b = bbox(it); return it.t !== 'f' && it.t !== 'n' && b[2] >= x0 && b[0] <= x1 && b[3] >= y0 && b[1] <= y1; });
+      const inside = items.filter((it) => { const b = bbox(it); return it.t !== 'f' && it.t !== 'n' && !(drawable(it) && layerOf(it).h) && b[2] >= x0 && b[0] <= x1 && b[3] >= y0 && b[1] <= y1; });
       await Promise.all(inside.filter((it) => it.t === 'i').map(async (it) => { const bmp = await getImage(it.src); if (bmp) loaded.set(it.src, bmp); }));
       const ctx = cv.getContext('2d');
       ctx.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
-      if (bg !== 'none') drawFrameBg(ctx, box, bg, Math.min(1, k));   // klein (Vorschau): feine Linien und Punkte bleiben sichtbar
+      if (bg !== 'none') drawFrameBg(ctx, box, bg, Math.min(1, k), { pc, mc });   // klein (Vorschau): feine Linien und Punkte bleiben sichtbar
       if (ly) drawFrameLayout(ctx, box, ly, lf);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -1599,6 +1630,66 @@ export function createBoard(opts) {
       return cv;
     },
     imagePaths: () => items.filter((it) => it.t === 'i').map((it) => it.src),
+    // ---------- Ebenen ----------
+    layerMeta: () => ({ layers, fix }),
+    layerInfo: () => ({ layers: layers.map((l) => ({ ...l, count: items.filter((it) => drawable(it) && layerOf(it) === l).length })), active, fix: { ...fix } }),
+    setActive(id) { if (layers.some((l) => l.id === id)) { active = id; opts.onLayers?.(); } },
+    addLayer() {
+      const used = new Set(layers.map((l) => l.n));
+      let k = layers.length + 1;
+      while (used.has(`Ebene ${k}`)) k++;
+      const l = { id: layerId(), n: `Ebene ${k}` };
+      const i = Math.max(0, layers.findIndex((x) => x.id === active));
+      layers = [...layers.slice(0, i), l, ...layers.slice(i)];   // gleich über der aktiven
+      active = l.id;
+      layersChanged();
+    },
+    renameLayer(id, n) { const l = layers.find((x) => x.id === id); if (l && n.trim()) { l.n = n.trim().slice(0, 40); layersChanged(); } },
+    toggleLayer(id, key) {   // key: 'h' ausblenden, 'k' sperren
+      const l = layers.find((x) => x.id === id);
+      if (!l) return;
+      if (l[key]) delete l[key]; else l[key] = 1;
+      if (sel && [...sel.set].some((it) => !editable(it))) clearSel();
+      layersChanged();
+    },
+    moveLayer(id, d) {
+      const i = layers.findIndex((x) => x.id === id), j = i + d;
+      if (i < 0 || j < 0 || j >= layers.length) return;
+      [layers[i], layers[j]] = [layers[j], layers[i]];
+      layersChanged();
+    },
+    // Ebene samt Inhalt löschen (die letzte bleibt); Titel darauf fragen nach, weil ihre Unterseiten mitgehen
+    async deleteLayer(id) {
+      if (layers.length < 2) return false;
+      const gone = items.filter((it) => drawable(it) && layerOf(it).id === id);
+      const titles = gone.filter((it) => it.t === 't');
+      if (titles.length && !(await opts.onDeleteTitles(titles))) return false;
+      clearSel();
+      layers = layers.filter((l) => l.id !== id);
+      if (active === id) active = layers[0].id;
+      if (gone.length) { const set = new Set(gone); commit(items.filter((it) => !set.has(it))); if (titles.length) past.length = 0; }
+      layersChanged();
+      return true;
+    },
+    editPageLayout(n) { const f = frameList()[n]; if (f) editLayout(f); },
+    toggleFix(key) { if (fix[key]) delete fix[key]; else fix[key] = 1; layersChanged(); },
+    // Ausgewähltes auf eine Ebene legen
+    selToLayer(id) { if (sel && layers.some((l) => l.id === id)) editSel((it) => (drawable(it) ? { ...it, l: id } : it)); },
+    // Hintergrund, Muster oder Vorlage ändern: auf Seite n oder allen Seiten (patch: pc, mc, bg, ly)
+    setPageLook(n, patch, all = false) {
+      const targets = all ? frameList() : [frameList()[n]].filter(Boolean);
+      if (!targets.length) return;
+      const set = new Set(targets);
+      commit(items.map((f) => {
+        if (!set.has(f)) return f;
+        const next = { ...f, ...patch };
+        for (const k of ['bg', 'ly', 'pc', 'mc']) if (!next[k]) delete next[k];
+        return next;
+      }));
+      redrawAll();
+      opts.onFrames?.();
+      opts.onLayers?.();
+    },
     destroy() {
       ro.disconnect(); stopAnim(); closeMenu();
       document.removeEventListener('pointerdown', onDocDown, true);

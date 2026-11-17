@@ -8,6 +8,7 @@ const IMG_PATH = /^(?:[uc]\/)?[\w-]{1,64}\/[\w-]{1,64}\.jpg$/;   // u/<user-id>/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DAY = /^\d{4}-\d{2}-\d{2}$/, TIME = /^\d{2}:\d{2}$/;
 const EXT_OCC = /^x:[\w.@:#-]{1,400}$/;   // Termin eines verknüpften Kalenders (cal-sources.js)
+const LAYER_ID = /^L[\w-]{1,24}$/;                     // Ebene (ink-layers.js)
 const MAX_IMG = 1600;                                  // längste Bildseite in Pixel
 export const newId = () => crypto.randomUUID();
 
@@ -76,11 +77,13 @@ export const FRAMES = { a4p: [850, 1200], a4l: [1200, 850], home: [750, 500] }; 
 export const FRAME_NAMES = { a4p: 'A4 hoch', a4l: 'A4 quer', home: 'Startbildschirm' };
 const FRAME_BGS = ['lines', 'dots', 'blank'];                   // Hintergründe eines Bereichs (ohne: kariert wie die Fläche)
 
-export function serialize(items, h, w) {
+// meta: { layers: [{ id, n, h (ausgeblendet), k (gesperrt) }], fix: { bg, pat, ly } (ausgeblendete feste Ebenen) }
+export function serialize(items, h, w, meta = {}) {
   return {
     v: 2, h: Math.round(h), w: Math.round(w),
+    ...layersOut(meta),
     items: items.map((it) => {
-      const g = it.g ? { g: it.g } : {};
+      const g = { ...(it.g ? { g: it.g } : {}), ...(it.l ? { l: it.l } : {}) };   // Gruppe, Ebene
       if (it.t === 'n') return { t: 'n', x: it.x, y: it.y };
       if (it.t === 'b') return { t: 'b', x: it.x, y: it.y, sz: it.sz, rem: it.rem, tt: it.tt };   // Erinnerungs-Feld
       if (it.t === 'c') {   // Termin-Feld: Verweis und Kopie für unterwegs
@@ -90,7 +93,7 @@ export function serialize(items, h, w) {
       }
       if (it.t === 'f') {
         const f = { t: 'f', fmt: it.fmt, x: it.x, y: it.y };
-        for (const k of ['n', 'bg', 'fc', 'ly', 'lf', 'cov']) if (it[k]) f[k] = it[k];
+        for (const k of ['n', 'bg', 'fc', 'ly', 'lf', 'cov', 'pc', 'mc']) if (it[k]) f[k] = it[k];
         return f;
       }
       if (it.t === 'x') return { ...textOut(it), ...g };
@@ -136,6 +139,8 @@ export function deserialize(data) {
       if (FRAME_BGS.includes(it.bg)) out.bg = it.bg;                                    // Hintergrund
       if (safeColor(it.fc)) out.fc = it.fc;                                             // Farbe von Rahmen und Reiter
       if (it.cov === 1 && it.fmt !== 'home') out.cov = 1;                              // Deckseite
+      if (safeColor(it.pc)) out.pc = it.pc;                                             // Farbe des Papiers (Hintergrund)
+      if (safeColor(it.mc)) out.mc = it.mc;                                             // Farbe des Musters
       if (FRAME_LAYOUTS.some(([k]) => k && k === it.ly)) out.ly = it.ly;                // Layout im Dudek-CI
       if (it.lf && typeof it.lf === 'object') {                                         // Angaben im Layout
         const lf = {};
@@ -152,9 +157,27 @@ export function deserialize(data) {
     }
     if (!out) continue;
     if (UUID.test(it.g || '')) out.g = it.g;   // Gruppe
+    if (LAYER_ID.test(it.l || '')) out.l = it.l;   // Ebene
     items.push(out);
   }
-  return { items, v: data?.v === 2 ? 2 : 1, h: num(data?.h, 0, 1e6, 0), w: num(data?.w, 0, 1e6, 0) };
+  return { items, v: data?.v === 2 ? 2 : 1, ...layersIn(data), h: num(data?.h, 0, 1e6, 0), w: num(data?.w, 0, 1e6, 0) };
+}
+
+// Ebenen: Liste (oben zuerst) und ausgeblendete feste Ebenen (Hintergrund, Muster, Vorlage)
+const FIX = ['bg', 'pat', 'ly'];
+function layersOut({ layers, fix } = {}) {
+  const out = {};
+  if (layers?.length) out.layers = layers.map((l) => ({ id: l.id, n: l.n, ...(l.h ? { h: 1 } : {}), ...(l.k ? { k: 1 } : {}) }));
+  const f = FIX.filter((k) => fix?.[k]);
+  if (f.length) out.fix = Object.fromEntries(f.map((k) => [k, 1]));
+  return out;
+}
+function layersIn(data) {
+  const seen = new Set();
+  const layers = (Array.isArray(data?.layers) ? data.layers : []).slice(0, 30).filter((l) => LAYER_ID.test(l?.id || '') && !seen.has(l.id) && seen.add(l.id))
+    .map((l) => ({ id: l.id, n: typeof l.n === 'string' && l.n.trim() ? l.n.trim().slice(0, 40) : 'Ebene', ...(l.h === 1 ? { h: 1 } : {}), ...(l.k === 1 ? { k: 1 } : {}) }));
+  const fix = Object.fromEntries(FIX.filter((k) => data?.fix?.[k] === 1).map((k) => [k, 1]));
+  return { layers, fix };
 }
 
 // Titel: Striche (s) und Texte (tx)
@@ -208,8 +231,8 @@ export async function loadTree(catId) {
   return data || [];
 }
 
-export async function savePage(id, items, h, w) {
-  const { error } = await sb.from('ink_pages').update({ data: serialize(items, h, w), updated_at: new Date().toISOString() }).eq('id', id);
+export async function savePage(id, items, h, w, meta) {
+  const { error } = await sb.from('ink_pages').update({ data: serialize(items, h, w, meta), updated_at: new Date().toISOString() }).eq('id', id);
   return error;
 }
 

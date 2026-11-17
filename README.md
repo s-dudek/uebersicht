@@ -38,6 +38,7 @@ js/
   ink.js            Canvas je Notiz-Ordner: Seiten, Werkzeuge, Export, Speichern
   ink-board.js      Canvas: Zeichenfläche mit A4-Seiten und Zoom (Stift, Radierer, Auswahl, Formen, Bemaßung, Titel)
   ink-pages.js      Canvas: Seiten untereinander, Deckseite, Umbau älterer unendlicher Flächen
+  ink-layers.js     Canvas: Fenster „Ebenen“ (eigene Ebenen, Vorlage, Muster, Hintergrund)
   ink-draw.js       Canvas: Geometrie und Zeichnen (Striche, Formen, Maße, Bilder, Kästchen)
   ink-crop.js       Canvas: Bild zuschneiden
   ink-cal.js        Canvas: Termin-Feld (Verweis auf einen Termin, Auswahl, Karte für den Export)

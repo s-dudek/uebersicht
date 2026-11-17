@@ -8,6 +8,7 @@ import { createBoard } from './ink-board.js';
 import { drawFrameBg, FONTS, FRAME_BG, GRID, SHAPES, WEIGHTS } from './ink-draw.js';
 import { deliver, exportWidth, fileName, toImage, toPdf } from './ink-export.js';
 import { drawFrameLayout, FRAME_LAYOUTS, LAYOUT_FIELDS } from './ink-layout.js';
+import { bindLayers, layersAction, layersHtml } from './ink-layers.js';
 import { isPage, preparePages } from './ink-pages.js';
 import { clampSize, cleanText, KINDS, openPenPanel, PALETTE } from './ink-pen.js';
 import { deletePageTree, deserialize, FRAME_NAMES, FRAMES, loadChild, loadRoot, removeImages, savePage, serialize, titleIn, uploadImage } from './ink-store.js';
@@ -35,6 +36,7 @@ const ui = {
   eraser: [5, 9, 18].includes(+saved.e) ? +saved.e : 9,
   finger: store('inkFinger') === '1',
   bar: store('inkBar') !== '0',
+  layers: store('inkLayers') === '1',   // Fenster „Ebenen“ offen
 };
 const saveStyle = () => store('inkStyle', JSON.stringify({ pen: ui.pen, marker: ui.marker, text: ui.text, r: ui.recent, e: ui.eraser }));
 // welche Einstellung Farbe und Stärke gerade betreffen (Formen und Bemaßung zeichnen mit dem Stift)
@@ -60,7 +62,7 @@ async function removeNote(id) {
 // note: Notiz, zu der die Seite gehört (ihre Unterseite)
 function openPage(row, note = null) {
   const isRoot = !stack.length;
-  const { items: raw, v } = deserialize(row.data);
+  const { items: raw, v, layers, fix } = deserialize(row.data);
   const { items, changed } = preparePages(raw, { v, root: isRoot, notes: isRoot && !isCanvasOnly(cat) });
   const page = { id: row.id, note, title: titleIn(row.title), atOpen: new Set(), uploaded: new Set(), timer: null, pending: null };
   const root = isRoot ? { notes: noteList, onNote: (id) => openNote(page, id), onNoteAdd: () => createNote(cat || null), onNoteDelete: removeNote } : {};
@@ -69,6 +71,10 @@ function openPage(row, note = null) {
     ...root,
     ...sub,
     items,
+    layers,
+    fix,
+    onLayers: () => refreshLayers(),
+    onPage: () => refreshLayers(),
     colors: PALETTE,
     hold,
     onTool: (t) => { ui.tool = t; render(); },
@@ -154,10 +160,10 @@ async function removeTitle(row, it) {
   while (stack.length > 1 && stack.some((p) => p.id === it.page)) closePage(stack.pop());   // gelöschte Seite war offen
   const open = stack.find((p) => p.id === row.id);
   if (open) { open.board.removeTitle(it.page); render(); return true; }
-  const { items } = deserialize(row.data);
-  const rest = items.filter((o) => !(o.t === 't' && o.page === it.page));
-  row.data = serialize(rest, row.data?.h || 0, row.data?.w || 0);
-  const err = await savePage(row.id, rest, row.data.h, row.data.w);
+  const d = deserialize(row.data);
+  const rest = d.items.filter((o) => !(o.t === 't' && o.page === it.page));
+  row.data = serialize(rest, d.h, d.w, d);
+  const err = await savePage(row.id, rest, d.h, d.w, d);
   if (err) { toast('Speichern fehlgeschlagen: ' + err.message); return false; }
   return true;
 }
@@ -166,12 +172,12 @@ async function removeTitle(row, it) {
 async function renameFrame(row, n, name) {
   const open = stack.find((p) => p.id === row.id);
   if (open) { open.board.renameFrame(n, name); return null; }
-  const { items } = deserialize(row.data);
-  const f = items.filter(isPage)[n];
+  const d = deserialize(row.data);
+  const f = d.items.filter(isPage)[n];
   if (!f) return null;
   if (name) f.n = name; else delete f.n;
-  row.data = serialize(items, row.data?.h || 0, row.data?.w || 0);
-  return savePage(row.id, items, row.data.h, row.data.w);
+  row.data = serialize(d.items, d.h, d.w, d);
+  return savePage(row.id, d.items, d.h, d.w, d);
 }
 
 // Angaben im Layout eines Bereichs (Dudek-CI): Titel, Projekt, Projektnummer, Kontakt
@@ -197,7 +203,7 @@ function openOutlineTree() {
     cat, open: stack.map((p) => p.id), notes: noteList(),
     pages: b && {
       list: () => b.frames(),
-      thumb: (f, w) => b.renderBox(f.box, w, f.bg, f.ly, f.lf),
+      thumb: (f, w) => b.renderBox(f.box, w, f),
       onShow: (n) => b.showPage(n),
       onMove: (n, d) => b.movePage(n, d),
       onDelete: (n) => b.deletePage(n),
@@ -315,7 +321,7 @@ async function flush(page) {
   if (!page?.pending) return;
   const { list, hh, ww } = page.pending;
   page.pending = null;
-  const err = await savePage(page.id, list, hh, ww);
+  const err = await savePage(page.id, list, hh, ww, page.board.layerMeta());
   if (err) { page.pending ??= { list, hh, ww }; toast('Speichern fehlgeschlagen: ' + err.message, 4000); return; }
   if (page === stack[0]) updateHomeImg(page);
 }
@@ -324,7 +330,7 @@ async function flush(page) {
 const HOME_W = 640;   // Breite des Bildes in Pixel
 async function updateHomeImg(page) {
   const box = page.board.homeBox();
-  const url = box ? (await page.board.renderBox(box, HOME_W, 'blank')).toDataURL('image/jpeg', .8) : null;
+  const url = box ? (await page.board.renderBox(box, HOME_W, { bg: 'blank' })).toDataURL('image/jpeg', .8) : null;
   if ((state.homeImgs[cat ?? ''] || null) === url) return;
   state.homeImgs[cat ?? ''] = url;
   sb.from('ink_pages').update({ home_img: url }).eq('id', page.id).then(() => {});
@@ -475,6 +481,13 @@ function contextAction(id) {
   }
 }
 
+// ---------- Fenster „Ebenen“ (ink-layers.js) ----------
+const layerCtx = () => { const b = top()?.board; return { board: b, page: b?.currentPage() ?? 0, refresh: refreshLayers, editLayout: (n) => b?.editPageLayout(n) }; };
+function refreshLayers() {
+  const el = $app.querySelector('.ink-layers'), b = top()?.board;
+  if (el && b) el.innerHTML = layersHtml(b, b.frames()[b.currentPage()]);
+}
+
 // Werkzeugleiste ein- und ausfahren (ohne Neuaufbau, damit sie weich gleitet)
 function toggleBar() {
   ui.bar = !ui.bar;
@@ -493,6 +506,8 @@ export async function inkAction(act, id, btn) {
       else ui.tool = id;
       break;
     case 'ink-ctx': contextAction(id); return;
+    case 'ink-layers': ui.layers = !ui.layers; store('inkLayers', ui.layers ? '1' : '0'); break;
+    case 'ink-ly': if (id === 'close') { ui.layers = false; store('inkLayers', '0'); break; } layersAction(id, btn, layerCtx()); return;
     case 'ink-pen': openPen(btn); return;
     case 'ink-tree': openOutlineTree(); return;
     case 'ink-more': openMore(btn); return;
@@ -568,7 +583,7 @@ function openExport(preselect) {
     const f = frame(), t = ++token;
     const bg = exp.bg === 'grid' ? f.bg : 'none';
     const w = Math.min(1200, Math.max(300, host.clientWidth || 500) * Math.min(2, window.devicePixelRatio || 1));
-    const cv = await b.renderBox(f.box, w, bg, f.ly, f.lf);
+    const cv = await b.renderBox(f.box, w, { ...f, bg });
     if (t !== token) return;
     cv.className = `exp-cv ${f.fmt} ${bg === 'none' ? 'clear' : ''}`;
     host.replaceChildren(cv);
@@ -642,7 +657,7 @@ async function runExport(b, list) {
   // PDF und JPEG brauchen Weiß, PNG darf durchsichtig sein
   const render1 = async (f) => {
     const bg = exp.bg === 'grid' ? f.bg : 'none';
-    const cv = await b.renderBox(f.box, exportWidth(f.fmt), bg, f.ly, f.lf);
+    const cv = await b.renderBox(f.box, exportWidth(f.fmt), { ...f, bg });
     if (bg === 'none' && exp.fmt !== 'png') {
       const white = document.createElement('canvas');
       white.width = cv.width; white.height = cv.height;
@@ -676,6 +691,7 @@ export function renderInk(fid) {
   if (status === 'error') return '<div class="ink-slot"><p class="empty ink-msg">Der Canvas ist gerade nicht erreichbar. Bitte später nochmal versuchen.</p></div>';
   if (!top()) return `<div class="ink-slot"><div class="center loading ink-msg">${LOADER}</div></div>`;
   return `${inkBar()}<div class="ink-slot">
+    ${ui.layers ? `<aside class="ink-layers" aria-label="Ebenen">${layersHtml(top().board, top().board.frames()[top().board.currentPage()])}</aside>` : ''}
     <div class="ink-ctx" role="toolbar" aria-label="Eigenschaften">${contextHtml()}</div>
   </div>`;
 }
@@ -688,6 +704,8 @@ export function mountInk() {
   if (!slot || !page) return;
   slot.prepend(page.board.el);
   page.board.attach();
+  const aside = slot.querySelector('.ink-layers');
+  if (aside) { bindLayers(aside, layerCtx); refreshLayers(); }
   page.board.refreshNotes();   // Notizen können sich inzwischen geändert haben (auch durch die andere Person)
   if (focusOn && stack.length === 1) { page.board.showMatch(focusOn); focusOn = null; }
   updateTools();
@@ -779,6 +797,7 @@ function inkBar() {
   const selecting = ui.tool === 'lasso';
   return `<div class="ink-bar ${ui.bar ? '' : 'closed'} ${selecting ? 'selecting' : ''}">
     <div class="ink-tools"><div class="ink-tools-in">
+      ${tb('ink-layers', 'layers', 'Ebenen', { on: ui.layers })}
       ${tool('marker', 'marker', 'Textmarker')}
       ${tool('shape', SHAPE_ICON[ui.shape], 'Formen')}
       ${tool('dim', 'ruler', 'Bemaßung')}

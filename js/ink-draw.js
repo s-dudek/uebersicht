@@ -248,24 +248,31 @@ export function drawText(ctx, it) {
 export const FRAME_BG = [['', 'Kariert'], ['lines', 'Liniert'], ['dots', 'Punktiert'], ['blank', 'Leer']];   // Muster einer Seite
 export const FRAME_COLORS = ['#3E7CA8', '#0C3741', '#7FA08A', '#7A5AA6', '#C2575A', '#D9873E', '#C9A227', '#6E8582'];   // Farbe von Rahmen und Reiter
 
-export function drawFrameBg(ctx, box, bg, k = 1) {
+// pc: Farbe des Papiers, mc: Farbe des Musters; paper/pattern: false = ausgeblendet (Ebenen „Hintergrund“, „Muster“)
+export const PAPER = '#FFFFFF', PATTERN = '#0C3741';
+export function drawFrameBg(ctx, box, bg, k = 1, { pc = PAPER, mc = PATTERN, paper = true, pattern = true } = {}) {
   const [x0, y0, x1, y1] = box;
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+  if (paper) { ctx.fillStyle = pc || PAPER; ctx.fillRect(x0, y0, x1 - x0, y1 - y0); }
+  if (!pattern) return;
+  const own = mc && mc !== PATTERN;   // eigene Farbe: kräftiger, damit sie zu sehen ist
+  ctx.save();
   if (bg === 'grid' || bg === 'lines') {
-    ctx.strokeStyle = 'rgba(12, 55, 65, .12)';
+    ctx.strokeStyle = mc || PATTERN;
+    ctx.globalAlpha = own ? .4 : .12;
     ctx.lineWidth = 1.1 / k;
     ctx.beginPath();
     for (let gy = Math.ceil(y0 / GRID) * GRID; gy <= y1; gy += GRID) { ctx.moveTo(x0, gy); ctx.lineTo(x1, gy); }
     if (bg === 'grid') for (let gx = Math.ceil(x0 / GRID) * GRID; gx <= x1; gx += GRID) { ctx.moveTo(gx, y0); ctx.lineTo(gx, y1); }
     ctx.stroke();
   } else if (bg === 'dots') {
-    ctx.fillStyle = 'rgba(12, 55, 65, .32)';
+    ctx.fillStyle = mc || PATTERN;
+    ctx.globalAlpha = own ? .7 : .32;
     const r = Math.max(1.4, 1.2 / k);   // klein gezeichnet (Vorschau, weit herausgezoomt): Punkte bleiben sichtbar
     for (let gy = Math.ceil(y0 / GRID) * GRID; gy <= y1; gy += GRID) {
       for (let gx = Math.ceil(x0 / GRID) * GRID; gx <= x1; gx += GRID) ctx.fillRect(gx - r / 2, gy - r / 2, r, r);
     }
   }
+  ctx.restore();
 }
 
 // ---------- Formen: werden zu gewöhnlichen Strichen (radierbar, auswählbar, umfärbbar) ----------

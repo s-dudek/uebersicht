@@ -1,6 +1,6 @@
 // Speichert die App-Dateien, damit sie auch bei schlechtem Netz schnell startet.
 // Bei jeder neuen Version die Nummer erhöhen.
-const CACHE = 'uebersicht-v77';
+const CACHE = 'uebersicht-v78';
 const FILES = [
   './', 'index.html', 'style.css', 'config.js', 'manifest.json',
   'icons/icon-192.png', 'icons/apple-touch-icon.png',
@@ -42,6 +42,7 @@ const FILES = [
   'js/ink-store.js',
   'js/ink-tree.js',
   'js/ink-pages.js',
+  'js/ink-layers.js',
   'js/items.js',
   'js/main.js',
   'js/meals.js',

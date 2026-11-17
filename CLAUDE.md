@@ -67,6 +67,10 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   Ältere unendliche Flächen (`v: 1`) werden beim Öffnen einmal umgebaut (`preparePages`/`migrate`): Bereiche werden Seiten, übriger Inhalt kommt auf zusätzliche A4-Seiten, nichts geht verloren.
   „Neue Seite“ (Kopfleiste, Knopf unter der letzten Seite, Seitenmenü): Fenster mit Vorlage `ly`, Format, Muster `bg` und Stelle (gemerkt in `inkPageKind`).
   Seitenmenü (Reiter über der Seite): Umbenennen, Format, Muster, Vorlage samt Angaben, nach oben/unten, neue Seite danach, Speichern, löschen.
+  Ebenen (`ink-layers.js`, Knopf „Ebenen“ links in der Werkzeugleiste, `inkLayers` gemerkt): Fenster links neben der Fläche (schmal darüber).
+  Eigene Ebenen in `data.layers` [{ id `L…`, n, h ausgeblendet, k gesperrt }] (oben zuerst), Elemente s/x/i/d/t tragen `l`; Neues kommt auf die aktive Ebene (`commit`),
+  ausgeblendete werden nicht gezeichnet/gespeichert-exportiert, gesperrte nicht bearbeitet; hinzufügen, umbenennen, verschieben, Auswahl hierher, löschen (mit Inhalt).
+  Feste Ebenen je Seite: Vorlage `ly`, Muster `bg` + Farbe `mc`, Hintergrund (Papier) `pc` – für die aktuelle Seite oder alle (`setPageLook`); ausblenden in `data.fix` { bg, pat, ly }.
   Seitenübersicht (`ink-tree.js`, Knopf „Seiten und Unterseiten“): Vorschaubilder der Seiten (öffnen, verschieben, löschen, neue Seite), darunter Notizen, Seiten und Titel aller Unterseiten.
   Notizen-Bereich (Element `n`, nur Lage) zeigt die Notizen des Ordners als Liste (HTML); jede Notiz hat eine Unterseite mit gleicher ID
   und ihrer Beschreibung oben; Notiz löschen löscht die Unterseite mit (data.js). Auswahl lässt sich nachträglich umgestalten (Farbe, Stärke, Schrift).
