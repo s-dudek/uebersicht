@@ -10,8 +10,9 @@ import { deliver, exportWidth, fileName, toImage, toPdf } from './ink-export.js'
 import { drawFrameLayout, FRAME_LAYOUTS, LAYOUT_FIELDS } from './ink-layout.js';
 import { bindLayers, layersAction, layersHtml } from './ink-layers.js';
 import { isPage, preparePages } from './ink-pages.js';
+import { openStickers } from './ink-stickers.js';
 import { clampSize, cleanText, KINDS, openPenPanel, PALETTE } from './ink-pen.js';
-import { deletePageTree, deserialize, FRAME_NAMES, FRAMES, loadChild, loadRoot, removeImages, savePage, serialize, titleIn, uploadImage } from './ink-store.js';
+import { deletePageTree, deserialize, FRAME_NAMES, FRAMES, loadChild, loadRoot, placeSticker, removeImages, savePage, saveSticker, serialize, titleIn, uploadImage } from './ink-store.js';
 import { openTree, titleSvg } from './ink-tree.js';
 import { calCardHtml, calColor, drawCalCard, nextCalSize, openCalOf, pickCalEvent } from './ink-cal.js';
 import { bellCardHtml, bellColor, drawBellCard, openBellOf } from './ink-remind.js';
@@ -96,6 +97,7 @@ function openPage(row, note = null) {
     onCard: (it) => { flushAll(); if (it.t === 'b') openBellOf(it); else openCalOf(it); },
     onCardDelete: (it) => { if (it.t === 'b' && itemById(it.rem)) trashItems([it.rem]); },   // Feld weg = Erinnerung in den Papierkorb
     onRemind: (box, text) => remindSelection(page, box, text),
+    onSticker: async (cv) => { try { await saveSticker(cv, cv.width, cv.height); toast('Als Sticker gespeichert.'); } catch (e) { toast('Sticker konnte nicht gespeichert werden: ' + (e.message || e), 4000); } },
   });
   page.board.imagePaths().forEach((p) => page.atOpen.add(p));
   stack.push(page);
@@ -383,6 +385,19 @@ picker.addEventListener('change', async () => {
   }
 });
 
+// Sticker aus der Sammlung auf die Seite (als Kopie im Ordner des Canvas, obenauf)
+async function insertSticker(path) {
+  const page = top();
+  if (!page) return;
+  try {
+    const img = await busy(placeSticker(path, cat));
+    page.uploaded.add(img.path);
+    page.board.addImage(img, { top: true, size: 260 });
+  } catch (e) {
+    toast('Sticker konnte nicht eingefügt werden: ' + (e.message || e), 4000);
+  }
+}
+
 // Formen: Linie, Pfeil, Rechteck, Ellipse, Dreieck
 function openShapes(btn) {
   dropMenu(btn, SHAPES.map(([k, l]) => `<button class="cm-i ${ui.tool === 'shape' && ui.shape === k ? 'on' : ''}" data-k="${k}">${ICON[SHAPE_ICON[k]]}<span>${l}</span></button>`).join(''), (b) => {
@@ -415,7 +430,7 @@ const remember = (c) => { ui.recent = [c, ...ui.recent.filter((x) => x !== c)].s
 // ---------- Eigenschaften-Leiste unten (wie in Illustrator): zeigt, was zum Werkzeug bzw. zur Auswahl passt ----------
 const TOOL_LABEL = { pen: 'Stift', marker: 'Textmarker', text: 'Text', shape: 'Form', dim: 'Bemaßung', eraser: 'Radierer', lasso: 'Auswahl' };
 const ACTION = { title: ['chevR', 'Als Titel'], edit: ['pen', 'Bearbeiten'], crop: ['crop', 'Zuschneiden'], unerase: ['undo', 'Radiertes zurück'],
-  group: ['stack', 'Gruppieren'], ungroup: ['stack', 'Aufheben'], copy: ['copy', 'Kopieren'], remind: ['bell', 'Erinnern'], delete: ['trash', 'Löschen'] };
+  group: ['stack', 'Gruppieren'], ungroup: ['stack', 'Aufheben'], copy: ['copy', 'Kopieren'], sticker: ['sticker', 'Als Sticker'], remind: ['bell', 'Erinnern'], delete: ['trash', 'Löschen'] };
 const ERASERS = [[5, 'Fein'], [9, 'Mittel'], [18, 'Breit']];
 
 // was die Leiste gerade einstellt: { kind, val } aus der Auswahl oder dem Werkzeug (null: nichts mit Farbe)
@@ -516,6 +531,7 @@ export async function inkAction(act, id, btn) {
     case 'ink-undo': b?.undo(); return;
     case 'ink-redo': b?.redo(); return;
     case 'ink-img': picker.click(); return;
+    case 'ink-sticker': openStickers({ onPick: insertSticker }); return;
     case 'ink-cal': pickCalEvent().then((c) => { if (c) top()?.board.addCard(c); }); return;
     case 'ink-page': if (b) openAddPage(b.currentPage() + 1); return;
     case 'ink-fold': toggleBar(); return;
@@ -802,6 +818,7 @@ function inkBar() {
       ${tool('shape', SHAPE_ICON[ui.shape], 'Formen')}
       ${tool('dim', 'ruler', 'Bemaßung')}
       ${tb('ink-img', 'image', 'Bild hinzufügen')}
+      ${tb('ink-sticker', 'sticker', 'Sticker')}
       ${tb('ink-cal', 'calendar', 'Termin einfügen', { cls: 'wide-only' })}
       <div class="ink-right">
         <div class="seg-view ink-seg">${seg('text', 'text', 'Text')}${seg('pen', 'pen', 'Zeichnen')}${seg('eraser', 'eraser', 'Radieren')}</div>

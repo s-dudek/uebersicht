@@ -477,3 +477,7 @@ alter table public.items add constraint items_type_check check (type in ('todo',
 -- Kann gelöscht werden, sobald der Umbau bestätigt ist: drop table if exists public.ink_pages_backup_v1;
 create table if not exists public.ink_pages_backup_v1 as select * from public.ink_pages;
 alter table public.ink_pages_backup_v1 enable row level security;
+
+-- ---------- Sticker: PNG mit durchsichtigem Hintergrund im Speicher "ink" erlauben (17.11.2026) ----------
+-- Sammlung je Person unter u/<user-id>/stk-….png, auf einer Seite als Kopie im Ordner des Canvas
+update storage.buckets set allowed_mime_types = array['image/jpeg', 'image/png'] where id = 'ink';

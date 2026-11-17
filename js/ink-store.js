@@ -4,12 +4,14 @@ import { FONTS } from './ink-draw.js';
 import { FRAME_LAYOUTS, LAYOUT_FIELDS } from './ink-layout.js';
 
 const BUCKET = 'ink';
-const IMG_PATH = /^(?:[uc]\/)?[\w-]{1,64}\/[\w-]{1,64}\.jpg$/;   // u/<user-id>/… oder c/<ordner-id>/… (ältere: <user-id>/…)
+const IMG_PATH = /^(?:[uc]\/)?[\w-]{1,64}\/[\w-]{1,64}\.(?:jpg|png)$/;   // u/<user-id>/… oder c/<ordner-id>/… (ältere: <user-id>/…); PNG: Sticker
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DAY = /^\d{4}-\d{2}-\d{2}$/, TIME = /^\d{2}:\d{2}$/;
 const EXT_OCC = /^x:[\w.@:#-]{1,400}$/;   // Termin eines verknüpften Kalenders (cal-sources.js)
 const LAYER_ID = /^L[\w-]{1,24}$/;                     // Ebene (ink-layers.js)
 const MAX_IMG = 1600;                                  // längste Bildseite in Pixel
+const MAX_STICKER = 1024;                              // längste Seite eines Stickers in Pixel
+const STICKER = /^stk-[\w-]{1,48}\.png$/;              // Sticker der eigenen Sammlung: u/<user-id>/stk-….png
 export const newId = () => crypto.randomUUID();
 
 // ---------- Striche kompakt speichern: Ganzzahlen, ab dem 2. Punkt als Differenz ----------
@@ -302,6 +304,64 @@ export function imageUrl(path) {
   return urls.get(path);
 }
 export const isImagePath = (p) => IMG_PATH.test(p || '');
+
+// ---------- Sticker: eigene Sammlung (PNG mit durchsichtigem Hintergrund) ----------
+// Bild bzw. SVG als Bild laden (SVG über eine data-URL, die CSP erlaubt keine blob:-Adressen; gespeichert wird nur das gerasterte PNG)
+function readImage(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onerror = () => rej(new Error('Datei konnte nicht gelesen werden.'));
+    r.onload = () => { const img = new Image(); img.onload = () => res(img); img.onerror = () => rej(new Error('Bild konnte nicht geöffnet werden.')); img.src = String(r.result); };
+    r.readAsDataURL(file);
+  });
+}
+const pngBlob = (cv) => new Promise((res) => cv.toBlob(res, 'image/png'));
+
+// Canvas verkleinert in die Sammlung legen
+export async function saveSticker(src, w, h) {
+  const k = Math.min(1, MAX_STICKER / Math.max(w, h));
+  const cv = document.createElement('canvas');
+  cv.width = Math.max(1, Math.round(w * k)); cv.height = Math.max(1, Math.round(h * k));
+  cv.getContext('2d').drawImage(src, 0, 0, cv.width, cv.height);
+  const blob = await pngBlob(cv);
+  if (!blob) throw new Error('Sticker konnte nicht umgewandelt werden.');
+  const path = `u/${state.me}/stk-${newId()}.png`;
+  const { error } = await sb.storage.from(BUCKET).upload(path, blob, { contentType: 'image/png', upsert: false });
+  if (error) throw error;
+  return path;
+}
+
+// PNG oder SVG (ohne Hintergrund) als Sticker hochladen
+export async function uploadSticker(file) {
+  const svg = file?.type === 'image/svg+xml' || /\.svg$/i.test(file?.name || '');
+  if (!svg && file?.type !== 'image/png') throw new Error('Bitte eine PNG- oder SVG-Datei wählen.');
+  const img = svg ? await readImage(file) : await createImageBitmap(file);
+  let w = img.width || img.naturalWidth, h = img.height || img.naturalHeight;
+  if (svg && (!w || !h)) { w = 512; h = 512; }                  // SVG ohne Größenangabe
+  if (svg && Math.max(w, h) < MAX_STICKER) { const k = MAX_STICKER / Math.max(w, h); w *= k; h *= k; }   // Vektoren scharf rastern
+  return saveSticker(img, w, h);
+}
+
+// eigene Sticker, neueste zuerst
+export async function listStickers() {
+  const { data, error } = await sb.storage.from(BUCKET).list(`u/${state.me}`, { limit: 1000, sortBy: { column: 'created_at', order: 'desc' } });
+  if (error) throw error;
+  return (data || []).filter((f) => STICKER.test(f.name)).map((f) => `u/${state.me}/${f.name}`);
+}
+
+// Sticker auf eine Seite: Kopie in den Ordner des Canvas (die andere Person sieht die eigene Sammlung nicht)
+export async function placeSticker(path, catId) {
+  const { data, error } = await sb.storage.from(BUCKET).download(path);
+  if (error || !data) throw error || new Error('Sticker nicht gefunden.');
+  const bmp = await createImageBitmap(data);
+  const copy = catId ? `c/${catId}/${newId()}.png` : `u/${state.me}/${newId()}.png`;
+  const up = await sb.storage.from(BUCKET).upload(copy, data, { contentType: 'image/png', upsert: false });
+  if (up.error) throw up.error;
+  cache.set(copy, Promise.resolve(bmp));
+  return { path: copy, w: bmp.width, h: bmp.height };
+}
+
+export const deleteSticker = (path) => (STICKER.test(path.split('/').pop() || '') ? removeImages([path]) : Promise.resolve());
 
 export async function removeImages(paths) {
   const list = paths.filter((p) => IMG_PATH.test(p));

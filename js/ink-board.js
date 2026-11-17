@@ -7,8 +7,8 @@ import { esc } from './core.js';
 import { ICON } from './icons.js';
 import { startCrop } from './ink-crop.js';
 import {
-  bbox, canRotate, dimLabelAt, distTo, drawDim, drawFrameBg, drawImageItem, drawStroke, drawText, fontCss, FONTS, fontListeners,
-  FRAME_BG, forgetBox, forgetErased, fullRect, GRID, LINE_H, nearItem, NOTES_W, rotateItem, shapeStrokes, share, TEXT_FS, textSize, transform, union,
+  bbox, canRotate, cropOf, dimLabelAt, distTo, drawDim, drawFrameBg, drawImageItem, drawStroke, drawText, fontCss, FONTS, fontListeners,
+  FRAME_BG, forgetBox, forgetErased, fullRect, GRID, imageSource, LINE_H, nearItem, NOTES_W, rotateItem, shapeStrokes, share, TEXT_FS, textSize, transform, union,
 } from './ink-draw.js';
 import { drawFrameLayout, FRAME_LAYOUTS } from './ink-layout.js';
 import { groupsOf, isPage, PAGE_GAP, stackGroups } from './ink-pages.js';
@@ -996,6 +996,7 @@ export function createBoard(opts) {
       (single('d') || single('x')) && 'edit',
       single('i') && !single('i').r && 'crop',   // gedrehte Bilder: erst gerade stellen
       single('i')?.er?.length && 'unerase',
+      single('i') && 'sticker',
       list.length > 1 && !oneGroup && 'group',
       oneGroup && 'ungroup',
       list.some(copyable) && 'copy',
@@ -1004,7 +1005,18 @@ export function createBoard(opts) {
     ].filter(Boolean);
   }
   const ACTIONS = { title: () => makeTitle(), edit: () => editSingle(), crop: () => cropImage(single('i')), unerase: () => unerase(),
-    group: () => group(), ungroup: () => ungroup(), delete: () => deleteSel(), copy: () => copySel(), remind: () => opts.onRemind?.(sel.box, selectionText()) };
+    group: () => group(), ungroup: () => ungroup(), delete: () => deleteSel(), copy: () => copySel(), remind: () => opts.onRemind?.(sel.box, selectionText()),
+    sticker: async () => { const cv = await stickerCanvas(single('i')); if (cv) opts.onSticker?.(cv); } };
+  // ausgeschnittenes Bild (Zuschnitt, radierte Stellen durchsichtig) als Canvas in Originalauflösung, für die Sticker-Sammlung
+  async function stickerCanvas(it) {
+    const bmp = it && (loaded.get(it.src) || (await getImage(it.src)));
+    if (!bmp) return null;
+    const [c0, c1, c2, c3] = cropOf(it), W = bmp.width, H = bmp.height;
+    const cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round((c2 - c0) * W)); cv.height = Math.max(1, Math.round((c3 - c1) * H));
+    cv.getContext('2d').drawImage(imageSource(it, bmp), c0 * W, c1 * H, cv.width, cv.height, 0, 0, cv.width, cv.height);
+    return cv;
+  }
   // Kopieren: Auswahl merken und gleich versetzt daneben einfügen; Einfügen geht auch später (langes Drücken auf freie Stelle)
   const copyable = (it) => it.t !== 't' && it.t !== 'f';   // Titel (Unterseiten) und Bereiche nicht
   function copySel() {
@@ -1543,11 +1555,12 @@ export function createBoard(opts) {
     deleteSelection: deleteSel,
     clearHistory() { past.length = 0; future.length = 0; },
     get isEmpty() { return !items.length; },
-    // Bild in der Mitte des sichtbaren Bereichs einfügen (unter die Striche)
-    addImage({ path, w, h: ih }) {
-      const bw = Math.min(480, VIEW - 80) / view.z, bh = bw * (ih / w);
+    // Bild in der Mitte des sichtbaren Bereichs einfügen: unter die Striche, Sticker (top) obenauf; size: Breite in Einheiten
+    addImage({ path, w, h: ih }, { top = false, size = 480 } = {}) {
+      const bw = Math.min(size, VIEW - 80) / view.z, bh = bw * (ih / w);
       const cx = view.x + sc.clientWidth / 2 / cur(), cy = view.y + sc.clientHeight / 2 / cur();
-      commit([{ t: 'i', src: path, x: cx - bw / 2, y: cy - bh / 2, w: bw, h: bh }, ...items]);
+      const img = { t: 'i', src: path, x: cx - bw / 2, y: cy - bh / 2, w: bw, h: bh };
+      commit(top ? [...items, img] : [img, ...items]);
       redrawAll();
     },
     addPage,

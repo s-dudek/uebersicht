@@ -71,6 +71,8 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   Eigene Ebenen in `data.layers` [{ id `L…`, n, h ausgeblendet, k gesperrt }] (oben zuerst), Elemente s/x/i/d/t tragen `l`; Neues kommt auf die aktive Ebene (`commit`),
   ausgeblendete werden nicht gezeichnet/gespeichert-exportiert, gesperrte nicht bearbeitet; hinzufügen, umbenennen, verschieben, Auswahl hierher, löschen (mit Inhalt).
   Feste Ebenen je Seite: Vorlage `ly`, Muster `bg` + Farbe `mc`, Hintergrund (Papier) `pc` – für die aktuelle Seite oder alle (`setPageLook`); ausblenden in `data.fix` { bg, pat, ly }.
+  Sticker (`ink-stickers.js`, Knopf „Sticker“ in der Werkzeugleiste): eigene Sammlung als PNG unter `u/<user-id>/stk-….png` (PNG/SVG hochladen, SVG wird gerastert, `uploadSticker`);
+  Antippen setzt eine Kopie in den Ordner des Canvas (`placeSticker`, obenauf); Auswahl eines Bildes → „Als Sticker“ speichert es ausgeschnitten (Zuschnitt, Radiertes durchsichtig). Bucket `ink` erlaubt dafür PNG.
   Seitenübersicht (`ink-tree.js`, Knopf „Seiten und Unterseiten“): Vorschaubilder der Seiten (öffnen, verschieben, löschen, neue Seite), darunter Notizen, Seiten und Titel aller Unterseiten.
   Notizen-Bereich (Element `n`, nur Lage) zeigt die Notizen des Ordners als Liste (HTML); jede Notiz hat eine Unterseite mit gleicher ID
   und ihrer Beschreibung oben; Notiz löschen löscht die Unterseite mit (data.js). Auswahl lässt sich nachträglich umgestalten (Farbe, Stärke, Schrift).
