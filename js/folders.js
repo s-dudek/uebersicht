@@ -29,14 +29,20 @@ const orderCats = (list, kind) => {
 };
 
 export async function saveCatOrder(kind, ids) {
+  const done = saveProfileList(kind, ids);
+  render();
+  return done;
+}
+
+// Liste je Person in profiles.cat_order speichern (auch für Sticker-Namen, ohne neu zu zeichnen)
+export async function saveProfileList(kind, list) {
   const me = state.profiles[state.me] || (state.profiles[state.me] = { id: state.me });
   const all = { ...(me.cat_order || {}) };
-  try { const ls = JSON.parse(localStorage.getItem(CAT_ORDER_KEY)) || {}; ls[kind] = ids; localStorage.setItem(CAT_ORDER_KEY, JSON.stringify(ls)); } catch {}
-  all[kind] = ids;
+  try { const ls = JSON.parse(localStorage.getItem(CAT_ORDER_KEY)) || {}; ls[kind] = list; localStorage.setItem(CAT_ORDER_KEY, JSON.stringify(ls)); } catch {}
+  all[kind] = list;
   me.cat_order = all;
-  render();
   const { error } = await sb.from('profiles').update({ cat_order: all }).eq('id', state.me);
-  if (error && !/cat_order/.test(error.message)) toast('Reihenfolge nicht gespeichert: ' + error.message, 4000);
+  if (error && !/cat_order/.test(error.message)) toast('Nicht gespeichert: ' + error.message, 4000);
 }
 
 export const todoLists = () => [

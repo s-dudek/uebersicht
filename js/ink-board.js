@@ -996,7 +996,7 @@ export function createBoard(opts) {
       (single('d') || single('x')) && 'edit',
       single('i') && !single('i').r && 'crop',   // gedrehte Bilder: erst gerade stellen
       single('i')?.er?.length && 'unerase',
-      single('i') && 'sticker',
+      list.some(drawable) && 'sticker',
       list.length > 1 && !oneGroup && 'group',
       oneGroup && 'ungroup',
       list.some(copyable) && 'copy',
@@ -1006,15 +1006,28 @@ export function createBoard(opts) {
   }
   const ACTIONS = { title: () => makeTitle(), edit: () => editSingle(), crop: () => cropImage(single('i')), unerase: () => unerase(),
     group: () => group(), ungroup: () => ungroup(), delete: () => deleteSel(), copy: () => copySel(), remind: () => opts.onRemind?.(sel.box, selectionText()),
-    sticker: async () => { const cv = await stickerCanvas(single('i')); if (cv) opts.onSticker?.(cv); } };
-  // ausgeschnittenes Bild (Zuschnitt, radierte Stellen durchsichtig) als Canvas in Originalauflösung, für die Sticker-Sammlung
-  async function stickerCanvas(it) {
-    const bmp = it && (loaded.get(it.src) || (await getImage(it.src)));
-    if (!bmp) return null;
-    const [c0, c1, c2, c3] = cropOf(it), W = bmp.width, H = bmp.height;
-    const cv = document.createElement('canvas');
-    cv.width = Math.max(1, Math.round((c2 - c0) * W)); cv.height = Math.max(1, Math.round((c3 - c1) * H));
-    cv.getContext('2d').drawImage(imageSource(it, bmp), c0 * W, c1 * H, cv.width, cv.height, 0, 0, cv.width, cv.height);
+    sticker: async () => { const cv = await stickerCanvas(); if (cv) opts.onSticker?.(cv, selectionText()); } };
+  // Auswahl als Canvas mit durchsichtigem Grund, für die Sticker-Sammlung. Ein einzelnes Bild in Originalauflösung
+  // (Zuschnitt, radierte Stellen durchsichtig), sonst alles Ausgewählte gezeichnet (längste Seite höchstens 1024 Pixel)
+  async function stickerCanvas() {
+    const list = sel ? items.filter((it) => sel.set.has(it) && drawable(it)) : [];
+    if (!list.length) return null;
+    await Promise.all(list.filter((it) => it.t === 'i').map(async (it) => { const bmp = await getImage(it.src); if (bmp) loaded.set(it.src, bmp); }));
+    const cv = document.createElement('canvas'), img = list.length === 1 && list[0].t === 'i' && !list[0].r ? list[0] : null;
+    if (img) {
+      const bmp = loaded.get(img.src);
+      if (!bmp) return null;
+      const [c0, c1, c2, c3] = cropOf(img), W = bmp.width, H = bmp.height;
+      cv.width = Math.max(1, Math.round((c2 - c0) * W)); cv.height = Math.max(1, Math.round((c3 - c1) * H));
+      cv.getContext('2d').drawImage(imageSource(img, bmp), c0 * W, c1 * H, cv.width, cv.height, 0, 0, cv.width, cv.height);
+      return cv;
+    }
+    const [x0, y0, x1, y1] = union(list), pad = 4, k = Math.min(3, 1024 / (Math.max(x1 - x0, y1 - y0) + pad * 2));
+    cv.width = Math.max(1, Math.round((x1 - x0 + pad * 2) * k)); cv.height = Math.max(1, Math.round((y1 - y0 + pad * 2) * k));
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(k, 0, 0, k, (pad - x0) * k, (pad - y0) * k);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    drawList(ctx, list);
     return cv;
   }
   // Kopieren: Auswahl merken und gleich versetzt daneben einfügen; Einfügen geht auch später (langes Drücken auf freie Stelle)

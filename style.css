@@ -1670,18 +1670,22 @@ li.closed > ul { display: none; }
 .ily-all svg { width: 15px; height: 15px; }
 .ily-in { flex: 1; min-width: 0; height: 32px; padding: 4px 8px; font-size: 14px; }
 /* Sticker-Sammlung: durchsichtige Bilder auf Schachbrett-Grund */
-.stk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 12px; }
-.stk { position: relative; aspect-ratio: 1; border-radius: 16px; }
-.stk-pick { width: 100%; height: 100%; display: grid; place-items: center; padding: 10px; border-radius: 16px;
+.stk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 12px; align-items: start; }
+.stk-body.editing .stk-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.stk-h { display: flex; align-items: center; gap: 8px; margin: 16px 2px 8px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--grey); }
+.stk-h i { font-style: normal; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; display: grid; place-items: center; background: var(--pale); color: var(--ink); letter-spacing: 0; }
+.stk { position: relative; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.stk-n { padding: 0 4px; font-size: 13px; font-weight: 600; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stk-in { height: 34px; padding: 4px 10px; font-size: 14px; }
+.stk-pick { width: 100%; aspect-ratio: 1; display: grid; place-items: center; padding: 10px; border-radius: 16px;
   background: repeating-conic-gradient(#EEF2ED 0 25%, #FFFFFF 0 50%) 50% / 16px 16px; box-shadow: inset 0 0 0 1px var(--soft); }
 .stk-pick img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .stk-pick:active { transform: scale(.95); }
-.stk-add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: 1.5px dashed var(--soft); cursor: pointer; font-size: 13px; font-weight: 600; }
+.stk-add { aspect-ratio: 1; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: 1.5px dashed var(--soft); cursor: pointer; font-size: 13px; font-weight: 600; }
 .stk-add svg { width: 22px; height: 22px; }
 .stk-del { position: absolute; top: -6px; right: -6px; width: 26px; height: 26px; display: none; place-items: center; border-radius: 50%; background: var(--danger); color: var(--white); }
 .stk-del svg { width: 14px; height: 14px; }
-.stk-grid.editing .stk-del { display: grid; }
-.stk-grid.editing .stk-pick { animation: jiggle .28s ease-in-out infinite alternate; }
+.stk-body.editing .stk-del { display: grid; }
 @media (hover: hover) {
   .tree-i:hover, .tree-start:hover, .tree-tog:hover, .tree-show:hover { background: var(--pale); }
   .tree-row:hover .tree-ren { opacity: 1; }

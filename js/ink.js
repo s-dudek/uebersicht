@@ -10,7 +10,7 @@ import { deliver, exportWidth, fileName, toImage, toPdf } from './ink-export.js'
 import { drawFrameLayout, FRAME_LAYOUTS, LAYOUT_FIELDS } from './ink-layout.js';
 import { bindLayers, layersAction, layersHtml } from './ink-layers.js';
 import { isPage, preparePages } from './ink-pages.js';
-import { openStickers } from './ink-stickers.js';
+import { nameSticker, openStickers } from './ink-stickers.js';
 import { clampSize, cleanText, KINDS, openPenPanel, PALETTE } from './ink-pen.js';
 import { deletePageTree, deserialize, FRAME_NAMES, FRAMES, loadChild, loadRoot, placeSticker, removeImages, savePage, saveSticker, serialize, titleIn, uploadImage } from './ink-store.js';
 import { openTree, titleSvg } from './ink-tree.js';
@@ -97,7 +97,7 @@ function openPage(row, note = null) {
     onCard: (it) => { flushAll(); if (it.t === 'b') openBellOf(it); else openCalOf(it); },
     onCardDelete: (it) => { if (it.t === 'b' && itemById(it.rem)) trashItems([it.rem]); },   // Feld weg = Erinnerung in den Papierkorb
     onRemind: (box, text) => remindSelection(page, box, text),
-    onSticker: async (cv) => { try { await saveSticker(cv, cv.width, cv.height); toast('Als Sticker gespeichert.'); } catch (e) { toast('Sticker konnte nicht gespeichert werden: ' + (e.message || e), 4000); } },
+    onSticker: async (cv, name) => { try { await nameSticker(await saveSticker(cv, cv.width, cv.height), name); toast('Als Sticker gespeichert.'); } catch (e) { toast('Sticker konnte nicht gespeichert werden: ' + (e.message || e), 4000); } },
   });
   page.board.imagePaths().forEach((p) => page.atOpen.add(p));
   stack.push(page);
