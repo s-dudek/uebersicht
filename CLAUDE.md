@@ -61,7 +61,7 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
 - `sw.js` holt eigene Dateien mit `cache: 'no-cache'`, damit neue Versionen sofort ankommen.
 - `render()` baut die Ansicht neu auf; während Gesten `render.hold = true` setzen, danach `render.pending` abarbeiten.
 - Canvas (früher „Handschrift“, Code `js/ink*.js`): je Notiz-Ordner eine Startseite in `ink_pages`, Titel führen zu Unterseiten.
-  Jede Seite ist ein Heft aus A4-Seiten (`ink-pages.js`, Daten-Version `v: 2`): Seiten = Elemente `f` (a4p/a4l) in ihrer Reihenfolge untereinander, mittig auf x = 0, Abstand `PAGE_GAP`;
+  Jede Seite ist ein Heft aus A4-Seiten (`ink-pages.js`, Daten-Version `v: 2`): Seiten = Elemente `f` (a4p/a4l) in ihrer Reihenfolge untereinander oder zu zweit nebeneinander (Anordnung `data.ar = 2`, Knopf „Zwei Seiten nebeneinander“ in der Kopfleiste bzw. „Mehr“, `setCols`), Reihen mittig auf x = 0, Abstand `PAGE_GAP`;
   zu einer Seite gehört, was mit seiner Mitte darauf liegt (`groupsOf`, `stackGroups` reiht neu ein). Neben den Seiten wird nicht geschrieben, Zoom 45–400 % der Seitenbreite, Ansicht bleibt bei den Seiten (`clampView`).
   Startseite beginnt immer mit der Deckseite (`cov: 1`, nicht verschieb-/löschbar) mit Homescreen-Ausschnitt (`fmt: 'home'`, 750×500) und Notizen-Bereich.
   Ältere unendliche Flächen (`v: 1`) werden beim Öffnen einmal umgebaut (`preparePages`/`migrate`): Bereiche werden Seiten, übriger Inhalt kommt auf zusätzliche A4-Seiten, nichts geht verloren.
@@ -86,8 +86,8 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   Termin-Feld (Element `c`, ink-cal.js: Verweis `ev` bzw. `xo` plus Kopie `tt`/`d`/`tm`, Größe `sz` s/m/l wie Kacheln, HTML-Ebene; ziehen = verschieben, antippen = Wochenansicht des Tages, Inhalt immer aktuell aus dem Kalender),
   Seiten mit Name `n`, Muster `bg` (ohne = kariert, lines/dots/blank), Vorlage `ly` im Dudek-CI (ink-layout.js) mit Angaben `lf` (Titel, Projekt, Nr., Kontakt),
   Werkzeugleiste: Umschalter Text/Zeichnen/Radieren, Auswahl als eigener Knopf (solange aktiv ruhen die anderen Werkzeuge),
-  Eigenschaften-Leiste unten (`.ink-ctx`, contextHtml in ink.js): je nach Werkzeug/Auswahl Farbe, Stärke, Schrift, Radiergröße, Aktionen; rechts runder Knopf „Ursprungsansicht“,
-  Kopfleiste links (Desktop): Knopf ☰ fährt die Seitenleiste ein/aus (`state.inkSideOff`, gemerkt); rechts: Neue Seite, Speichern | Finger, Seitenübersicht | Rückgängig, Wiederholen.
+  Eigenschaften-Leiste unten (`.ink-ctx`, contextHtml in ink.js): je nach Werkzeug/Auswahl Farbe, Stärke, Schrift, Radiergröße, Aktionen (nur Symbole); an freier Stelle bzw. am Griff verschiebbar (`inkCtxPos`), rechts runder Knopf holt sie in die Mitte (Ursprungsansicht nur noch Strg+0),
+  Desktop: kleiner Pfeil links mittig am Rand (`.side-tab` in render.js) fährt die Seitenleiste ein/aus (`state.inkSideOff`, gemerkt); Kopfleiste rechts: Neue Seite, Nebeneinander, Speichern | Finger, Seitenübersicht | Rückgängig, Wiederholen.
   Speichern-Fenster: links Seiten, Vorlage samt Angaben (nachträglich), Format, Muster; rechts große Vorschau.
   Text mit Schriftart `ff` (FONTS in ink-draw.js, Google Fonts in index.html), Schnitt `fw`, kursiv `i`;
   Titel aus Strichen und Texten (`tx`). Handballen je Berührung (wie GoodNotes): Hand ist, was aufsetzt, während der Stift schreibt, große

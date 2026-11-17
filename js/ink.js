@@ -38,6 +38,7 @@ const ui = {
   finger: store('inkFinger') === '1',
   bar: store('inkBar') !== '0',
   layers: store('inkLayers') === '1',   // Fenster „Ebenen“ offen
+  ctxPos: (() => { try { const p = JSON.parse(store('inkCtxPos')); return Number.isFinite(p?.x) && Number.isFinite(p?.y) ? p : null; } catch { return null; } })(),   // verschobene Eigenschaften-Leiste
 };
 const saveStyle = () => store('inkStyle', JSON.stringify({ pen: ui.pen, marker: ui.marker, text: ui.text, r: ui.recent, e: ui.eraser }));
 // welche Einstellung Farbe und Stärke gerade betreffen (Formen und Bemaßung zeichnen mit dem Stift)
@@ -63,8 +64,8 @@ async function removeNote(id) {
 // note: Notiz, zu der die Seite gehört (ihre Unterseite)
 function openPage(row, note = null) {
   const isRoot = !stack.length;
-  const { items: raw, v, layers, fix } = deserialize(row.data);
-  const { items, changed } = preparePages(raw, { v, root: isRoot, notes: isRoot && !isCanvasOnly(cat) });
+  const { items: raw, v, layers, fix, cols } = deserialize(row.data);
+  const { items, changed } = preparePages(raw, { v, root: isRoot, notes: isRoot && !isCanvasOnly(cat), cols });
   const page = { id: row.id, note, title: titleIn(row.title), atOpen: new Set(), uploaded: new Set(), timer: null, pending: null };
   const root = isRoot ? { notes: noteList, onNote: (id) => openNote(page, id), onNoteAdd: () => createNote(cat || null), onNoteDelete: removeNote } : {};
   const sub = note ? { desc: () => itemById(note)?.body?.trim() || '', onDesc: () => openItem(note) } : {};
@@ -80,7 +81,7 @@ function openPage(row, note = null) {
     hold,
     onTool: (t) => { ui.tool = t; render(); },
     onSelect: () => updateContext(),
-    onView: (at) => { ui.atOrigin = at; $app.querySelector('.ctx-origin')?.classList.toggle('at', at); },
+    cols,
     onCommit: (list, hh, ww) => { page.pending = { list, hh, ww }; scheduleSave(page); updateTools(); },
     onOpenTitle: (it) => openTitle(page, it),
     onDeleteTitles: deleteTitles,
@@ -227,6 +228,7 @@ function showOutline() {
 function openMore(btn) {
   dropMenu(btn, `<button class="cm-i" data-a="ink-cal">${ICON.calendar}<span>Termin einfügen</span></button>
     <button class="cm-i" data-a="ink-page">${ICON.plus}<span>Neue Seite</span></button>
+    <button class="cm-i" data-a="ink-cols">${ICON.spread}<span>${top()?.board.cols === 2 ? 'Seiten untereinander' : 'Zwei Seiten nebeneinander'}</span></button>
     <button class="cm-i" data-a="ink-export">${ICON.download}<span>Speichern als PDF, PNG, JPEG</span></button>`, (b) => inkAction(b.dataset.a));
 }
 
@@ -323,7 +325,7 @@ async function flush(page) {
   if (!page?.pending) return;
   const { list, hh, ww } = page.pending;
   page.pending = null;
-  const err = await savePage(page.id, list, hh, ww, page.board.layerMeta());
+  const err = await savePage(page.id, list, hh, ww, page.board.meta());
   if (err) { page.pending ??= { list, hh, ww }; toast('Speichern fehlgeschlagen: ' + err.message, 4000); return; }
   if (page === stack[0]) updateHomeImg(page);
 }
@@ -447,7 +449,7 @@ function contextHtml() {
   const t = contextTarget(), selecting = !!b?.hasSelection;
   const btn = (id, html, { on = false, label = '', cls = '', style = '' } = {}) =>
     `<button class="ctx-b ${on ? 'on' : ''} ${cls}" data-act="ink-ctx" data-id="${id}" ${label ? `aria-label="${label}" title="${label}"` : ''} ${style ? `style="${style}"` : ''}>${html}</button>`;
-  const out = [`<span class="ctx-l">${selecting ? 'Auswahl' : TOOL_LABEL[ui.tool] || ''}</span>`];
+  const out = [`<span class="ctx-grip" aria-hidden="true">${ICON.grip}</span><span class="ctx-l">${selecting ? 'Auswahl' : TOOL_LABEL[ui.tool] || ''}</span>`];
   if (!selecting && ui.tool === 'shape') out.push(`<div class="ctx-g">${SHAPES.map(([k, l]) => btn('shape:' + k, ICON[SHAPE_ICON[k]], { on: ui.shape === k, label: l })).join('')}</div>`);
   if (t) {
     const colors = [...new Set([t.val.c, ...ui.recent])].slice(0, 4);
@@ -464,8 +466,8 @@ function contextHtml() {
     }
   }
   if (!selecting && ui.tool === 'eraser') out.push(`<div class="ctx-g">${ERASERS.map(([r, l]) => btn('er:' + r, l, { on: ui.eraser === r, cls: 'ctx-t' })).join('')}</div>`);
-  if (selecting) out.push(`<div class="ctx-g">${b.selectionActions().map((a) => btn('act:' + a, `${ICON[ACTION[a][0]]}<span>${ACTION[a][1]}</span>`, { cls: `ctx-a ${a === 'delete' ? 'danger' : ''}` })).join('')}</div>`);
-  out.push(btn('origin', ICON.target, { cls: `ctx-origin ${ui.atOrigin ? 'at' : ''}`, label: 'Ursprungsansicht' }));
+  if (selecting) out.push(`<div class="ctx-g">${b.selectionActions().map((a) => btn('act:' + a, ICON[ACTION[a][0]], { cls: `ctx-a ${a === 'delete' ? 'danger' : ''}`, label: ACTION[a][1] })).join('')}</div>`);
+  out.push(btn('center', ICON.target, { cls: `ctx-origin ${ui.ctxPos ? '' : 'at'}`, label: 'Leiste in die Mitte' }));
   return out.join('<i class="ctx-sep"></i>');
 }
 
@@ -479,7 +481,7 @@ function contextAction(id) {
   const b = top()?.board;
   if (!b) return;
   const [k, v] = [id.slice(0, id.indexOf(':') < 0 ? id.length : id.indexOf(':')), id.slice(id.indexOf(':') + 1)];
-  if (k === 'origin') return b.resetView();
+  if (k === 'center') return placeCtx(null, true);
   if (k === 'act') return b.runAction(v);
   if (k === 'shape') { ui.shape = v; store('inkShape', v); applyUi(); return updateContext(); }
   if (k === 'er') { ui.eraser = +v; saveStyle(); applyUi(); return updateContext(); }
@@ -494,6 +496,40 @@ function contextAction(id) {
     applyUi();
     updateContext();
   }
+}
+
+// ---------- Eigenschaften-Leiste verschieben: an freier Stelle bzw. am Griff ziehen; der runde Knopf rechts holt sie in die Mitte ----------
+function placeCtx(pos, save = false) {
+  ui.ctxPos = pos;
+  const el = $app.querySelector('.ink-ctx');
+  if (el) {
+    el.style.translate = pos ? `${pos.x}px ${pos.y}px` : '';
+    el.querySelector('.ctx-origin')?.classList.toggle('at', !pos);
+  }
+  if (save) store('inkCtxPos', pos ? JSON.stringify(pos) : '');
+}
+function bindCtxDrag(el) {
+  if (!el) return;
+  placeCtx(ui.ctxPos);
+  el.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return;
+    e.preventDefault();
+    const slot = el.parentElement.getBoundingClientRect(), r = el.getBoundingClientRect(), start = ui.ctxPos || { x: 0, y: 0 }, sx = e.clientX, sy = e.clientY;
+    // ganz im Bild bleiben: erlaubter Versatz aus der Lage ohne Verschiebung
+    const lim = (v, lo, hi) => Math.round(Math.min(Math.max(v, Math.min(lo, 0)), Math.max(hi, 0)));
+    const x0 = slot.left + 8 - (r.left - start.x), x1 = slot.right - 8 - (r.right - start.x), y0 = slot.top + 8 - (r.top - start.y), y1 = slot.bottom - 8 - (r.bottom - start.y);
+    el.setPointerCapture(e.pointerId);
+    el.classList.add('dragging');
+    const move = (ev) => placeCtx({ x: lim(start.x + ev.clientX - sx, x0, x1), y: lim(start.y + ev.clientY - sy, y0, y1) });
+    const up = () => {
+      el.classList.remove('dragging');
+      el.removeEventListener('pointermove', move);
+      placeCtx(ui.ctxPos && (ui.ctxPos.x || ui.ctxPos.y) ? ui.ctxPos : null, true);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up, { once: true });
+    el.addEventListener('pointercancel', up, { once: true });
+  });
 }
 
 // ---------- Fenster „Ebenen“ (ink-layers.js) ----------
@@ -534,6 +570,7 @@ export async function inkAction(act, id, btn) {
     case 'ink-sticker': openStickers({ onPick: insertSticker }); return;
     case 'ink-cal': pickCalEvent().then((c) => { if (c) top()?.board.addCard(c); }); return;
     case 'ink-page': if (b) openAddPage(b.currentPage() + 1); return;
+    case 'ink-cols': b?.setCols(b.cols === 2 ? 1 : 2); break;
     case 'ink-fold': toggleBar(); return;
     case 'ink-export': flushAll(); openExport(); return;
     case 'ink-back': if (stack.length > 1) closePage(stack.pop()); break;
@@ -720,6 +757,7 @@ export function mountInk() {
   if (!slot || !page) return;
   slot.prepend(page.board.el);
   page.board.attach();
+  bindCtxDrag(slot.querySelector('.ink-ctx'));
   const aside = slot.querySelector('.ink-layers');
   if (aside) { bindLayers(aside, layerCtx); refreshLayers(); }
   page.board.refreshNotes();   // Notizen können sich inzwischen geändert haben (auch durch die andere Person)
@@ -793,6 +831,7 @@ export function inkHeadTools() {
   const b = top()?.board;
   return `<div class="ph-ink">
     ${tb('ink-page', 'plus', 'Neue Seite', { cls: 'wide-only' })}
+    ${tb('ink-cols', 'spread', 'Zwei Seiten nebeneinander', { on: b?.cols === 2, cls: 'wide-only' })}
     ${tb('ink-export', 'download', 'Speichern als PDF, PNG, JPEG', { cls: 'wide-only' })}
     ${tb('ink-more', 'dots', 'Mehr', { cls: 'narrow-only' })}
     <i class="ink-sep"></i>

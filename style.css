@@ -1401,10 +1401,14 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .ink-addpg:active { transform: scale(.96); }
 .ink-msg { margin: 24px; }
 /* Eigenschaften-Leiste unten (wie in Illustrator): je nach Werkzeug bzw. Auswahl Farbe, Stärke, Schrift, Aktionen; rechts Ursprungsansicht */
-.ink-ctx { position: absolute; z-index: 3; left: 50%; bottom: calc(var(--safe-bottom) + 16px); translate: -50% 0; max-width: calc(100% - 32px); display: flex; align-items: center; gap: 4px;
-  padding: 5px 5px 5px 14px; border-radius: 999px; background: rgba(255, 255, 255, .97); box-shadow: 0 0 0 1px var(--soft), 0 10px 28px rgba(12, 55, 65, .16);
-  overflow-x: auto; scrollbar-width: none; cursor: default; }
+.ink-ctx { position: absolute; z-index: 3; left: 0; right: 0; margin-inline: auto; width: max-content; bottom: calc(var(--safe-bottom) + 16px); max-width: calc(100% - 32px); display: flex; align-items: center; gap: 4px;
+  padding: 5px 5px 5px 4px; border-radius: 999px; background: rgba(255, 255, 255, .97); box-shadow: 0 0 0 1px var(--soft), 0 10px 28px rgba(12, 55, 65, .16);
+  overflow-x: auto; scrollbar-width: none; cursor: grab; touch-action: none; }
 .ink-ctx::-webkit-scrollbar { display: none; }
+.ink-ctx.dragging { cursor: grabbing; box-shadow: 0 0 0 1px var(--soft), 0 16px 36px rgba(12, 55, 65, .26); }
+.ink-ctx button { cursor: pointer; }
+.ctx-grip { flex: none; display: grid; place-items: center; width: 18px; color: var(--soft); }
+.ctx-grip svg { width: 16px; height: 16px; }
 .ctx-l { flex: none; font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--grey); margin-right: 2px; }
 .ctx-sep { flex: none; width: 1px; height: 22px; margin: 0 4px; background: var(--soft); }
 .ctx-g { display: flex; align-items: center; gap: 2px; flex: none; }
@@ -1421,13 +1425,12 @@ body.is-dragging .droptray { opacity: 1; transform: none; pointer-events: auto; 
 .ctx-v { min-width: 30px; font-size: 13px; font-weight: 600; color: var(--grey); text-align: center; font-variant-numeric: tabular-nums; }
 .ctx-t { font-size: 13px; padding: 0 10px; }
 .ctx-i { font-style: italic; font-family: Georgia, serif; font-size: 15px; }
-.ctx-a { display: flex; gap: 6px; padding: 0 12px 0 10px; font-weight: 600; }
 .ctx-a.danger { color: var(--danger); }
 .ctx-origin { position: sticky; right: 0; background: var(--ink); color: var(--white); box-shadow: 0 0 0 6px #fff, -10px 0 0 6px #fff; }   /* bleibt sichtbar, auch wenn die Leiste wischt */
 .ctx-origin.at { background: var(--pale); color: var(--grey); }
 @media (max-width: 1023px) {
   /* Smartphone/Tablet: links unten, rechts sitzt der Steuerknopf */
-  .ink-ctx { left: var(--gutter-l); translate: none; max-width: calc(100% - var(--gutter-l) - 96px); bottom: calc(var(--safe-bottom) + 22px); }
+  .ink-ctx { left: var(--gutter-l); right: auto; margin-inline: 0; max-width: calc(100% - var(--gutter-l) - 96px); bottom: calc(var(--safe-bottom) + 22px); }
 }
 /* Notizen-Bereich im Canvas: Liste der Notizen des Ordners, wächst nach unten; Größen in em (folgen dem Zoom) */
 .ink-notes-layer { position: absolute; left: 0; top: 0; }
@@ -1779,10 +1782,12 @@ li.closed > ul { display: none; }
   .app.desk.side-off { grid-template-columns: 0 minmax(0, 1fr); }
   .app.desk.side-off .side { visibility: hidden; padding-inline: 0; }
   .app.desk.side-off .watermark { left: 0; }
-  .ph-side { flex: none; width: 34px; height: 34px; margin-left: -6px; display: grid; place-items: center; border-radius: 50%; color: var(--ink); }
-  .ph-side svg { width: 20px; height: 20px; }
-  .ph-side:hover { background: var(--pale); }
-  .ph-side.on { color: var(--grey); }
+  /* Canvas: kleiner Pfeil links mittig am Rand fährt die Seitenleiste ein und aus */
+  .desk-main { position: relative; }
+  .side-tab { position: absolute; z-index: 20; left: 0; top: 50%; translate: 0 -50%; width: 18px; height: 56px; display: grid; place-items: center; border-radius: 0 10px 10px 0;
+    background: var(--white); color: var(--grey); box-shadow: 0 0 0 1px var(--soft), 0 4px 12px rgba(12, 55, 65, .12); }
+  .side-tab svg { width: 14px; height: 14px; }
+  .side-tab:hover { color: var(--ink); width: 22px; }
   .desk-main { display: flex; flex-direction: column; min-width: 0; height: 100%; overflow: hidden; }
   :where(.main > *) { max-width: 1240px; }
   .main { padding: 20px 32px 40px; }

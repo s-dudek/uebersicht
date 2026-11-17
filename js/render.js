@@ -49,6 +49,7 @@ export function render() {
         ${WATERMARK}
         ${sidebar(tab)}
         <div class="desk-main">
+          ${inkOn ? `<button class="side-tab" data-act="ink-side" aria-label="Seitenleiste ${state.inkSideOff ? 'einblenden' : 'ausblenden'}" title="Seitenleiste ${state.inkSideOff ? 'einblenden' : 'ausblenden'}">${ICON[state.inkSideOff ? 'chevR' : 'chevL']}</button>` : ''}
           ${home ? '' : pageHead(tab, true)}
           <main class="main ${home ? 'is-home' : ''} ${ink}">${content}</main>
         </div>
@@ -159,9 +160,7 @@ function pageHead(tab, desk) {
     const drop = `<button class="ph-drop" data-act="folder-drop" aria-haspopup="menu" aria-label="Ordner wechseln" title="Ordner wechseln">${title}${ICON.chevD}</button>`;
     // Canvas: zurück zu den Notizen; Titel als Knopf, der die Kategorien zum Wechseln zeigt
     if (isInkView()) {
-      // Desktop: Seitenleiste ein-/ausfahren (mehr Platz zum Zeichnen)
-      const side = desk ? `<button class="ph-side ${state.inkSideOff ? '' : 'on'}" data-act="ink-side" aria-label="Seitenleiste ${state.inkSideOff ? 'einblenden' : 'ausblenden'}" title="Seitenleiste ${state.inkSideOff ? 'einblenden' : 'ausblenden'}">${ICON.menu}</button>` : '';
-      left = side + (inkHead() || `<button class="ph-back" data-act="ink-notes" aria-label="Zurück zu den Notizen" title="Zurück zu den Notizen">${ICON.chevL}</button>
+      left = (inkHead() || `<button class="ph-back" data-act="ink-notes" aria-label="Zurück zu den Notizen" title="Zurück zu den Notizen">${ICON.chevL}</button>
         ${drop}`);
     } else {
       left = `${desk ? '' : `<button class="ph-back" data-act="close-list" aria-label="Zurück zu den Listen">${ICON.chevL}</button>`}${drop}${cnt(n)}`;

@@ -1,5 +1,5 @@
 // Canvas als Heft aus A4-Seiten: Seiten (Elemente f, außer dem Homescreen-Ausschnitt) stehen in ihrer Reihenfolge
-// untereinander, mittig auf x = 0, mit etwas Abstand. Zu einer Seite gehört alles, dessen Mitte auf ihr liegt.
+// untereinander oder zu zweit nebeneinander (cols), mittig auf x = 0, mit etwas Abstand. Zu einer Seite gehört alles, dessen Mitte auf ihr liegt.
 // Die Startseite eines Ordners beginnt immer mit der Deckseite (cov); darauf der Homescreen-Ausschnitt (sein Inhalt
 // erscheint in der Kachel am Startbildschirm) und der Notizen-Bereich.
 // Ältere, unendliche Flächen (Version 1) werden beim Öffnen einmal zu Seiten umgebaut, ohne dass etwas verloren geht.
@@ -27,19 +27,24 @@ export function groupsOf(items) {
   return { groups, rest };
 }
 
-// Seiten untereinander stellen; jede nimmt ihren Inhalt mit. Gibt dieselbe Liste zurück, wenn alles schon passt.
-export function stackGroups(items, groups) {
+// Seiten in Reihen zu cols Seiten stellen (jede Reihe mittig, auf den Kästchen); jede nimmt ihren Inhalt mit.
+// Gibt dieselbe Liste zurück, wenn alles schon passt.
+export function stackGroups(items, groups, cols = 1) {
   const moved = new Map();
   let y = 0;
-  for (const g of groups) {
-    const [w, h] = FRAMES[g.frame.fmt];
-    const dx = -w / 2 - g.frame.x, dy = y - g.frame.y;
-    if (dx || dy) [g.frame, ...g.content].forEach((it) => moved.set(it, move(it, dx, dy)));
-    y += h + PAGE_GAP;
+  for (let i = 0; i < groups.length; i += cols) {
+    const row = groups.slice(i, i + cols), sizes = row.map((g) => FRAMES[g.frame.fmt]);
+    let x = Math.round(-(sizes.reduce((a, [w]) => a + w, 0) + PAGE_GAP * (row.length - 1)) / 2 / 25) * 25;
+    row.forEach((g, k) => {
+      const dx = x - g.frame.x, dy = y - g.frame.y;
+      if (dx || dy) [g.frame, ...g.content].forEach((it) => moved.set(it, move(it, dx, dy)));
+      x += sizes[k][0] + PAGE_GAP;
+    });
+    y += Math.max(...sizes.map(([, h]) => h)) + PAGE_GAP;
   }
   return moved.size ? items.map((it) => moved.get(it) || it) : items;
 }
-export const stackPages = (items) => stackGroups(items, groupsOf(items).groups);
+export const stackPages = (items, cols = 1) => stackGroups(items, groupsOf(items).groups, cols);
 
 // Deckseite mit Homescreen-Ausschnitt (und auf der Startseite mit Notizen der Notizen-Bereich) sicherstellen
 function withCover(items, notes) {
@@ -56,15 +61,16 @@ function withCover(items, notes) {
   return out;
 }
 
-// Seiten beim Öffnen herrichten. v: Version der gespeicherten Seite; root: Startseite des Ordners; notes: mit Notizen-Bereich.
+// Seiten beim Öffnen herrichten. v: Version der gespeicherten Seite; root: Startseite des Ordners; notes: mit Notizen-Bereich;
+// cols: Seiten je Reihe.
 // Gibt { items, changed } zurück (changed: gleich speichern).
-export function preparePages(items, { v, root, notes }) {
+export function preparePages(items, { v, root, notes, cols = 1 }) {
   let out = v >= 2 ? items : migrate(items, root);
   if (root) out = withCover(out, notes);
   else out = out.filter((it) => !(it.t === 'f' && it.fmt === 'home'));    // Homescreen-Ausschnitt nur auf der Startseite
   if (!notes) out = out.filter((it) => it.t !== 'n');
   if (!pagesOf(out).length) out = [{ t: 'f', fmt: 'a4p', x: -425, y: 0 }, ...out];   // mindestens eine Seite
-  out = stackPages(out);
+  out = stackPages(out, cols);
   return { items: out, changed: v < 2 || out !== items };
 }
 

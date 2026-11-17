@@ -32,7 +32,7 @@ const PEN_LOST = 1500;   // meldet der aufgesetzte Stift so lange nichts, gilt e
 // ====================================================================
 // opts: { items, colors, onCommit(items, h, w), onOpenTitle(titleItem), onDeleteTitles(titles) -> Promise<bool>,
 //         onExport(seite), onTool(tool), onFrames(), hold(bool), onAddPage(stelle), onConfirm(text) -> Promise<bool>,
-//         onSelect() nach jeder Änderung der Auswahl, onView(beiUrsprung) wenn die Ansicht zur Ursprungsansicht wird oder sie verlässt,
+//         onSelect() nach jeder Änderung der Auswahl, cols: Seiten je Reihe (1 untereinander, 2 nebeneinander),
 //         Notizen (nur Startseite): notes() -> [{ id, title }], onNote(id), onNoteAdd(), onNoteDelete(id),
 //         Notiz-Unterseite: desc() -> Beschreibungstext, onDesc(),
 //         Ebenen: layers [{ id, n, h, k }] (oben zuerst), fix { bg, pat, ly } (ausgeblendet), onLayers() nach jeder Änderung, onPage(n) beim Blättern }
@@ -49,6 +49,7 @@ export function createBoard(opts) {
   const past = [], future = [];
   // Ebenen (oben zuerst): neue Elemente kommen auf die aktive; ausgeblendete werden nicht gezeichnet, gesperrte nicht bearbeitet.
   // Feste Ebenen Hintergrund, Muster und Vorlage gehören zu den Seiten (fix: welche ausgeblendet sind)
+  let cols = opts.cols === 2 ? 2 : 1;
   let layers = opts.layers?.length ? opts.layers.map((l) => ({ ...l })) : [{ id: 'L1', n: 'Ebene 1' }];
   const fix = { ...opts.fix };
   let active = layers[0].id;
@@ -104,22 +105,22 @@ export function createBoard(opts) {
     pg.style.transform = `translate(${-view.x * s}px, ${-view.y * s}px) scale(${s / scale})`;
     const cp = currentPage();
     if (cp !== lastPage) { lastPage = cp; opts.onPage?.(cp); }
-    const o = originView();
-    const atOrigin = Math.abs(view.z - o.z) < .005 && Math.abs(view.x - o.x) < 2 && Math.abs(view.y - o.y) < 2;
-    if (atOrigin !== lastOrigin) { lastOrigin = atOrigin; opts.onView?.(atOrigin); }
   }
-  let lastOrigin = null, lastPage = -1;
+  let lastPage = -1;
 
-  // Ursprungsansicht: die erste Seite in voller Breite, oben beginnend
+  // Ursprungsansicht: die erste Reihe in voller Breite, oben beginnend
   function originView() {
     const f = frameList()[0];
     return f && base ? pageView(f) : { ...view };
   }
 
-  // Seite in voller Breite (höchstens PAGE_PX breit), ihr Anfang oben
-  const fitZ = (w) => Math.min(sc.clientWidth - 32, PAGE_PX) / (w * base);
+  // Reihe einer Seite (nebeneinander: beide Seiten mit gleichem Anfang oben) und ihre Breite
+  const rowOf = (f) => frameList().filter((o) => o.y === f.y);
+  const rowBox = (f) => union(rowOf(f));
+  // Seite bzw. Reihe in voller Breite (eine Seite höchstens PAGE_PX breit), ihr Anfang oben
+  const fitZ = (w) => Math.min(sc.clientWidth - 32, PAGE_PX * (w > FRAMES.a4l[0] + PAGE_GAP ? 2 : 1)) / (w * base);
   function pageView(f) {
-    const [x0, y0, x1] = bbox(f), z = fitZ(x1 - x0), s = base * z;
+    const [x0, y0, x1] = rowBox(f), z = fitZ(x1 - x0), s = base * z;
     return { x: (x0 + x1) / 2 - sc.clientWidth / s / 2, y: y0 - 30 / s, z };
   }
 
@@ -183,9 +184,9 @@ export function createBoard(opts) {
     if (!tileRaf) tileRaf = requestAnimationFrame(() => { tileRaf = 0; ensureTiles(); });
   }
 
-  // Zoom bezogen auf die breiteste Seite in voller Breite
+  // Zoom bezogen auf die breiteste Reihe in voller Breite
   const clampZ = (z) => {
-    const f = fitZ(Math.max(...frameList().map((p) => FRAMES[p.fmt][0]), FRAMES.a4p[0]));
+    const f = fitZ(Math.max(...frameList().map((p) => { const b = rowBox(p); return b[2] - b[0]; }), FRAMES.a4p[0]));
     return Math.min(ZOOM[1] * f, Math.max(ZOOM[0] * f, z));
   };
   const panBy = (dx, dy) => { view.x -= dx / cur(); view.y -= dy / cur(); moveView(); };
@@ -454,7 +455,7 @@ export function createBoard(opts) {
   function renderFrames() {
     const list = frameList(), home = homeItem();
     const box = (b) => `left:${b[0] * scale}px;top:${b[1] * scale}px;width:${(b[2] - b[0]) * scale}px;height:${(b[3] - b[1]) * scale}px`;
-    const last = list.length ? bbox(list[list.length - 1]) : null;
+    const last = list.length ? rowBox(list[list.length - 1]) : null;
     frameLayer.innerHTML = list.map((f, n) => `<div class="ink-frame ink-pg" style="${box(bbox(f))}">
         <button type="button" class="ink-ftab" data-frame="${n}"><span>${esc(frameName(f, n + 1))}</span><small>${n + 1} / ${list.length}</small>${ICON.dots}</button></div>`).join('')
       + (home ? `<div class="ink-frame ink-home" style="${box(bbox(home))}"><span class="ink-home-l">${ICON.home} Kachel am Startbildschirm</span></div>` : '')
@@ -480,7 +481,7 @@ export function createBoard(opts) {
 
   // Seiten neu untereinander stellen (Reihenfolge wie in der Liste); groups: Inhalt je Seite, falls schon vorher bestimmt
   function relayout(next, groups = groupsOf(next).groups) {
-    commit(stackGroups(next, groups));
+    commit(stackGroups(next, groups, cols));
     redrawAll();
     renderOverlays();
     opts.onFrames?.();
@@ -509,9 +510,11 @@ export function createBoard(opts) {
   }
 
   const showPage = (n) => { const f = frameList()[n]; if (f) { const v = pageView(f); goTo(v.x, v.y, v.z); } };
-  // Seite, die gerade die Mitte des Bildschirms füllt
+  // Seite, die gerade die Mitte des Bildschirms füllt (sonst die der Reihe, in deren Höhe die Mitte liegt)
   function currentPage() {
-    const y = view.y + sc.clientHeight / 2 / cur(), list = frameList();
+    const x = view.x + sc.clientWidth / 2 / cur(), y = view.y + sc.clientHeight / 2 / cur(), list = frameList();
+    const hit = list.indexOf(pageAt(x, y));
+    if (hit >= 0) return hit;
     const i = list.findIndex((f) => bbox(f)[3] + PAGE_GAP / 2 >= y);
     return i < 0 ? list.length - 1 : i;
   }
@@ -1657,7 +1660,10 @@ export function createBoard(opts) {
     },
     imagePaths: () => items.filter((it) => it.t === 'i').map((it) => it.src),
     // ---------- Ebenen ----------
-    layerMeta: () => ({ layers, fix }),
+    meta: () => ({ layers, fix, cols }),
+    get cols() { return cols; },
+    // Anordnung: 1 = Seiten untereinander, 2 = zwei Seiten nebeneinander
+    setCols(n) { cols = n === 2 ? 2 : 1; relayout(items); resetView(); },
     layerInfo: () => ({ layers: layers.map((l) => ({ ...l, count: items.filter((it) => drawable(it) && layerOf(it) === l).length })), active, fix: { ...fix } }),
     setActive(id) { if (layers.some((l) => l.id === id)) { active = id; opts.onLayers?.(); } },
     addLayer() {

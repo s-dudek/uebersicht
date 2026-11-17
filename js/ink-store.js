@@ -79,11 +79,12 @@ export const FRAMES = { a4p: [850, 1200], a4l: [1200, 850], home: [750, 500] }; 
 export const FRAME_NAMES = { a4p: 'A4 hoch', a4l: 'A4 quer', home: 'Startbildschirm' };
 const FRAME_BGS = ['lines', 'dots', 'blank'];                   // Hintergründe eines Bereichs (ohne: kariert wie die Fläche)
 
-// meta: { layers: [{ id, n, h (ausgeblendet), k (gesperrt) }], fix: { bg, pat, ly } (ausgeblendete feste Ebenen) }
+// meta: { layers: [{ id, n, h (ausgeblendet), k (gesperrt) }], fix: { bg, pat, ly } (ausgeblendete feste Ebenen), cols: Seiten je Reihe (gespeichert als ar) }
 export function serialize(items, h, w, meta = {}) {
   return {
     v: 2, h: Math.round(h), w: Math.round(w),
     ...layersOut(meta),
+    ...(meta.cols === 2 ? { ar: 2 } : {}),
     items: items.map((it) => {
       const g = { ...(it.g ? { g: it.g } : {}), ...(it.l ? { l: it.l } : {}) };   // Gruppe, Ebene
       if (it.t === 'n') return { t: 'n', x: it.x, y: it.y };
@@ -162,7 +163,7 @@ export function deserialize(data) {
     if (LAYER_ID.test(it.l || '')) out.l = it.l;   // Ebene
     items.push(out);
   }
-  return { items, v: data?.v === 2 ? 2 : 1, ...layersIn(data), h: num(data?.h, 0, 1e6, 0), w: num(data?.w, 0, 1e6, 0) };
+  return { items, v: data?.v === 2 ? 2 : 1, ...layersIn(data), cols: data?.ar === 2 ? 2 : 1, h: num(data?.h, 0, 1e6, 0), w: num(data?.w, 0, 1e6, 0) };
 }
 
 // Ebenen: Liste (oben zuerst) und ausgeblendete feste Ebenen (Hintergrund, Muster, Vorlage)
