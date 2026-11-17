@@ -73,12 +73,12 @@ const strokeIn = (s) => ({ t: 's', c: safeColor(s?.c, '#0C3741'), w: num(s?.w, .
 
 // Seiteninhalt für die Datenbank
 export const FRAMES = { a4p: [850, 1200], a4l: [1200, 850], home: [750, 500] };   // A4 hoch/quer, Homescreen-Ausschnitt; genau auf den Kästchen (25 Einheiten)
-export const FRAME_NAMES = { a4p: 'A4 hoch', a4l: 'A4 quer', home: 'Homescreen' };
+export const FRAME_NAMES = { a4p: 'A4 hoch', a4l: 'A4 quer', home: 'Startbildschirm' };
 const FRAME_BGS = ['lines', 'dots', 'blank'];                   // Hintergründe eines Bereichs (ohne: kariert wie die Fläche)
 
 export function serialize(items, h, w) {
   return {
-    v: 1, h: Math.round(h), w: Math.round(w),
+    v: 2, h: Math.round(h), w: Math.round(w),
     items: items.map((it) => {
       const g = it.g ? { g: it.g } : {};
       if (it.t === 'n') return { t: 'n', x: it.x, y: it.y };
@@ -90,7 +90,7 @@ export function serialize(items, h, w) {
       }
       if (it.t === 'f') {
         const f = { t: 'f', fmt: it.fmt, x: it.x, y: it.y };
-        for (const k of ['n', 'bg', 'fc', 'ly', 'lf']) if (it[k]) f[k] = it[k];
+        for (const k of ['n', 'bg', 'fc', 'ly', 'lf', 'cov']) if (it[k]) f[k] = it[k];
         return f;
       }
       if (it.t === 'x') return { ...textOut(it), ...g };
@@ -135,6 +135,7 @@ export function deserialize(data) {
       if (typeof it.n === 'string' && it.n.trim()) out.n = it.n.trim().slice(0, 40);   // eigener Name
       if (FRAME_BGS.includes(it.bg)) out.bg = it.bg;                                    // Hintergrund
       if (safeColor(it.fc)) out.fc = it.fc;                                             // Farbe von Rahmen und Reiter
+      if (it.cov === 1 && it.fmt !== 'home') out.cov = 1;                              // Deckseite
       if (FRAME_LAYOUTS.some(([k]) => k && k === it.ly)) out.ly = it.ly;                // Layout im Dudek-CI
       if (it.lf && typeof it.lf === 'object') {                                         // Angaben im Layout
         const lf = {};
@@ -153,7 +154,7 @@ export function deserialize(data) {
     if (UUID.test(it.g || '')) out.g = it.g;   // Gruppe
     items.push(out);
   }
-  return { items, h: num(data?.h, 0, 1e6, 0), w: num(data?.w, 0, 1e6, 0) };
+  return { items, v: data?.v === 2 ? 2 : 1, h: num(data?.h, 0, 1e6, 0), w: num(data?.w, 0, 1e6, 0) };
 }
 
 // Titel: Striche (s) und Texte (tx)

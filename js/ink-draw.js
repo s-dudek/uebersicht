@@ -147,7 +147,7 @@ export function transform(it, ox, oy, k, dx, dy) {
   const st = (s) => ({ ...s, w: s.w * k, pts: s.pts.map((v, i) => (i % 3 === 0 ? tx(v) : i % 3 === 1 ? ty(v) : v)) });
   if (it.t === 's') return st(it);
   if (it.t === 't') return { ...it, s: it.s.map(st), ...(it.tx ? { tx: it.tx.map((t) => transform(t, ox, oy, k, dx, dy)) } : {}) };
-  if (it.t === 'f' || it.t === 'c' || it.t === 'b') return { ...it, x: it.x + dx, y: it.y + dy };   // Bereiche und Termin-Felder werden nur verschoben
+  if (it.t === 'f' || it.t === 'n' || it.t === 'c' || it.t === 'b') return { ...it, x: it.x + dx, y: it.y + dy };   // Seiten, Notizen-Bereich und Felder werden nur verschoben
   if (it.t === 'd') return { ...it, w: it.w * k, a: [tx(it.a[0]), ty(it.a[1])], b: [tx(it.b[0]), ty(it.b[1])] };
   if (it.t === 'x') return { ...it, x: tx(it.x), y: ty(it.y), fs: it.fs * k };
   return { ...it, x: tx(it.x), y: ty(it.y), w: it.w * k, h: it.h * k };   // Zuschnitt und Radierung sind relativ und wandern mit
@@ -245,7 +245,7 @@ export function drawText(ctx, it) {
 }
 
 // ---------- Bereiche: eigener Hintergrund (weiß, darauf Linien oder Punkte), deckt die Kästchen der Fläche ab ----------
-export const FRAME_BG = [['', 'Kariert (wie die Fläche)'], ['lines', 'Liniert'], ['dots', 'Punktiert'], ['blank', 'Leer (weiß)']];
+export const FRAME_BG = [['', 'Kariert'], ['lines', 'Liniert'], ['dots', 'Punktiert'], ['blank', 'Leer']];   // Muster einer Seite
 export const FRAME_COLORS = ['#3E7CA8', '#0C3741', '#7FA08A', '#7A5AA6', '#C2575A', '#D9873E', '#C9A227', '#6E8582'];   // Farbe von Rahmen und Reiter
 
 export function drawFrameBg(ctx, box, bg, k = 1) {
@@ -261,7 +261,7 @@ export function drawFrameBg(ctx, box, bg, k = 1) {
     ctx.stroke();
   } else if (bg === 'dots') {
     ctx.fillStyle = 'rgba(12, 55, 65, .32)';
-    const r = 1.4;
+    const r = Math.max(1.4, 1.2 / k);   // klein gezeichnet (Vorschau, weit herausgezoomt): Punkte bleiben sichtbar
     for (let gy = Math.ceil(y0 / GRID) * GRID; gy <= y1; gy += GRID) {
       for (let gx = Math.ceil(x0 / GRID) * GRID; gx <= x1; gx += GRID) ctx.fillRect(gx - r / 2, gy - r / 2, r, r);
     }
@@ -383,34 +383,4 @@ export function imageSource(it, bmp) {
 export function drawImageItem(ctx, it, bmp) {
   const [c0, c1, c2, c3] = cropOf(it), W = bmp.width, H = bmp.height;
   rotated(ctx, it, it.w, it.h, () => ctx.drawImage(imageSource(it, bmp), c0 * W, c1 * H, (c2 - c0) * W, (c3 - c1) * H, it.x, it.y, it.w, it.h));
-}
-
-// ---------- Kästchen-Raster der Ansicht (scharf auf Bildschirmpunkten, feine Linien blenden beim Verkleinern aus) ----------
-export function drawGrid(cv, W, H, dpr, vx, vy, s) {
-  const pw = Math.round(W * dpr), ph = Math.round(H * dpr);
-  if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; }
-  const ctx = cv.getContext('2d');
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, pw, ph);
-  const cell = GRID * s;                                  // Kästchen in Bildschirmpunkten
-  const fine = Math.max(0, Math.min(1, (cell - 5) / 9));  // unter ~14 px langsam ausblenden
-  const lw = Math.max(1, Math.round(dpr)), half = lw % 2 ? .5 : 0;
-  const lines = (step, alpha, skip) => {
-    if (alpha <= .002) return;
-    ctx.strokeStyle = `rgba(12, 55, 65, ${alpha})`;
-    ctx.lineWidth = lw;
-    ctx.beginPath();
-    for (let gx = Math.ceil(vx / step) * step; (gx - vx) * s <= W; gx += step) {
-      if (skip && Math.round(gx / skip) * skip === gx) continue;
-      const p = Math.round((gx - vx) * s * dpr) + half; ctx.moveTo(p, 0); ctx.lineTo(p, ph);
-    }
-    for (let gy = Math.ceil(vy / step) * step; (gy - vy) * s <= H; gy += step) {
-      if (skip && Math.round(gy / skip) * skip === gy) continue;
-      const p = Math.round((gy - vy) * s * dpr) + half; ctx.moveTo(0, p); ctx.lineTo(pw, p);
-    }
-    ctx.stroke();
-  };
-  const major = GRID * 4;   // jede vierte Linie bleibt auch weit herausgezoomt sichtbar
-  lines(GRID, .09 * fine, fine < 1 ? major : 0);
-  lines(major, fine < 1 ? .09 : 0);
 }

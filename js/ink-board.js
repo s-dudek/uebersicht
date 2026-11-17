@@ -1,21 +1,24 @@
-// Canvas: Zeichenfläche mit kariertem Papier
+// Canvas: Heft aus A4-Seiten (ink-pages.js), die untereinander stehen – jede mit Format, Muster und Vorlage.
 // Stift (mit Druck), Textmarker, Text, Radierer (ganze Striche, bei Bildern Teilbereiche), Auswahl (Lasso oder Antippen),
-// Formen, Bemaßung, Titel (ziehen zum Verschieben, tippen zum Öffnen), Bilder zuschneiden, Bereiche mit Namen und Hintergrund.
-// Die Fläche ist unendlich in alle Richtungen und lässt sich verschieben und zoomen. Bei 100 % passen 1000 Einheiten in die Breite.
-// Gezeichnet wird in Kacheln fester Bildschirmgröße, damit auch große Flächen und starker Zoom wenig Speicher brauchen.
+// Formen, Bemaßung, Titel (ziehen zum Verschieben, tippen zum Öffnen), Bilder zuschneiden.
+// Verschieben und zoomen nur so weit, dass die Seiten im Blick bleiben. Bei 100 % passen 1000 Einheiten in die Breite.
+// Gezeichnet wird in Kacheln fester Bildschirmgröße, damit auch viele Seiten und starker Zoom wenig Speicher brauchen.
 import { esc } from './core.js';
 import { ICON } from './icons.js';
 import { startCrop } from './ink-crop.js';
 import {
-  bbox, canRotate, dimLabelAt, distTo, drawDim, drawFrameBg, drawGrid, drawImageItem, drawStroke, drawText, fontCss, FONTS, fontListeners,
-  FRAME_BG, FRAME_COLORS, forgetBox, forgetErased, fullRect, GRID, LINE_H, nearItem, NOTES_W, rotateItem, shapeStrokes, share, TEXT_FS, textSize, transform, union,
+  bbox, canRotate, dimLabelAt, distTo, drawDim, drawFrameBg, drawImageItem, drawStroke, drawText, fontCss, FONTS, fontListeners,
+  FRAME_BG, forgetBox, forgetErased, fullRect, GRID, LINE_H, nearItem, NOTES_W, rotateItem, shapeStrokes, share, TEXT_FS, textSize, transform, union,
 } from './ink-draw.js';
 import { drawFrameLayout, FRAME_LAYOUTS } from './ink-layout.js';
-import { FRAME_NAMES, FRAMES, getImage, newId } from './ink-store.js';
+import { groupsOf, isPage, PAGE_GAP, stackGroups } from './ink-pages.js';
+import { FRAMES, getImage, newId } from './ink-store.js';
 
 const VIEW = 1000;       // so viele Einheiten passen bei 100 % in die Breite
 const TILE_PX = 512;     // Kachelgröße in Bildschirmpunkten
-const ZOOM = [.25, 4];   // kleinster und größter Zoom
+const ZOOM = [.45, 4];   // kleinster und größter Zoom, bezogen auf „Seite in voller Breite“
+const PAGE_PX = 920;     // so breit (Punkte) wird eine Seite in voller Breite höchstens
+const DRAWS = ['pen', 'marker', 'text', 'shape', 'dim'];   // Werkzeuge, die nur auf einer Seite beginnen
 const ERASE_R = 9;       // Radierer-Radius in Einheiten (bei 100 %), voreingestellt
 const HISTORY = 60;      // Schritte zum Rückgängigmachen
 const SEL_PX = 4096;     // größte Kantenlänge der Auswahl-Vorschau in Pixel
@@ -28,7 +31,7 @@ const PEN_LOST = 1500;   // meldet der aufgesetzte Stift so lange nichts, gilt e
 
 // ====================================================================
 // opts: { items, colors, onCommit(items, h, w), onOpenTitle(titleItem), onDeleteTitles(titles) -> Promise<bool>,
-//         onExport(frameIndex), onTool(tool), onFrames(), hold(bool),
+//         onExport(seite), onTool(tool), onFrames(), hold(bool), onAddPage(stelle), onConfirm(text) -> Promise<bool>,
 //         onSelect() nach jeder Änderung der Auswahl, onView(beiUrsprung) wenn die Ansicht zur Ursprungsansicht wird oder sie verlässt,
 //         Notizen (nur Startseite): notes() -> [{ id, title }], onNote(id), onNoteAdd(), onNoteDelete(id),
 //         Notiz-Unterseite: desc() -> Beschreibungstext, onDesc() }
@@ -38,7 +41,7 @@ let clipboard = null;   // Kopiertes (gilt für alle Seiten und Ordner, bis zum 
 
 export function createBoard(opts) {
   let items = opts.items;
-  let tool = 'pen', shape = 'line', finger = false, eraseR = ERASE_R, gridOn = true;
+  let tool = 'pen', shape = 'line', finger = false, eraseR = ERASE_R;
   let pen = { c: '#0C3741', w: 2.2 }, marker = { c: '#F2D33B', w: 16 }, textStyle = { c: '#0C3741', ff: 'sans', fw: 400, i: false, fs: TEXT_FS };
   const past = [], future = [];
   let sel = null;            // { set: Set<item>, box: [x0,y0,x1,y1] }
@@ -56,8 +59,7 @@ export function createBoard(opts) {
   // ---------- Aufbau ----------
   const sc = document.createElement('div');
   sc.className = 'ink-view';
-  sc.innerHTML = `<canvas class="ink-grid" aria-hidden="true"></canvas>
-    <div class="ink-page">
+  sc.innerHTML = `<div class="ink-page">
       <div class="ink-tiles"></div>
       <div class="ink-frames"></div>
       <div class="ink-notes-layer"></div>
@@ -66,7 +68,7 @@ export function createBoard(opts) {
     </div>
     <canvas class="ink-live" aria-hidden="true"></canvas>
     <svg class="ink-lasso" aria-hidden="true"><polyline/></svg>`;
-  const gridCv = sc.querySelector('.ink-grid'), liveCv = sc.querySelector('.ink-live');
+  const liveCv = sc.querySelector('.ink-live');
   const pg = sc.querySelector('.ink-page');
   const tileLayer = pg.querySelector('.ink-tiles');
   const titleLayer = pg.querySelector('.ink-titles');
@@ -84,28 +86,46 @@ export function createBoard(opts) {
   }
 
   // ---------- Ansicht ----------
-  // Ebene verschieben und (bis zum nächsten Neuaufbau) per CSS skalieren; Kästchen frisch zeichnen
+  // Ebene verschieben und (bis zum nächsten Neuaufbau) per CSS skalieren
   function place() {
+    clampView();
     const s = cur();
     pg.style.transform = `translate(${-view.x * s}px, ${-view.y * s}px) scale(${s / scale})`;
-    drawGrid(gridCv, sc.clientWidth, sc.clientHeight, dpr, view.x, view.y, s);
     const o = originView();
     const atOrigin = Math.abs(view.z - o.z) < .005 && Math.abs(view.x - o.x) < 2 && Math.abs(view.y - o.y) < 2;
     if (atOrigin !== lastOrigin) { lastOrigin = atOrigin; opts.onView?.(atOrigin); }
   }
   let lastOrigin = null;
 
-  // Ursprungsansicht: der erste Bereich ganz sichtbar und mittig (ohne Bereich der Notizen-Bereich, sonst Anfang der Seite bei 100 % mit Rand)
+  // Ursprungsansicht: die erste Seite in voller Breite, oben beginnend
   function originView() {
-    const f = frameList()[0] || notesItem();
-    if (!f || !base) return { x: -GRID, y: -GRID * 2, z: 1 };   // etwas Rand oben links
-    return fitView(f.t === 'n' ? notesBox() : bbox(f));
+    const f = frameList()[0];
+    return f && base ? pageView(f) : { ...view };
   }
 
-  // Ansicht, in der ein Rechteck ganz und mittig zu sehen ist (höchstens 100 %)
+  // Seite in voller Breite (höchstens PAGE_PX breit), ihr Anfang oben
+  const fitZ = (w) => Math.min(sc.clientWidth - 32, PAGE_PX) / (w * base);
+  function pageView(f) {
+    const [x0, y0, x1] = bbox(f), z = fitZ(x1 - x0), s = base * z;
+    return { x: (x0 + x1) / 2 - sc.clientWidth / s / 2, y: y0 - 30 / s, z };
+  }
+
+  // Ansicht begrenzen: Zoom zwischen knapp halber und vierfacher Seitenbreite; die Seiten bleiben im Blick
+  // (schmaler als der Bildschirm: mittig), unter der letzten Seite Platz für „Neue Seite“
+  function clampView() {
+    const W = sc.clientWidth, H = sc.clientHeight, list = frameList();
+    if (!base || !W || !list.length) return;
+    const [x0, y0, x1, y1] = union(list);
+    view.z = clampZ(view.z);
+    const s = cur(), vw = W / s, vh = H / s, m = 24 / s, top = 30 / s, bottom = 150 / s;
+    view.x = x1 - x0 + 2 * m <= vw ? (x0 + x1) / 2 - vw / 2 : Math.min(Math.max(view.x, x0 - m), x1 + m - vw);
+    view.y = y1 - y0 + top + bottom <= vh ? y0 - top : Math.min(Math.max(view.y, y0 - top), y1 + bottom - vh);
+  }
+
+  // Ansicht, in der ein Rechteck ganz und mittig zu sehen ist (höchstens eine Seite in voller Breite)
   function fitView([x0, y0, x1, y1]) {
     const W = sc.clientWidth, H = sc.clientHeight, m = 20, top = 34;   // Rand, oben Platz für den Reiter
-    const z = clampZ(Math.min(1, (W - 2 * m) / ((x1 - x0) * base), (H - m - top) / ((y1 - y0) * base)));
+    const z = clampZ(Math.min(fitZ(FRAMES.a4p[0]), (W - 2 * m) / ((x1 - x0) * base), (H - m - top) / ((y1 - y0) * base)));
     const s = base * z;
     return { x: x0 - (W / s - (x1 - x0)) / 2, y: y0 - top / s, z };
   }
@@ -150,7 +170,11 @@ export function createBoard(opts) {
     if (!tileRaf) tileRaf = requestAnimationFrame(() => { tileRaf = 0; ensureTiles(); });
   }
 
-  const clampZ = (z) => Math.min(ZOOM[1], Math.max(ZOOM[0], z));
+  // Zoom bezogen auf die breiteste Seite in voller Breite
+  const clampZ = (z) => {
+    const f = fitZ(Math.max(...frameList().map((p) => FRAMES[p.fmt][0]), FRAMES.a4p[0]));
+    return Math.min(ZOOM[1] * f, Math.max(ZOOM[0] * f, z));
+  };
   const panBy = (dx, dy) => { view.x -= dx / cur(); view.y -= dy / cur(); moveView(); };
 
   // Zoomen um einen Punkt am Bildschirm: der Punkt bleibt, wo er ist
@@ -273,9 +297,9 @@ export function createBoard(opts) {
   };
 
   function drawItem(ctx, it) {
-    if (it.t === 'f') {   // Hintergrund und Layout; Rahmen und Reiter sind HTML darüber
-      if (it.bg || it.ly) drawFrameBg(ctx, bbox(it), it.bg || 'blank', scale);
-      else if (!gridOn) drawFrameBg(ctx, bbox(it), 'grid', scale);   // Raster der Fläche aus: Bereich bleibt kariert
+    if (it.t === 'f') {   // Seite: weißes Papier mit Muster und Vorlage (Homescreen-Ausschnitt: nur HTML-Rahmen darüber)
+      if (it.fmt === 'home') return;
+      drawFrameBg(ctx, bbox(it), it.bg || (it.ly ? 'blank' : 'grid'), scale);
       if (it.ly) drawFrameLayout(ctx, bbox(it), it.ly, it.lf);
       return;
     }
@@ -317,11 +341,6 @@ export function createBoard(opts) {
   // ---------- Notizen-Bereich (Startseite) und Beschreibung (Notiz-Unterseite): HTML auf der Fläche ----------
   // Die Notizen kommen aus der Notizen-Liste des Ordners; ihre Titel öffnen Unterseiten, die Liste wächst nach unten.
   const notesItem = () => items.find((it) => it.t === 'n');
-  const notesBox = () => {
-    const n = notesItem(), el = notesLayer.firstElementChild;
-    const h = el && scale ? el.offsetHeight / scale : 300;
-    return [n.x, n.y, n.x + NOTES_W, n.y + h];
-  };
   let notesSig = '';
   function renderNotes(force = false) {
     const n = notesItem(), list = n && opts.notes?.(), desc = opts.desc?.();
@@ -344,7 +363,8 @@ export function createBoard(opts) {
       const el = document.createElement('button');
       el.type = 'button';
       el.className = 'ink-desc';
-      Object.assign(el.style, { width: 800 * scale + 'px', fontSize: 16 * scale + 'px' });
+      const p = frameList()[0], pw = p ? FRAMES[p.fmt][0] : 850;   // oben auf der ersten Seite
+      Object.assign(el.style, { left: ((p?.x || 0) + 25) * scale + 'px', top: ((p?.y || 0) + 25) * scale + 'px', width: (pw - 50) * scale + 'px', fontSize: 16 * scale + 'px' });
       el.innerHTML = `<small>Beschreibung</small><span></span>`;
       el.lastElementChild.textContent = desc || 'Noch keine Beschreibung. Antippen zum Schreiben.';
       el.classList.toggle('empty', !desc);
@@ -405,56 +425,86 @@ export function createBoard(opts) {
     if (el && e.detail === 0) opts.onOpenTitle(items[+el.dataset.idx]);
   });
 
-  // ---------- Bereiche (A4): gestrichelter Rahmen mit Reiter zum Verschieben ----------
-  const frameList = () => items.filter((it) => it.t === 'f');
-  const fmtName = (f) => FRAME_NAMES[f.fmt] || 'A4 hoch';
-  const frameName = (f, n) => f.n || f.lf?.t || (f.fmt === 'home' ? FRAME_NAMES.home : `${fmtName(f)} · ${n}`);
+  // ---------- Seiten: Papier mit Reiter (Name, Menü), darunter „Neue Seite“; auf der Deckseite der Homescreen-Ausschnitt ----------
+  const frameList = () => items.filter(isPage);
+  const homeItem = () => items.find((it) => it.t === 'f' && it.fmt === 'home');
+  const frameName = (f, n) => f.n || f.lf?.t || (f.cov ? 'Deckseite' : `Seite ${n}`);
+  const pageAt = (x, y) => frameList().find((f) => { const b = bbox(f); return x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3]; });
 
   function renderFrames() {
-    frameLayer.innerHTML = '';
-    frameList().forEach((f, n) => {
-      const b = bbox(f);
-      const el = document.createElement('div');
-      el.className = 'ink-frame';
-      if (f.fc) el.style.setProperty('--fc', f.fc);
-      Object.assign(el.style, { left: b[0] * scale + 'px', top: b[1] * scale + 'px', width: (b[2] - b[0]) * scale + 'px', height: (b[3] - b[1]) * scale + 'px' });
-      el.innerHTML = `<button type="button" class="ink-ftab" data-frame="${n}"></button>`;
-      el.firstElementChild.textContent = frameName(f, n + 1);
-      frameLayer.appendChild(el);
-    });
+    const list = frameList(), home = homeItem();
+    const box = (b) => `left:${b[0] * scale}px;top:${b[1] * scale}px;width:${(b[2] - b[0]) * scale}px;height:${(b[3] - b[1]) * scale}px`;
+    const last = list.length ? bbox(list[list.length - 1]) : null;
+    frameLayer.innerHTML = list.map((f, n) => `<div class="ink-frame ink-pg" style="${box(bbox(f))}">
+        <button type="button" class="ink-ftab" data-frame="${n}"><span>${esc(frameName(f, n + 1))}</span><small>${n + 1} / ${list.length}</small>${ICON.dots}</button></div>`).join('')
+      + (home ? `<div class="ink-frame ink-home" style="${box(bbox(home))}"><span class="ink-home-l">${ICON.home} Kachel am Startbildschirm</span></div>` : '')
+      + (last ? `<button type="button" class="ink-addpg" data-addpg style="left:${(last[0] + last[2]) / 2 * scale}px;top:${(last[3] + PAGE_GAP / 2) * scale}px">${ICON.plus}<span>Neue Seite</span></button>` : '');
+  }
+  frameLayer.addEventListener('click', (e) => {
+    const tab = e.target.closest('.ink-ftab');
+    if (tab) { const r = tab.getBoundingClientRect(); openFrameMenu(+tab.dataset.frame, r.left, r.bottom + 6); }
+    else if (e.target.closest('[data-addpg]')) opts.onAddPage?.(frameList().length);
+  });
+
+  // Seite einfügen (an Stelle at, sonst am Ende): fmt Format, bg Muster, ly Vorlage im Dudek-CI (danach öffnen sich die Angaben)
+  function addPage({ fmt = 'a4p', bg = '', ly = '' } = {}, at = frameList().length) {
+    const list = frameList(), n = Math.max(list[0]?.cov ? 1 : 0, Math.min(at, list.length));
+    const f = { t: 'f', fmt, x: -FRAMES[fmt][0] / 2, y: 1e6, ...(bg ? { bg } : {}), ...(ly ? { ly } : {}) };   // erst weit unten, dann eingereiht
+    const before = list[n], next = [...items];
+    next.splice(before ? next.indexOf(before) : next.indexOf(list[list.length - 1]) + 1, 0, f);
+    relayout(next);
+    const added = frameList()[n];
+    showPage(n);
+    if (ly && added) editLayout(added);
   }
 
-  // freier Platz im sichtbaren Bereich bzw. unter vorhandenen Bereichen, auf den Kästchen
-  // ly: gleich mit Layout im Dudek-CI (danach öffnen sich die Angaben)
-  function addFrame(fmt, ly = '') {
-    const [w, fh] = FRAMES[fmt];
-    const snap = (v) => Math.round(v / GRID) * GRID;
-    const x = snap(view.x + GRID * 2);
-    let y = snap(view.y + GRID * 3);
-    const taken = [...frameList().map(bbox), ...(notesItem() ? [notesBox()] : [])];   // nicht über andere Bereiche oder die Notizen
-    const overlaps = (ax, ay) => taken.some((b) => ax < b[2] && ax + w > b[0] && ay < b[3] && ay + fh > b[1]);
-    while (overlaps(x, y)) y += GRID * 4;
-    const f = { t: 'f', fmt, x, y, ...(ly ? { ly } : {}) };
-    commit([...items, f]);
-    const v = fitView(bbox(f));
-    goTo(v.x, v.y, v.z);
-    if (ly) { redrawBox(bbox(f)); editLayout(f); }
+  // Seiten neu untereinander stellen (Reihenfolge wie in der Liste); groups: Inhalt je Seite, falls schon vorher bestimmt
+  function relayout(next, groups = groupsOf(next).groups) {
+    commit(stackGroups(next, groups));
+    redrawAll();
+    renderOverlays();
+    opts.onFrames?.();
   }
 
-  // Inhalt eines Bereichs: alles, dessen Mitte darin liegt
-  function frameContent(f) {
-    const [x0, y0, x1, y1] = bbox(f);
-    return items.filter((it) => {
-      if (it === f || it.t === 'f' || it.t === 'n') return false;
-      const b = bbox(it), cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
-      return cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1;
-    });
+  // Seite um d Stellen verschieben (die Deckseite bleibt vorne)
+  function movePage(n, d) {
+    const { groups } = groupsOf(items), to = n + d;
+    if (!groups[n] || !groups[to] || groups[n].frame.cov || groups[to].frame.cov) return;
+    [groups[n], groups[to]] = [groups[to], groups[n]];
+    relayout([...groups.map((g) => g.frame), ...items.filter((it) => !isPage(it))], groups);
+    showPage(to);
   }
 
-  // Format, Name oder Hintergrund eines Bereichs ändern
+  // Seite samt Inhalt löschen (Deckseite und die letzte Seite bleiben)
+  async function deletePage(n) {
+    const { groups } = groupsOf(items), g = groups[n];
+    if (!g || g.frame.cov || groups.length < 2) return;
+    const titles = g.content.filter((it) => it.t === 't');
+    if (titles.length) { if (!(await opts.onDeleteTitles(titles))) return; }
+    else if (g.content.length && !(await opts.onConfirm?.(`„${frameName(g.frame, n + 1)}“ samt Inhalt löschen?`))) return;
+    clearSel();
+    const gone = new Set([g.frame, ...g.content]);
+    relayout(items.filter((it) => !gone.has(it)), groups.filter((x) => x !== g));
+    if (titles.length) past.length = 0;   // gelöschte Unterseiten lassen sich nicht zurückholen
+  }
+
+  const showPage = (n) => { const f = frameList()[n]; if (f) { const v = pageView(f); goTo(v.x, v.y, v.z); } };
+  // Seite, die gerade die Mitte des Bildschirms füllt
+  function currentPage() {
+    const y = view.y + sc.clientHeight / 2 / cur(), list = frameList();
+    const i = list.findIndex((f) => bbox(f)[3] + PAGE_GAP / 2 >= y);
+    return i < 0 ? list.length - 1 : i;
+  }
+
+  // Format, Name, Muster oder Vorlage einer Seite ändern; neues Format: Seiten neu einreihen
   function setFrame(f, patch) {
     const next = { ...f, ...patch };
     for (const k of ['n', 'bg', 'fc', 'ly', 'lf']) if (!next[k]) delete next[k];
+    if (next.fmt !== f.fmt) {
+      const { groups } = groupsOf(items), g = groups.find((x) => x.frame === f);
+      if (g) g.frame = next;
+      return relayout(items.map((it) => (it === f ? next : it)), groups);
+    }
     replace(f, next);
     redrawBox(union([f, next]));
     opts.onFrames?.();
@@ -463,7 +513,7 @@ export function createBoard(opts) {
   // Angaben im Layout (Titel, Projekt, Projektnummer, Kontakt) über ein Fenster der App
   async function editLayout(f) {
     const lf = await opts.onEditLayout?.(f.lf || {});
-    const cur = frameList().find((o) => o.x === f.x && o.y === f.y);   // der Bereich nach dem Layout-Wechsel
+    const cur = frameList().find((o) => o.x === f.x && o.y === f.y);   // die Seite nach dem Wechsel der Vorlage
     if (lf && cur) setFrame(cur, { lf: Object.keys(lf).length ? lf : null });
   }
 
@@ -840,28 +890,31 @@ export function createBoard(opts) {
     });
   }
 
-  // Menü eines Bereichs (Tippen auf seinen Reiter)
+  // Menü einer Seite (Tippen auf ihren Reiter): Name, Format, Muster, Vorlage, Reihenfolge, neue Seite, Speichern, Löschen
   function openFrameMenu(n, cx, cy) {
-    const f = frameList()[n];
+    const list = frameList(), f = list[n];
     if (!f) return;
     const opt = (m, on, icon, label) => `<button class="cm-i ${on ? 'on' : ''}" data-m="${m}">${ICON[icon]}<span>${label}</span>${on ? ICON.check : ''}</button>`;
-    const fc = f.fc || FRAME_COLORS[0];
-    showMenu(cx, cy, `<button class="cm-i" data-m="rename">${ICON.pen}<span>Umbenennen …</span></button><hr>
-      <div class="cm-colors" role="group" aria-label="Farbe des Bereichs">${FRAME_COLORS.map((c, i) => `<button class="cm-color ${c === fc ? 'on' : ''}" data-m="fc" data-i="${i}" style="background:${c}" aria-label="Farbe ${i + 1}"></button>`).join('')}</div><hr>
-      ${opt('a4p', f.fmt === 'a4p', 'frame', 'A4 hoch')}${opt('a4l', f.fmt === 'a4l', 'frame', 'A4 quer')}<hr>
-      ${FRAME_BG.map(([k, l]) => opt('bg:' + k, (f.bg || '') === k, 'grid', l)).join('')}<hr>
-      ${FRAME_LAYOUTS.map(([k, l]) => opt('ly:' + k, (f.ly || '') === k, 'frame', l)).join('')}
-      ${f.ly ? `<button class="cm-i" data-m="lf">${ICON.text}<span>Titel, Projekt, Kontakt …</span></button>` : ''}<hr>
-      <button class="cm-i" data-m="export">${ICON.download}<span>Speichern …</span></button>
-      <button class="cm-i danger" data-m="remove">${ICON.trash}<span>Bereich entfernen</span></button>`, (m, i) => {
-      if (m === 'fc') setFrame(f, { fc: i === '0' ? '' : FRAME_COLORS[+i] });
-      else if (m === 'a4p' || m === 'a4l') setFrame(f, { fmt: m });
+    const act = (m, icon, label, cls = '') => `<button class="cm-i ${cls}" data-m="${m}">${ICON[icon]}<span>${label}</span></button>`;
+    const up = n > (list[0].cov ? 1 : 0) && !f.cov, down = n < list.length - 1 && !f.cov;
+    showMenu(cx, cy, `${act('rename', 'pen', 'Umbenennen …')}<hr>
+      <div class="cm-h">Format</div>${opt('a4p', f.fmt === 'a4p', 'frame', 'A4 hoch')}${opt('a4l', f.fmt === 'a4l', 'frame', 'A4 quer')}<hr>
+      <div class="cm-h">Muster</div>${FRAME_BG.map(([k, l]) => opt('bg:' + k, (f.bg || '') === k, 'grid', l)).join('')}<hr>
+      <div class="cm-h">Vorlage</div>${FRAME_LAYOUTS.map(([k, l]) => opt('ly:' + k, (f.ly || '') === k, 'frame', l.replace('Dudek · ', 'Dudek ')) ).join('')}
+      ${f.ly ? act('lf', 'text', 'Titel, Projekt, Kontakt …') : ''}<hr>
+      ${up ? act('up', 'chevU', 'Nach oben') : ''}${down ? act('down', 'chevD', 'Nach unten') : ''}
+      ${act('add', 'plus', 'Neue Seite danach')}
+      ${act('export', 'download', 'Speichern …')}
+      ${!f.cov && list.length > 1 ? act('remove', 'trash', 'Seite löschen', 'danger') : ''}`, (m) => {
+      if (m === 'a4p' || m === 'a4l') setFrame(f, { fmt: m });
       else if (m.startsWith('bg:')) setFrame(f, { bg: m.slice(3) });
       else if (m.startsWith('ly:')) { setFrame(f, { ly: m.slice(3) }); if (m !== 'ly:' && !f.lf) editLayout(f); }
       else if (m === 'lf') editLayout(f);
       else if (m === 'rename') renameFrame(f);
+      else if (m === 'up' || m === 'down') movePage(n, m === 'up' ? -1 : 1);
+      else if (m === 'add') opts.onAddPage?.(n + 1);
       else if (m === 'export') opts.onExport(n);
-      else if (m === 'remove') { commit(items.filter((it) => it !== f)); redrawBox(bbox(f)); opts.onFrames?.(); }   // Inhalt bleibt stehen
+      else if (m === 'remove') deletePage(n);
     });
   }
   const onDocDown = (e) => { if (menu && !menu.contains(e.target)) closeMenu(); };
@@ -996,7 +1049,6 @@ export function createBoard(opts) {
     else if (a.kind === 'marker') drawLive();
     else if ((a.kind === 'erase' && a.hit) || a.kind === 'shape' || a.kind === 'dim') { items = a.before; redrawAll(); }
     else if (a.kind === 'lasso') { lassoSvg.classList.remove('on'); lassoLine.setAttribute('points', ''); }
-    else if (a.kind === 'fmove') { a.tab.closest('.ink-frame').style.translate = ''; selBox.classList.remove('bare'); clearSel(); }
     else if (a.kind === 'nmove' || a.kind === 'cmove') a.el.style.translate = '';
     else if (a.kind === 'move' || a.kind === 'scale') { selCv.style.transform = ''; renderSel(); }
     else if (a.kind === 'rotate') { selBox.style.rotate = ''; renderSel(); }
@@ -1099,18 +1151,6 @@ export function createBoard(opts) {
       act = { kind: 'nmove', id: e.pointerId, x, y, dx: 0, dy: 0, el: ntab.parentElement };
       return;
     }
-    const tab = e.target.closest('.ink-ftab');
-    if (tab && !act) {   // Bereich samt Inhalt verschieben (Tippen ohne Bewegung: Menü)
-      e.preventDefault();
-      capture(tab, e.pointerId);
-      opts.hold(true);
-      const n = +tab.dataset.frame, f = frameList()[n];
-      const [x, y] = pos(e);
-      setSel([f, ...frameContent(f)]);
-      selBox.classList.add('bare');   // nur der Inhalt wandert mit, ohne Auswahlrahmen
-      act = { kind: 'fmove', id: e.pointerId, n, x, y, dx: 0, dy: 0, tab };
-      return;
-    }
     const tEl = e.target.closest('.ink-title');
     if (tEl && !act && !(e.pointerType === 'touch' && fingers.size)) {   // Titel: tippen öffnet, ziehen (Finger: lange drücken) verschiebt
       e.preventDefault();
@@ -1162,14 +1202,16 @@ export function createBoard(opts) {
     }
     if (act) return;                                 // nur eine Geste gleichzeitig
     if (crop) { finishCrop(); return; }              // daneben tippen übernimmt den Zuschnitt
+    // neben den Seiten wird nicht geschrieben, sondern verschoben
+    const eraserTip = e.pointerType === 'pen' && ((e.buttons & 32) || e.button === 5);
+    if (DRAWS.includes(tool) && !eraserTip && !onSel && !pageAt(...pos(e))) { e.preventDefault(); capture(sc, e.pointerId); startPan(e); return; }
     e.preventDefault();
     capture(sc, e.pointerId);
     if (e.pointerType === 'pen') penDown = true;
     opts.hold(true);
     const [x, y, p] = pos(e);
     const touch = e.pointerType === 'touch';
-    const eraserEnd = e.pointerType === 'pen' && ((e.buttons & 32) || e.button === 5);   // Radier-Ende des Stifts
-    const t = eraserEnd ? 'eraser' : tool;
+    const t = eraserTip ? 'eraser' : tool;   // Radier-Ende des Stifts
     if (!['shape', 'dim', 'text', 'marker'].includes(t)) startLp(e);
 
     const onHandle = e.target.closest('.ink-sel-h'), onRot = e.target.closest('.ink-sel-r');
@@ -1262,12 +1304,6 @@ export function createBoard(opts) {
       act.dx = Math.round((x - act.x) / GRID) * GRID;
       act.dy = Math.round((y - act.y) / GRID) * GRID;
       act.el.style.translate = `${act.dx * scale}px ${act.dy * scale}px`;
-    } else if (act.kind === 'fmove') {
-      // immer ganze Kästchen weit, damit der Bereich auf dem Raster bleibt
-      act.dx = Math.round((x - act.x) / GRID) * GRID;
-      act.dy = Math.round((y - act.y) / GRID) * GRID;
-      renderSel(act.dx, act.dy, 1);
-      act.tab.closest('.ink-frame').style.translate = `${act.dx * scale}px ${act.dy * scale}px`;
     } else if (act.kind === 'rotate') {
       // in 15°-Schritten einrasten, wenn man in der Nähe ist
       const deg = (Math.atan2(y - act.cy, x - act.cx) - act.a0) * 180 / Math.PI, snap = Math.round(deg / 15) * 15;
@@ -1416,11 +1452,6 @@ export function createBoard(opts) {
       const n = notesItem();
       if (n && (a.dx || a.dy)) replace(n, { ...n, x: n.x + a.dx, y: n.y + a.dy });
     }
-    else if (a.kind === 'fmove') {
-      selBox.classList.remove('bare');
-      if (a.dx || a.dy) { applySel(a.dx, a.dy, 1); clearSel(); }
-      else { clearSel(); const r = a.tab.getBoundingClientRect(); openFrameMenu(a.n, r.left, r.bottom + 6); }
-    }
     else if (a.kind === 'scale') { selCv.style.transform = ''; applySel(0, 0, a.k); }
     else if (a.kind === 'rotate') { selBox.style.rotate = ''; rotateSel(a.a); }
     opts.hold(false);
@@ -1489,7 +1520,12 @@ export function createBoard(opts) {
       commit([{ t: 'i', src: path, x: cx - bw / 2, y: cy - bh / 2, w: bw, h: bh }, ...items]);
       redrawAll();
     },
-    addFrame,
+    addPage,
+    movePage,
+    deletePage,
+    currentPage,
+    showPage,
+    pageMenu: openFrameMenu,
     // Feld einfügen (auf den Kästchen): an der Stelle at [x, y] oder in der Mitte des sichtbaren Bereichs
     addCard(c, at = null) {
       const [w, h] = bbox({ ...c, x: 0, y: 0 }).slice(2);
@@ -1505,20 +1541,14 @@ export function createBoard(opts) {
       const v = fitView(bbox(it));
       goTo(v.x, v.y, Math.min(v.z, 1));
     },
-    // Bereiche für den Export: Name und Rechteck in Einheiten
-    frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, bg: f.bg || (f.ly ? 'blank' : 'grid'), ly: f.ly, lf: f.lf, box: bbox(f) })),
-    // Homescreen-Ausschnitt zeigen bzw. in der Mitte des sichtbaren Bereichs anlegen (einer je Canvas)
-    homeFrame() {
-      const f = frameList().find((x) => x.fmt === 'home');
-      if (!f) {
-        const [w, h] = FRAMES.home, snap = (v) => Math.round(v / GRID) * GRID;
-        commit([...items, { t: 'f', fmt: 'home', x: snap(view.x + sc.clientWidth / 2 / cur() - w / 2), y: snap(view.y + sc.clientHeight / 2 / cur() - h / 2) }]);
-        redrawAll();
-        renderOverlays();
-        return;
-      }
-      const v = fitView(bbox(f));
-      goTo(v.x, v.y, Math.min(v.z, 1.5));
+    // Seiten für Export und Übersicht: Name und Rechteck in Einheiten
+    frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, cov: !!f.cov, bg: f.bg || (f.ly ? 'blank' : 'grid'), ly: f.ly, lf: f.lf, box: bbox(f) })),
+    // Homescreen-Ausschnitt auf der Deckseite zeigen
+    showHome() { const f = homeItem(); if (f) { const v = fitView(bbox(f)); goTo(v.x, v.y, v.z); } },
+    // Rechteck des Homescreen-Ausschnitts, wenn darin etwas steht (sonst null)
+    homeBox() {
+      const f = homeItem(), b = f && bbox(f);
+      return b && items.some((it) => it.t !== 'f' && it.t !== 'n' && (() => { const o = bbox(it); return o[2] > b[0] && o[0] < b[2] && o[3] > b[1] && o[1] < b[3]; })()) ? b : null;
     },
     renameFrame(n, name) { const f = frameList()[n]; if (f) setFrame(f, { n: name.trim().slice(0, 40) }); },
     showOutline,
@@ -1529,8 +1559,6 @@ export function createBoard(opts) {
     clearSelection: () => clearSel(),
     get hasSelection() { return !!sel; },
     setEraser(r) { eraseR = r; },
-    // Kästchen der Fläche zeigen oder ausblenden (Bereiche bleiben kariert)
-    setGrid(on) { if (on === gridOn) return; gridOn = on; gridCv.hidden = !on; redrawAll(); },
     // Vorlage (Layout) und Angaben eines Bereichs, z. B. aus dem Speichern-Fenster
     setFrameLayout(n, ly) { const f = frameList()[n]; if (f) setFrame(f, { ly }); },
     setFrameInfo(n, lf) { const f = frameList()[n]; if (f) setFrame(f, { lf: Object.keys(lf).length ? lf : null }); },
@@ -1552,18 +1580,17 @@ export function createBoard(opts) {
       const dy = r.bottom > v.bottom - m ? v.bottom - m - r.bottom : r.top < v.top + m ? v.top + m - r.top : 0;
       if (dy) panBy(0, dy);
     },
-    showFrame(n) { const f = frameList()[n]; if (f) { const v = fitView(bbox(f)); goTo(v.x, v.y, v.z); } },
-    // Bereich als Bild zeichnen; bg: 'grid' (Kästchen), 'lines', 'dots', 'blank' (alle auf Weiß) oder 'none' (durchsichtig)
+    // Seite bzw. Rechteck als Bild zeichnen; bg: 'grid' (Kästchen), 'lines', 'dots', 'blank' (alle auf Weiß) oder 'none' (durchsichtig)
     async renderBox(box, pxW, bg, ly, lf) {
       const [x0, y0, x1, y1] = box, k = pxW / (x1 - x0);
       const cv = document.createElement('canvas');
       cv.width = Math.round(pxW);
       cv.height = Math.round((y1 - y0) * k);
-      const inside = items.filter((it) => { const b = bbox(it); return it.t !== 'f' && b[2] >= x0 && b[0] <= x1 && b[3] >= y0 && b[1] <= y1; });
+      const inside = items.filter((it) => { const b = bbox(it); return it.t !== 'f' && it.t !== 'n' && b[2] >= x0 && b[0] <= x1 && b[3] >= y0 && b[1] <= y1; });
       await Promise.all(inside.filter((it) => it.t === 'i').map(async (it) => { const bmp = await getImage(it.src); if (bmp) loaded.set(it.src, bmp); }));
       const ctx = cv.getContext('2d');
       ctx.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
-      if (bg !== 'none') drawFrameBg(ctx, box, bg, 1);
+      if (bg !== 'none') drawFrameBg(ctx, box, bg, Math.min(1, k));   // klein (Vorschau): feine Linien und Punkte bleiben sichtbar
       if (ly) drawFrameLayout(ctx, box, ly, lf);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';

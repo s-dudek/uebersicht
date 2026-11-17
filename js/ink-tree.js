@@ -1,9 +1,10 @@
-// Canvas: Gliederung – auf der Startseite zuerst die Notizen, dann je Seite ihre Bereiche (A4) mit den Titeln, die darin
-// stehen, danach die übrigen Titel; unter jedem Titel seine Unterseite (beliebig tief). Bereiche lassen sich hier umbenennen, Titel und Notizen löschen;
-// Tippen öffnet die Seite bzw. zeigt den Bereich.
+// Canvas: Seiten und Unterseiten – oben die Seiten des geöffneten Hefts als Vorschaubilder (öffnen, verschieben, löschen,
+// neue Seite), darunter der Baum: auf der Startseite zuerst die Notizen, dann je Seite die Titel, die darauf stehen;
+// unter jedem Titel seine Unterseite (beliebig tief). Seiten lassen sich umbenennen, Titel und Notizen löschen.
 import { esc, toast } from './core.js';
 import { ICON } from './icons.js';
 import { bbox, fontCss, LINE_H, textSize } from './ink-draw.js';
+import { isPage } from './ink-pages.js';
 import { deserialize, FRAME_NAMES, loadTree } from './ink-store.js';
 import { closeSheet, openSheet, sheetActs } from './sheet.js';
 import { LOADER } from './loader.js';
@@ -34,16 +35,49 @@ export function titleSvg({ s: strokes = [], tx = [] }, cls = 'ink-ttl') {
 }
 
 const fmtName = (f) => FRAME_NAMES[f.fmt] || 'A4 hoch';
-const frameName = (f, n) => f.n || f.lf?.t || `${fmtName(f)} · ${n + 1}`;
+const frameName = (f, n) => f.n || f.lf?.t || (f.cov ? 'Deckseite' : `Seite ${n + 1}`);
+const THUMB = { a4p: 116, a4l: 150 };   // Breite der Vorschaubilder (Punkte)
 
-// cat: Ordner; open: IDs der geöffneten Seiten (Startseite zuerst);
-// onOpen(pfad aus Titeln, bereich?); onRename(seite, bereich, name) -> Promise<Fehler | null>;
-// onShow(): Bereiche und Titel der geöffneten Seite auf der Fläche hervorheben;
-// notes: [{ id, title }] Notizen des Ordners; onDeleteTitle(seite, titel), onDeleteNote(id)
-export async function openTree({ cat, open, notes, onOpen, onRename, onShow, onDeleteTitle, onDeleteNote }) {
-  const sheet = openSheet(`<div class="sheet-head"><h2>Gliederung</h2>
+// Seiten des geöffneten Hefts als Vorschaubilder; pages: { list(), thumb(seite, breite) -> canvas, onShow(n), onMove(n, d), onDelete(n), onAdd() }
+function pageGrid(box, pages) {
+  let token = 0;
+  async function draw() {
+    const list = pages.list(), t = ++token, first = list[0]?.cov ? 1 : 0;
+    const btn = (attr, icon, label, cls = '') => `<button class="pg-b ${cls}" ${attr} aria-label="${label}" title="${label}">${ICON[icon]}</button>`;
+    box.innerHTML = list.map((f, n) => `<div class="pg-card ${f.cov ? 'cov' : ''}">
+        <button class="pg-th ${f.fmt}" data-pshow="${n}" aria-label="${esc(f.name)} öffnen"></button>
+        <div class="pg-meta"><b>${esc(f.name)}</b><small>${n + 1} · ${fmtName(f)}</small></div>
+        <div class="pg-acts">${n > first && !f.cov ? btn(`data-pmove="${n}" data-d="-1"`, 'chevL', 'Nach vorne') : ''}${n < list.length - 1 && !f.cov ? btn(`data-pmove="${n}" data-d="1"`, 'chevR', 'Nach hinten') : ''}${!f.cov && list.length > 1 ? btn(`data-pdel="${n}"`, 'trash', 'Seite löschen', 'del') : ''}</div>
+      </div>`).join('') + `<button class="pg-card pg-new" data-padd><span>${ICON.plus}</span><b>Neue Seite</b></button>`;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    for (const [n, f] of list.entries()) {   // nacheinander, damit die Liste sofort steht
+      const cv = await pages.thumb(f, THUMB[f.fmt] * dpr);
+      if (t !== token) return;
+      cv.style.width = THUMB[f.fmt] + 'px';
+      box.querySelector(`[data-pshow="${n}"]`)?.appendChild(cv);
+    }
+  }
+  box.addEventListener('click', async (e) => {
+    const sh = e.target.closest('[data-pshow]'), mv = e.target.closest('[data-pmove]'), del = e.target.closest('[data-pdel]');
+    if (sh) { closeSheet(); pages.onShow(+sh.dataset.pshow); }
+    else if (mv) { pages.onMove(+mv.dataset.pmove, +mv.dataset.d); draw(); }
+    else if (del) { await pages.onDelete(+del.dataset.pdel); draw(); }
+    else if (e.target.closest('[data-padd]')) { closeSheet(); pages.onAdd(); }
+  });
+  draw();
+}
+
+// cat: Ordner; open: IDs der geöffneten Seiten (Startseite zuerst); pages: Seiten des geöffneten Hefts (siehe pageGrid);
+// onOpen(pfad aus Titeln, seite?); onRename(heft, seite, name) -> Promise<Fehler | null>;
+// onShow(): Titel der geöffneten Seite auf der Fläche hervorheben;
+// notes: [{ id, title }] Notizen des Ordners; onDeleteTitle(heft, titel), onDeleteNote(id)
+export async function openTree({ cat, open, notes, pages, onOpen, onRename, onShow, onDeleteTitle, onDeleteNote }) {
+  const sheet = openSheet(`<div class="sheet-head"><h2>Seiten</h2>
       <span class="sh-btns"><button class="tree-show" aria-label="Auf der Fläche zeigen" title="Auf der Fläche zeigen">${ICON.eye}</button>${sheetActs()}</span></div>
-    <div class="tree-body"><div class="center loading">${LOADER}</div></div>`);
+    ${pages ? '<div class="pg-grid"></div><div class="tree-h">Unterseiten und Notizen</div>' : ''}
+    <div class="tree-body"><div class="center loading">${LOADER}</div></div>`, { full: true });
+  sheet.classList.add('tree-sheet');
+  if (pages) pageGrid(sheet.querySelector('.pg-grid'), pages);
   sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
   sheet.querySelector('.tree-show').addEventListener('click', () => { closeSheet(); onShow(); });
   let rows;
@@ -54,7 +88,7 @@ export async function openTree({ cat, open, notes, onOpen, onRename, onShow, onD
 
   // Baum aufbauen; besuchte Seiten merken, damit nichts doppelt oder im Kreis läuft.
   // Jede Zeile: Aufklapp-Pfeil (wenn es Unterseiten gibt), Eintrag mit kleiner Angabe rechts, Aktionen.
-  const paths = [[]], pages = [root], dels = [];   // dels: [seite, titel] zum Löschen
+  const paths = [[]], docs = [root], dels = [];   // dels: [seite, titel] zum Löschen
   const seen = new Set([root?.id, ...notes.map((n) => n.id)]);
   const act = (attr, icon, label, cls = '') => `<button class="tree-ren ${cls}" ${attr} aria-label="${label}" title="${label}">${ICON[icon]}</button>`;
   // sub: { html, hasOpen } der Unterseite; geschlossen, solange darin nichts geöffnet ist
@@ -65,7 +99,7 @@ export async function openTree({ cat, open, notes, onOpen, onRename, onShow, onD
       ${main.replace('>', ` class="tree-i ${on ? 'on' : ''}">`)}${meta ? `<small class="tree-m">${meta}</small>` : ''}${actions}</div>
       ${kids ? `<ul>${kids}</ul>` : ''}</li>`;
   };
-  const count = (row) => { const l = itemsOf(row); const n = l.filter((it) => it.t === 'f' || it.t === 't').length; return n ? `${n} ${n === 1 ? 'Eintrag' : 'Einträge'}` : ''; };
+  const count = (row) => { const n = itemsOf(row).filter(isPage).length; return n ? `${n} ${n === 1 ? 'Seite' : 'Seiten'}` : ''; };
   const group = (label, icon, n, html) => (html ? `<li class="tree-group"><span class="tree-gh">${ICON[icon]}${label}<i>${n}</i></span><ul>${html}</ul></li>` : '');
 
   function noteItems(path, depth) {
@@ -74,7 +108,7 @@ export async function openTree({ cat, open, notes, onOpen, onRename, onShow, onD
       const p = [...path, { note: n.id }];
       paths.push(p);
       const child = byId.get(n.id), pi = paths.length - 1;
-      if (child) pages.push(child);
+      if (child) docs.push(child);
       const sub = child ? branch(child, pi, p, depth + 1) : null, on = open.includes(n.id);
       hasOpen ||= on || !!sub?.hasOpen;
       return li({ cls: 'tree-note', on, sub, main: `<button data-n="${pi}">${ICON.notes}<span class="tree-fn">${esc(n.title) || 'Ohne Titel'}</span></button>`,
@@ -85,9 +119,9 @@ export async function openTree({ cat, open, notes, onOpen, onRename, onShow, onD
 
   function branch(row, pi, path, depth) {
     const list = itemsOf(row);
-    const frames = list.filter((it) => it.t === 'f'), titles = list.filter((it) => it.t === 't');
+    const frames = list.filter(isPage), titles = list.filter((it) => it.t === 't');
     let hasOpen = false;
-    // Bereich, in dem die Mitte eines Titels liegt (sonst -1)
+    // Seite, auf der die Mitte eines Titels liegt (sonst -1)
     const frameOf = (it) => {
       const b = bbox(it), cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
       return frames.findIndex((f) => { const r = bbox(f); return cx >= r[0] && cx <= r[2] && cy >= r[1] && cy <= r[3]; });
@@ -99,7 +133,7 @@ export async function openTree({ cat, open, notes, onOpen, onRename, onShow, onD
       const p = [...path, it];
       paths.push(p);
       const ti = paths.length - 1;
-      if (child) pages.push(child);
+      if (child) docs.push(child);
       const sub = child && depth < 12 ? branch(child, ti, p, depth + 1) : null, on = open.includes(it.page);
       hasOpen ||= on || !!sub?.hasOpen;
       dels.push([row, it]);
@@ -110,21 +144,21 @@ export async function openTree({ cat, open, notes, onOpen, onRename, onShow, onD
       const inside = titles.filter((it) => frameOf(it) === n).map(titleLi).join('');
       return li({ cls: 'tree-fr', style: f.fc ? `style="--fc:${f.fc}"` : '', sub: inside ? { html: inside, hasOpen: true } : null,
         main: `<button data-n="${pi}" data-fr="${n}">${ICON.frame}<span class="tree-fn">${esc(frameName(f, n))}</span></button>`,
-        meta: fmtName(f), actions: act(`data-pg="${pages.indexOf(row)}" data-fr="${n}"`, 'pen', 'Bereich umbenennen') });
+        meta: fmtName(f), actions: act(`data-pg="${docs.indexOf(row)}" data-fr="${n}"`, 'pen', 'Seite umbenennen') });
     }).join('');
     const rest = titles.filter((it) => frameOf(it) < 0).map(titleLi).join('');
     const notesPart = row === root ? noteItems(path, depth) : { html: '', hasOpen: false };
     hasOpen ||= notesPart.hasOpen;
-    // Startseite in Gruppen, Unterseiten schlicht: erst Bereiche (mit ihren Titeln), dann übrige Titel
+    // Startseite in Gruppen, Unterseiten schlicht: erst Seiten (mit ihren Titeln), dann übrige Titel
     const html = row === root
-      ? group('Notizen', 'notes', notes.length, notesPart.html) + group('Bereiche', 'frame', frames.length, framesHtml) + group(frames.length ? 'Weitere Titel' : 'Titel', 'chevR', titles.filter((it) => frameOf(it) < 0).length, rest)
+      ? group('Notizen', 'notes', notes.length, notesPart.html) + group('Seiten', 'frame', frames.length, framesHtml) + group('Weitere Titel', 'chevR', titles.filter((it) => frameOf(it) < 0).length, rest)
       : framesHtml + rest;
     return { html, hasOpen };
   }
   const list = branch(root, 0, [], 0).html;
   const body = sheet.querySelector('.tree-body');
   body.innerHTML = `<button class="tree-start ${open.length === 1 ? 'on' : ''}" data-n="0">${ICON.home}<span>Startseite</span>${ICON.chevR}</button>
-    ${list ? `<ul class="tree">${list}</ul>` : '<p class="muted tree-empty">Noch keine Notizen, Bereiche oder Titel. Oben rechts einen Bereich anlegen, oder etwas schreiben, mit der Auswahl umkreisen und „Als Titel“ wählen.</p>'}`;
+    ${list ? `<ul class="tree">${list}</ul>` : ''}`;
 
   body.addEventListener('click', (e) => {
     const tog = e.target.closest('[data-tog]');
@@ -142,16 +176,16 @@ export async function openTree({ cat, open, notes, onOpen, onRename, onShow, onD
 
   // Name direkt in der Zeile ändern (Eingabe bestätigt, Esc bricht ab)
   function rename(btn) {
-    const row = pages[+btn.dataset.pg], n = +btn.dataset.fr;
+    const row = docs[+btn.dataset.pg], n = +btn.dataset.fr;
     const label = btn.parentElement.querySelector('.tree-fn');
-    const f = itemsOf(row).filter((it) => it.t === 'f')[n];
+    const f = itemsOf(row).filter(isPage)[n];
     if (!row || !f || btn.parentElement.querySelector('input')) return;
     const inp = document.createElement('input');
     inp.className = 'input tree-in';
     inp.maxLength = 40;
     inp.value = f.n || '';
     inp.placeholder = frameName({ fmt: f.fmt }, n);
-    inp.setAttribute('aria-label', 'Name des Bereichs');
+    inp.setAttribute('aria-label', 'Name der Seite');
     btn.parentElement.prepend(inp);
     inp.focus();
     let cancelled = false;

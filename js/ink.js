@@ -1,22 +1,22 @@
-// Canvas der Notiz-Ordner: jede Kategorie hat eine eigene Startseite mit Titeln, jeder Titel öffnet eine eigene Seite
-// (beliebig tief). Auf der Startseite steht der Notizen-Bereich mit den Notizen des Ordners; jede Notiz hat eine
-// Unterseite mit ihrer Beschreibung. Bereiche (A4) lassen sich speichern (PDF, PNG, JPEG).
+// Canvas der Notiz-Ordner: ein Heft aus A4-Seiten (ink-pages.js). Jede Kategorie hat eine Startseite, die mit der Deckseite
+// beginnt (Homescreen-Ausschnitt für die Kachel, Notizen-Bereich); Titel öffnen eigene Unterseiten (beliebig tief),
+// jede Notiz hat eine Unterseite mit ihrer Beschreibung. Neue Seiten mit Format, Muster und Vorlage; Speichern als PDF, PNG, JPEG.
 import { $app, askConfirm, catById, esc, isCanvasOnly, itemById, safeColor, sb, state, store, toast } from './core.js';
 import { createNote, deleteItem, trashItems } from './data.js';
 import { ICON } from './icons.js';
 import { createBoard } from './ink-board.js';
-import { FONTS, GRID, NOTES_W, SHAPES, union, WEIGHTS } from './ink-draw.js';
+import { drawFrameBg, FONTS, FRAME_BG, GRID, SHAPES, WEIGHTS } from './ink-draw.js';
 import { deliver, exportWidth, fileName, toImage, toPdf } from './ink-export.js';
-import { FRAME_LAYOUTS, LAYOUT_FIELDS } from './ink-layout.js';
+import { drawFrameLayout, FRAME_LAYOUTS, LAYOUT_FIELDS } from './ink-layout.js';
+import { isPage, preparePages } from './ink-pages.js';
 import { clampSize, cleanText, KINDS, openPenPanel, PALETTE } from './ink-pen.js';
-import { deletePageTree, deserialize, FRAME_NAMES, loadChild, loadRoot, removeImages, savePage, serialize, titleIn, uploadImage } from './ink-store.js';
+import { deletePageTree, deserialize, FRAME_NAMES, FRAMES, loadChild, loadRoot, removeImages, savePage, serialize, titleIn, uploadImage } from './ink-store.js';
 import { openTree, titleSvg } from './ink-tree.js';
 import { calCardHtml, calColor, drawCalCard, nextCalSize, openCalOf, pickCalEvent } from './ink-cal.js';
 import { bellCardHtml, bellColor, drawBellCard, openBellOf } from './ink-remind.js';
 import { askReminder, createReminder } from './remind-page.js';
 import { openItem } from './items.js';
 import { busy, LOADER } from './loader.js';
-import { isPinned, pinKey, togglePin } from './pins.js';
 import { dropMenu } from './menu.js';
 import { notesIn } from './notes.js';
 import { render } from './render.js';
@@ -33,7 +33,6 @@ const ui = {
   text: cleanText(saved.text),
   recent: (Array.isArray(saved.r) ? saved.r.map((c) => safeColor(c)).filter(Boolean) : []).concat(['#0C3741', '#3E7CA8', '#C2575A']).filter((c, i, a) => a.indexOf(c) === i).slice(0, 3),
   eraser: [5, 9, 18].includes(+saved.e) ? +saved.e : 9,
-  grid: store('inkGrid') !== '0',
   finger: store('inkFinger') === '1',
   bar: store('inkBar') !== '0',
 };
@@ -52,21 +51,6 @@ const top = () => stack[stack.length - 1];
 // ---------- Notizen des Ordners im Canvas ----------
 const noteList = () => notesIn(cat).map((n) => ({ id: n.id, title: n.title || '' }));
 
-// Notizen-Bereich der Startseite: fehlt er, kommt er neben den vorhandenen Inhalt (leere Seite: an den Anfang);
-// reiner Canvas-Ordner: ohne Notizen-Bereich
-function withNotesArea(items) {
-  if (isCanvasOnly(cat)) {
-    const i = items.findIndex((it) => it.t === 'n');
-    if (i >= 0) items.splice(i, 1);
-    return i >= 0;
-  }
-  if (items.some((it) => it.t === 'n')) return false;
-  const b = items.length ? union(items) : null;
-  const snap = (v) => Math.round(v / GRID) * GRID;
-  items.push({ t: 'n', x: b ? snap(b[0] - NOTES_W - GRID * 4) : 0, y: b ? snap(b[1]) : 0 });
-  return true;
-}
-
 async function removeNote(id) {
   if (!(await deleteItem(id))) return;   // fragt nach; die Unterseite der Notiz löscht deleteItem mit
   stack.forEach((p) => p.board.refreshNotes());
@@ -75,9 +59,9 @@ async function removeNote(id) {
 // ---------- Seiten öffnen und schließen ----------
 // note: Notiz, zu der die Seite gehört (ihre Unterseite)
 function openPage(row, note = null) {
-  const { items } = deserialize(row.data);
   const isRoot = !stack.length;
-  const added = isRoot && withNotesArea(items);
+  const { items: raw, v } = deserialize(row.data);
+  const { items, changed } = preparePages(raw, { v, root: isRoot, notes: isRoot && !isCanvasOnly(cat) });
   const page = { id: row.id, note, title: titleIn(row.title), atOpen: new Set(), uploaded: new Set(), timer: null, pending: null };
   const root = isRoot ? { notes: noteList, onNote: (id) => openNote(page, id), onNoteAdd: () => createNote(cat || null), onNoteDelete: removeNote } : {};
   const sub = note ? { desc: () => itemById(note)?.body?.trim() || '', onDesc: () => openItem(note) } : {};
@@ -94,6 +78,8 @@ function openPage(row, note = null) {
     onOpenTitle: (it) => openTitle(page, it),
     onDeleteTitles: deleteTitles,
     onExport: (n) => openExport([n]),
+    onAddPage: (at) => openAddPage(at),
+    onConfirm: (q) => askConfirm(q, 'Löschen'),
     onEditLayout: editLayoutSheet,
     // Termin-Felder (ink-cal.js)
     // Felder: Termin (c, ink-cal.js) und Erinnerung (b, ink-remind.js)
@@ -107,7 +93,7 @@ function openPage(row, note = null) {
   });
   page.board.imagePaths().forEach((p) => page.atOpen.add(p));
   stack.push(page);
-  if (added) { page.pending = { list: items, hh: 0, ww: 0 }; scheduleSave(page); }   // Notizen-Bereich ergänzt bzw. entfernt: gleich speichern
+  if (changed) { page.pending = { list: items, hh: 0, ww: 0 }; scheduleSave(page); }   // zu Seiten umgebaut bzw. ergänzt: gleich speichern
   applyUi();
 }
 
@@ -154,12 +140,12 @@ async function openTitle(parent, it, quiet = false) {
   }
 }
 
-// aus der Gliederung: zurück zur Startseite, dann Titel für Titel hinein; frame: Bereich, der gezeigt werden soll
+// aus der Seitenübersicht: zurück zur Startseite, dann Titel für Titel hinein; frame: Seite, die gezeigt werden soll
 async function openPath(path, frame) {
   while (stack.length > 1) closePage(stack.pop());
   for (const it of path) if (!(await (it.note ? openNote(top(), it.note, true) : openTitle(top(), it, true)))) return render();
   render();
-  if (frame !== undefined) top().board.showFrame(frame);
+  if (frame !== undefined) top().board.showPage(frame);
 }
 
 // Titel aus der Gliederung löschen: Unterseite samt Inhalt weg, Titel von seiner Seite entfernen
@@ -176,12 +162,12 @@ async function removeTitle(row, it) {
   return true;
 }
 
-// Bereich umbenennen (aus der Gliederung): offene Seite direkt, sonst in der gespeicherten Seite
+// Seite umbenennen (aus der Seitenübersicht): offenes Heft direkt, sonst im gespeicherten
 async function renameFrame(row, n, name) {
   const open = stack.find((p) => p.id === row.id);
   if (open) { open.board.renameFrame(n, name); return null; }
   const { items } = deserialize(row.data);
-  const f = items.filter((it) => it.t === 'f')[n];
+  const f = items.filter(isPage)[n];
   if (!f) return null;
   if (name) f.n = name; else delete f.n;
   row.data = serialize(items, row.data?.h || 0, row.data?.w || 0);
@@ -195,39 +181,100 @@ function editLayoutSheet(lf) {
     const finish = (v) => { if (!done) { done = true; resolve(v); } };
     const sheet = openSheet(`<div class="sheet-head"><h2>Layout-Angaben</h2>${sheetActs({ save: true })}</div>
       ${LAYOUT_FIELDS.map(([k, l]) => `<div class="field"><label for="lf-${k}">${l}</label><input class="input" id="lf-${k}" maxlength="80" value="${esc(lf[k] || '')}"></div>`).join('')}
-      <p class="hint">Erscheint im Layout des Bereichs, auch beim Speichern als PDF oder Bild.</p>`, { onClose: () => finish(null) });
+`, { onClose: () => finish(null) });
     const read = () => Object.fromEntries(LAYOUT_FIELDS.map(([k]) => [k, sheet.querySelector('#lf-' + k).value.trim().slice(0, 80)]).filter(([, v]) => v));
     sheet.querySelector('[data-save]').addEventListener('click', () => { finish(read()); closeSheet(); });
     sheet.querySelector('[data-close]').addEventListener('click', closeSheet);   // ohne Übernehmen
   });
 }
 
-// Gliederung: Bereiche, Notizen und Titel aller Seiten; Titel und Notizen lassen sich dort auch löschen
+// Seitenübersicht: Seiten des geöffneten Hefts als Vorschaubilder (öffnen, verschieben, löschen, neue Seite),
+// darunter Notizen, Seiten und Titel aller Unterseiten
 function openOutlineTree() {
   flushAll();
+  const b = top()?.board;
   openTree({
     cat, open: stack.map((p) => p.id), notes: noteList(),
+    pages: b && {
+      list: () => b.frames(),
+      thumb: (f, w) => b.renderBox(f.box, w, f.bg, f.ly, f.lf),
+      onShow: (n) => b.showPage(n),
+      onMove: (n, d) => b.movePage(n, d),
+      onDelete: (n) => b.deletePage(n),
+      onAdd: () => openAddPage(b.frames().length),
+    },
     onOpen: openPath, onRename: renameFrame, onShow: showOutline,
     onDeleteTitle: async (row, it) => { const ok = await removeTitle(row, it); if (ok) openOutlineTree(); },
     onDeleteNote: async (id) => { await removeNote(id); openOutlineTree(); },
   });
 }
 
-// Gliederung auf der Fläche: alle Bereiche und Titel der geöffneten Seite hervorheben
+// Titel und Notizen auf der Fläche hervorheben
 function showOutline() {
-  if (!top()?.board.showOutline()) toast('Auf dieser Seite gibt es noch keine Bereiche oder Titel.');
+  if (!top()?.board.showOutline()) toast('Hier gibt es noch keine Titel.');
   else toast('Antippen beendet die Übersicht.');
 }
 
-// schmale Kopfleiste (Smartphone): Bereich und Speichern im Menü „Mehr“
+// schmale Kopfleiste (Smartphone): Termin, neue Seite und Speichern im Menü „Mehr“
 function openMore(btn) {
   dropMenu(btn, `<button class="cm-i" data-a="ink-cal">${ICON.calendar}<span>Termin einfügen</span></button>
-    <button class="cm-i" data-a="ink-frame">${ICON.frame}<span>Bereich (A4) anlegen</span></button>
-    <button class="cm-i" data-a="ink-export">${ICON.download}<span>Speichern als PDF, PNG, JPEG</span></button>
-    <button class="cm-i" data-a="ink-grid">${ICON.grid}<span>${ui.grid ? 'Raster ausblenden' : 'Raster einblenden'}</span></button>`, (b) => {
-    if (b.dataset.a === 'ink-frame') openFrameChoice(btn);
-    else if (b.dataset.a === 'ink-grid' || b.dataset.a === 'ink-cal') inkAction(b.dataset.a);
-    else { flushAll(); openExport(); }
+    <button class="cm-i" data-a="ink-page">${ICON.plus}<span>Neue Seite</span></button>
+    <button class="cm-i" data-a="ink-export">${ICON.download}<span>Speichern als PDF, PNG, JPEG</span></button>`, (b) => inkAction(b.dataset.a));
+}
+
+// ---------- Neue Seite: Vorlage, Format, Muster und Stelle wählen (zuletzt gewählte Art bleibt gemerkt) ----------
+function lastKind() {
+  try {
+    const k = JSON.parse(store('inkPageKind')) || {};
+    return { fmt: FRAMES[k.fmt] && k.fmt !== 'home' ? k.fmt : 'a4p', bg: FRAME_BG.some(([v]) => v === k.bg) ? k.bg : '', ly: FRAME_LAYOUTS.some(([v]) => v === k.ly) ? k.ly : '' };
+  } catch { return { fmt: 'a4p', bg: '', ly: '' }; }
+}
+
+// kleine Vorschau einer Seitenart
+function pagePreview(cv, { fmt, bg, ly }, w) {
+  const [pw, ph] = FRAMES[fmt], k = w / pw, dpr = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = Math.round(w * dpr); cv.height = Math.round(ph * k * dpr);
+  cv.style.width = w + 'px'; cv.style.height = ph * k + 'px';
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(k * dpr, 0, 0, k * dpr, 0, 0);
+  drawFrameBg(ctx, [0, 0, pw, ph], bg || (ly ? 'blank' : 'grid'), k * 1.6);
+  if (ly) drawFrameLayout(ctx, [0, 0, pw, ph], ly, {});
+}
+
+function openAddPage(at) {
+  const b = top()?.board;
+  if (!b) return;
+  const kind = lastKind(), here = b.currentPage(), count = b.frames().length;
+  let pos = at >= count ? 'end' : 'after';
+  const after = at < count ? at - 1 : here;   // nach dieser Seite (bei „Nach …“)
+  const chip = (key, v, label, on) => `<button type="button" class="pp-chip ${on ? 'on' : ''}" data-k="${key}" data-v="${v}">${esc(label)}</button>`;
+  const sheet = openSheet(`<div class="sheet-head"><h2>Neue Seite</h2>${sheetActs({ save: true, saveLabel: 'Einfügen' })}</div>
+    <div class="np-wrap"><div class="np-prev"><canvas></canvas></div><div class="np-side">
+      <div class="np-h">Vorlage</div><div class="pp-chips" data-g="ly"></div>
+      <div class="np-h">Format</div><div class="pp-chips" data-g="fmt"></div>
+      <div class="np-h">Muster</div><div class="np-bgs" data-g="bg"></div>
+      <div class="np-h">Einfügen</div><div class="pp-chips" data-g="pos"></div>
+    </div></div>`);
+  sheet.classList.add('np-sheet');
+  const names = b.frames();
+  function draw() {
+    sheet.querySelector('[data-g="ly"]').innerHTML = FRAME_LAYOUTS.map(([k, l]) => chip('ly', k, l.replace('Dudek · ', ''), kind.ly === k)).join('');
+    sheet.querySelector('[data-g="fmt"]').innerHTML = chip('fmt', 'a4p', 'A4 hoch', kind.fmt === 'a4p') + chip('fmt', 'a4l', 'A4 quer', kind.fmt === 'a4l');
+    sheet.querySelector('[data-g="pos"]').innerHTML = chip('pos', 'after', `Nach „${names[after]?.name || 'Seite'}“`, pos === 'after') + chip('pos', 'end', 'Am Ende', pos === 'end');
+    const bgs = sheet.querySelector('[data-g="bg"]');
+    bgs.innerHTML = FRAME_BG.map(([k, l]) => `<button type="button" class="np-bg ${kind.bg === k ? 'on' : ''}" data-k="bg" data-v="${k}"><canvas></canvas><span>${l}</span></button>`).join('');
+    bgs.querySelectorAll('canvas').forEach((cv, i) => pagePreview(cv, { fmt: 'a4p', bg: FRAME_BG[i][0], ly: '' }, 54));
+    pagePreview(sheet.querySelector('.np-prev canvas'), kind, kind.fmt === 'a4l' ? 240 : 170);
+  }
+  draw();
+  sheet.addEventListener('click', (e) => {
+    const c = e.target.closest('[data-k]');
+    if (c) { if (c.dataset.k === 'pos') pos = c.dataset.v; else kind[c.dataset.k] = c.dataset.v; draw(); return; }
+    if (e.target.closest('[data-close]')) return closeSheet();
+    if (!e.target.closest('[data-save]')) return;
+    store('inkPageKind', JSON.stringify(kind));
+    closeSheet();
+    b.addPage(kind, pos === 'end' ? count : after + 1);
   });
 }
 
@@ -273,11 +320,11 @@ async function flush(page) {
   if (page === stack[0]) updateHomeImg(page);
 }
 
-// Homescreen-Ausschnitt (Bereich fmt 'home' auf der Startseite des Canvas): Bild für die Kachel des Ordners speichern
+// Homescreen-Ausschnitt auf der Deckseite: sein Inhalt wird als Bild für die Kachel des Ordners gespeichert (leer: kein Bild)
 const HOME_W = 640;   // Breite des Bildes in Pixel
 async function updateHomeImg(page) {
-  const f = page.board.frames().find((x) => x.fmt === 'home');
-  const url = f ? (await page.board.renderBox(f.box, HOME_W, 'blank')).toDataURL('image/jpeg', .8) : null;   // Rahmen gelöscht: Bild weg
+  const box = page.board.homeBox();
+  const url = box ? (await page.board.renderBox(box, HOME_W, 'blank')).toDataURL('image/jpeg', .8) : null;
   if ((state.homeImgs[cat ?? ''] || null) === url) return;
   state.homeImgs[cat ?? ''] = url;
   sb.from('ink_pages').update({ home_img: url }).eq('id', page.id).then(() => {});
@@ -303,7 +350,6 @@ function applyUi() {
   b.setMarker(ui.marker);
   b.setTextStyle(ui.text);
   b.setEraser(ui.eraser);
-  b.setGrid(ui.grid);
   b.setFinger(ui.finger);
 }
 
@@ -330,26 +376,6 @@ picker.addEventListener('change', async () => {
     toast('Bild konnte nicht hinzugefügt werden: ' + (e.message || e), 4000);
   }
 });
-
-// Bereich anlegen: A4 hoch oder quer
-// Bereich anlegen: leer (A4 hoch/quer) oder gleich mit einem Layout im Dudek-CI
-function openFrameChoice(btn) {
-  const fmt = (f, ly, label) => `<button class="cm-i" data-f="${f}" data-ly="${ly}">${ICON.frame}<span>${label}</span></button>`;
-  dropMenu(btn, `${cat ? `<button class="cm-i" data-home>${ICON.home}<span>Homescreen-Ausschnitt</span></button><hr>` : ''}
-    ${fmt('a4p', '', 'A4 hoch')}${fmt('a4l', '', 'A4 quer')}<hr>
-    <div class="cm-h">Mit Dudek-Layout</div>
-    ${FRAME_LAYOUTS.filter(([k]) => k).map(([k, l]) => `${fmt('a4p', k, `${l.replace('Dudek · ', '')} · A4 hoch`)}${fmt('a4l', k, `${l.replace('Dudek · ', '')} · A4 quer`)}`).join('')}`,
-  (b) => ('home' in b.dataset ? homeFrame() : top()?.board.addFrame(b.dataset.f, b.dataset.ly)));
-}
-
-// Homescreen-Ausschnitt: Rahmen auf der Startseite des Canvas; sein Inhalt füllt die Kachel des Ordners (wird bei Bedarf angeheftet)
-function homeFrame() {
-  if (stack.length > 1) closePage(stack.pop());   // nur auf der Startseite des Canvas
-  top()?.board.homeFrame();
-  if (!isPinned(pinKey.cat(cat))) togglePin(pinKey.cat(cat));
-  applyUi();
-  render();
-}
 
 // Formen: Linie, Pfeil, Rechteck, Ellipse, Dreieck
 function openShapes(btn) {
@@ -467,7 +493,6 @@ export async function inkAction(act, id, btn) {
       else ui.tool = id;
       break;
     case 'ink-ctx': contextAction(id); return;
-    case 'ink-grid': ui.grid = !ui.grid; store('inkGrid', ui.grid ? '1' : '0'); break;
     case 'ink-pen': openPen(btn); return;
     case 'ink-tree': openOutlineTree(); return;
     case 'ink-more': openMore(btn); return;
@@ -477,7 +502,7 @@ export async function inkAction(act, id, btn) {
     case 'ink-redo': b?.redo(); return;
     case 'ink-img': picker.click(); return;
     case 'ink-cal': pickCalEvent().then((c) => { if (c) top()?.board.addCard(c); }); return;
-    case 'ink-frame': openFrameChoice(btn); return;
+    case 'ink-page': if (b) openAddPage(b.currentPage() + 1); return;
     case 'ink-fold': toggleBar(); return;
     case 'ink-export': flushAll(); openExport(); return;
     case 'ink-back': if (stack.length > 1) closePage(stack.pop()); break;
@@ -504,19 +529,11 @@ document.addEventListener('keydown', (e) => {
 // ---------- Export: Bereiche auswählen, Format und Hintergrund ----------
 const exp = { fmt: 'pdf', bg: 'grid' };
 
-// Fenster „Speichern“: links Bereiche, Vorlage (auch nachträglich) mit ihren Angaben, Format und Hintergrund; rechts große Vorschau
+// Fenster „Speichern“: links Seiten, Vorlage (auch nachträglich) mit ihren Angaben, Format und Hintergrund; rechts große Vorschau
 function openExport(preselect) {
   const b = top()?.board;
   if (!b) return;
   let frames = b.frames();
-  if (!frames.length) {
-    const sheet = openSheet(`<div class="sheet-head"><h2>Speichern</h2>${sheetActs()}</div>
-      <p class="exp-lead">Noch kein Bereich auf dieser Seite. Lege einen Bereich an, schreibe hinein und speichere ihn dann.</p>
-      <div class="exp-new"><button class="btn" data-f="a4p">${ICON.frame} A4 hoch</button><button class="btn" data-f="a4l">${ICON.frame} A4 quer</button></div>`);
-    sheet.querySelector('[data-close]').addEventListener('click', closeSheet);
-    sheet.addEventListener('click', (e) => { const nf = e.target.closest('[data-f]'); if (nf) { closeSheet(); b.addFrame(nf.dataset.f); } });
-    return;
-  }
   const chosen = new Set(preselect ?? frames.map((f) => f.n));
   let cur = preselect?.[0] ?? frames[0].n;   // Bereich in der Vorschau
   const sheet = openSheet(`<div class="sheet-head"><h2>Speichern</h2>${sheetActs()}</div>
@@ -526,13 +543,13 @@ function openExport(preselect) {
   const side = sheet.querySelector('.exp-side'), host = sheet.querySelector('.exp-host'), nav = sheet.querySelector('.exp-nav');
   const frame = () => frames.find((f) => f.n === cur);
   const seg = (key, opts) => `<div class="seg-view exp-seg" data-key="${key}">${opts.map(([v, l]) => `<button type="button" class="${exp[key] === v ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>`;
-  const goLabel = () => `${ICON.download} ${chosen.size === 1 ? 'Bereich' : `${chosen.size} Bereiche`} speichern`;
-  const note = () => (exp.bg === 'none' ? (exp.fmt === 'png' ? 'PNG ohne Hintergrund ist durchsichtig.' : 'Ohne Kästchen, Linien oder Punkte, auf Weiß.') : 'Jeder Bereich mit seinem Hintergrund und seiner Vorlage.');
+  const goLabel = () => `${ICON.download} ${chosen.size === 1 ? 'Seite' : `${chosen.size} Seiten`} speichern`;
+  const note = () => (exp.bg === 'none' ? (exp.fmt === 'png' ? 'PNG ohne Hintergrund ist durchsichtig.' : 'Ohne Kästchen, Linien oder Punkte, auf Weiß.') : 'Jede Seite mit ihrem Muster und ihrer Vorlage.');
 
   function renderSide() {
     const f = frame();
     side.innerHTML = `
-      <div class="exp-h">Bereiche</div>
+      <div class="exp-h">Seiten</div>
       <div class="exp-list">${frames.map((x) => `<div class="exp-item ${x.n === cur ? 'cur' : ''}">
         <button class="exp-chk ${chosen.has(x.n) ? 'on' : ''}" data-chk="${x.n}" aria-label="Mitspeichern" title="Mitspeichern">${ICON.check}</button>
         <button class="exp-name" data-show="${x.n}"><span>${esc(x.name)}</span><small>${FRAME_NAMES[x.fmt] || 'A4 hoch'}</small></button></div>`).join('')}</div>
@@ -540,12 +557,12 @@ function openExport(preselect) {
       <div class="pp-chips">${FRAME_LAYOUTS.map(([k, l]) => `<button type="button" class="pp-chip ${(f.ly || '') === k ? 'on' : ''}" data-ly="${k}">${esc(l.replace('Dudek · ', ''))}</button>`).join('')}</div>
       ${f.ly ? `<div class="exp-fields">${LAYOUT_FIELDS.map(([k, l]) => `<label><span>${l}</span><input class="input" data-lf="${k}" maxlength="80" value="${esc(f.lf?.[k] || '')}"></label>`).join('')}</div>` : ''}
       <div class="exp-h">Format</div>${seg('fmt', [['pdf', 'PDF'], ['png', 'PNG'], ['jpeg', 'JPEG']])}
-      <div class="exp-h">Hintergrund</div>${seg('bg', [['grid', 'Mit Hintergrund'], ['none', 'Ohne']])}
+      <div class="exp-h">Muster</div>${seg('bg', [['grid', 'Mit Muster'], ['none', 'Ohne']])}
       <p class="hint exp-note">${note()}</p>
       <button class="btn block" id="exp-go" ${chosen.size ? '' : 'disabled'}>${goLabel()}</button>`;
   }
 
-  // Vorschau des gewählten Bereichs; nur die jüngste Anfrage wird gezeigt
+  // Vorschau der gewählten Seite; nur die jüngste Anfrage wird gezeigt
   let token = 0;
   async function renderPreview() {
     const f = frame(), t = ++token;
@@ -556,8 +573,8 @@ function openExport(preselect) {
     cv.className = `exp-cv ${f.fmt} ${bg === 'none' ? 'clear' : ''}`;
     host.replaceChildren(cv);
     const i = frames.indexOf(f);
-    nav.innerHTML = frames.length > 1 ? `<button class="exp-arrow" data-step="-1" ${i ? '' : 'disabled'} aria-label="Voriger Bereich">${ICON.chevL}</button>
-      <span>${i + 1} / ${frames.length}</span><button class="exp-arrow" data-step="1" ${i < frames.length - 1 ? '' : 'disabled'} aria-label="Nächster Bereich">${ICON.chevR}</button>` : '';
+    nav.innerHTML = frames.length > 1 ? `<button class="exp-arrow" data-step="-1" ${i ? '' : 'disabled'} aria-label="Vorige Seite">${ICON.chevL}</button>
+      <span>${i + 1} / ${frames.length}</span><button class="exp-arrow" data-step="1" ${i < frames.length - 1 ? '' : 'disabled'} aria-label="Nächste Seite">${ICON.chevR}</button>` : '';
   }
   const show = (n) => { cur = n; renderSide(); renderPreview(); };
   const refresh = () => { frames = b.frames(); };
@@ -737,17 +754,16 @@ export function inkHead() {
 const tb = (act, icon, label, { on = false, dis = false, id = '', cls = '' } = {}) =>
   `<button class="dk ink-b ${on ? 'on' : ''} ${cls}" data-act="${act}" ${id ? `data-id="${id}"` : ''} aria-label="${label}" title="${label}" ${dis ? 'disabled' : ''}>${ICON[icon]}</button>`;
 
-// rechts in der Kopfleiste: Bereich, Speichern | Raster, Finger, Gliederung | ganz rechts Rückgängig, Wiederholen
+// rechts in der Kopfleiste: Neue Seite, Speichern | Finger, Seitenübersicht | ganz rechts Rückgängig, Wiederholen
 export function inkHeadTools() {
   const b = top()?.board;
   return `<div class="ph-ink">
-    ${tb('ink-frame', 'frame', 'Bereich (A4) anlegen', { cls: 'wide-only' })}
+    ${tb('ink-page', 'plus', 'Neue Seite', { cls: 'wide-only' })}
     ${tb('ink-export', 'download', 'Speichern als PDF, PNG, JPEG', { cls: 'wide-only' })}
     ${tb('ink-more', 'dots', 'Mehr', { cls: 'narrow-only' })}
     <i class="ink-sep"></i>
-    ${tb('ink-grid', 'grid', ui.grid ? 'Raster ausblenden' : 'Raster einblenden', { on: !ui.grid, cls: 'wide-only' })}
     ${tb('ink-finger', 'hand', 'Mit Finger schreiben', { on: ui.finger })}
-    ${tb('ink-tree', 'tree', 'Gliederung')}
+    ${tb('ink-tree', 'tree', 'Seiten und Unterseiten')}
     <i class="ink-sep"></i>
     ${tb('ink-undo', 'undo', 'Rückgängig', { dis: !b?.canUndo })}
     ${tb('ink-redo', 'redo', 'Wiederholen', { dis: !b?.canRedo })}

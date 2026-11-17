@@ -36,14 +36,15 @@ js/
   note-select.js    Notizen mehrfach auswählen: verschieben, löschen
   folders.js        Ordner (Kategorien) in Todos/Notizen
   ink.js            Canvas je Notiz-Ordner: Seiten, Werkzeuge, Export, Speichern
-  ink-board.js      Canvas: unendliche Zeichenfläche mit Zoom (Stift, Radierer, Auswahl, Formen, Bemaßung, Titel)
+  ink-board.js      Canvas: Zeichenfläche mit A4-Seiten und Zoom (Stift, Radierer, Auswahl, Formen, Bemaßung, Titel)
+  ink-pages.js      Canvas: Seiten untereinander, Deckseite, Umbau älterer unendlicher Flächen
   ink-draw.js       Canvas: Geometrie und Zeichnen (Striche, Formen, Maße, Bilder, Kästchen)
   ink-crop.js       Canvas: Bild zuschneiden
   ink-cal.js        Canvas: Termin-Feld (Verweis auf einen Termin, Auswahl, Karte für den Export)
   ink-remind.js     Canvas: Erinnerungs-Feld (Glocke bei Markiertem, öffnet die Erinnerung)
   remind-page.js    Bereich Erinnerungen: alle Erinnerungen, schnell stellen, Fenster einer Erinnerung
   ink-pen.js        Canvas: Fenster für Farbe und Stärke (Stift, Textmarker, Text)
-  ink-tree.js       Canvas: Gliederung (Bereiche, Titel und Unterseiten)
+  ink-tree.js       Canvas: Seitenübersicht (Vorschaubilder, Titel und Unterseiten)
   ink-store.js      Canvas: Datenbank und Bilder (Supabase Storage)
   ink-export.js     Canvas: Bereiche als PDF, PNG oder JPEG
   ink-layout.js     Canvas: Layouts für Bereiche im Dudek-CI (Blatt, Deckblatt, Planfeld)

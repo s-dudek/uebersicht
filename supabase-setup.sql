@@ -471,3 +471,9 @@ alter table public.ink_pages add column if not exists home_img text;
 -- Rezepte (Bereich Essen) als eigener Eintrag
 alter table public.items drop constraint if exists items_type_check;
 alter table public.items add constraint items_type_check check (type in ('todo', 'note', 'meal', 'event', 'training', 'reminder', 'recipe'));
+
+-- ---------- Sicherung vor dem Umbau des Canvas auf A4-Seiten (17.11.2026) ----------
+-- Kopie aller Canvas-Seiten im alten Format (unendliche Fläche, data.v = 1); nur Dienstzugang (RLS ohne Regeln).
+-- Kann gelöscht werden, sobald der Umbau bestätigt ist: drop table if exists public.ink_pages_backup_v1;
+create table if not exists public.ink_pages_backup_v1 as select * from public.ink_pages;
+alter table public.ink_pages_backup_v1 enable row level security;

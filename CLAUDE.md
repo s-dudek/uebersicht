@@ -60,23 +60,29 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
 - Startbild (`splash.js`, mind. 0,9 s): laufender Abschnitt blendet aus, Zeichen steht kurz kräftig da, dann löst es sich weich auf (größer, unscharf, durchsichtig), während der dunkle Grund ausblendet. Kein Fernseh-Effekt (Zusammenklappen) mehr.
 - `sw.js` holt eigene Dateien mit `cache: 'no-cache'`, damit neue Versionen sofort ankommen.
 - `render()` baut die Ansicht neu auf; während Gesten `render.hold = true` setzen, danach `render.pending` abarbeiten.
-- Canvas (früher „Handschrift“, Code `js/ink*.js`): je Notiz-Ordner eine Startseite in `ink_pages`, Titel führen zu Unterseiten, A4-Bereiche auf dem 25er-Raster.
+- Canvas (früher „Handschrift“, Code `js/ink*.js`): je Notiz-Ordner eine Startseite in `ink_pages`, Titel führen zu Unterseiten.
+  Jede Seite ist ein Heft aus A4-Seiten (`ink-pages.js`, Daten-Version `v: 2`): Seiten = Elemente `f` (a4p/a4l) in ihrer Reihenfolge untereinander, mittig auf x = 0, Abstand `PAGE_GAP`;
+  zu einer Seite gehört, was mit seiner Mitte darauf liegt (`groupsOf`, `stackGroups` reiht neu ein). Neben den Seiten wird nicht geschrieben, Zoom 45–400 % der Seitenbreite, Ansicht bleibt bei den Seiten (`clampView`).
+  Startseite beginnt immer mit der Deckseite (`cov: 1`, nicht verschieb-/löschbar) mit Homescreen-Ausschnitt (`fmt: 'home'`, 750×500) und Notizen-Bereich.
+  Ältere unendliche Flächen (`v: 1`) werden beim Öffnen einmal umgebaut (`preparePages`/`migrate`): Bereiche werden Seiten, übriger Inhalt kommt auf zusätzliche A4-Seiten, nichts geht verloren.
+  „Neue Seite“ (Kopfleiste, Knopf unter der letzten Seite, Seitenmenü): Fenster mit Vorlage `ly`, Format, Muster `bg` und Stelle (gemerkt in `inkPageKind`).
+  Seitenmenü (Reiter über der Seite): Umbenennen, Format, Muster, Vorlage samt Angaben, nach oben/unten, neue Seite danach, Speichern, löschen.
+  Seitenübersicht (`ink-tree.js`, Knopf „Seiten und Unterseiten“): Vorschaubilder der Seiten (öffnen, verschieben, löschen, neue Seite), darunter Notizen, Seiten und Titel aller Unterseiten.
   Notizen-Bereich (Element `n`, nur Lage) zeigt die Notizen des Ordners als Liste (HTML); jede Notiz hat eine Unterseite mit gleicher ID
   und ihrer Beschreibung oben; Notiz löschen löscht die Unterseite mit (data.js). Auswahl lässt sich nachträglich umgestalten (Farbe, Stärke, Schrift).
-  unendliche Fläche (verschieben, zoomen 25–400 %, „Ursprungsansicht“), Werkzeugleiste unter der Kopfleiste (einfahrbar), Ordnerwahl über den Titel,
+  verschieben und zoomen („Ursprungsansicht“ = erste Seite in voller Breite), Werkzeugleiste unter der Kopfleiste (einfahrbar), Ordnerwahl über den Titel,
   Formen (als Striche), Textmarker (Strich mit `m`), Text (Element `x`), Bemaßung (Element `d`), Bilder mit Zuschnitt `cr` und Radierspuren `er`,
   Drehen über den Griff oben an der Auswahl (Striche/Formen/Bemaßung: Punkte gedreht; Bilder und Texte: Winkel `r` um die Mitte; gedrehte Bilder nicht zuschneiden),
-  Homescreen-Ausschnitt: Menü „Bereich“ → „Homescreen-Ausschnitt“ legt einen Rahmen `fmt: 'home'` (750×500, einer je Canvas, nur Startseite) an und heftet den Ordner an;
-  nach jedem Speichern wird der Rahmen als JPEG in `ink_pages.home_img` gelegt (`updateHomeImg`), geladen in `state.homeImgs` (loadAll), geprüft mit `jpegSrc`;
-  die Ordner-Kachel zeigt dann nur das Bild (ganze Fläche, Name als Schild) und öffnet den Canvas. Geht auch bei reinen Canvas-Ordnern.
+  Kachel am Startbildschirm: nach jedem Speichern wird der Homescreen-Ausschnitt der Deckseite als JPEG in `ink_pages.home_img` gelegt (`updateHomeImg`, nur wenn darin etwas steht),
+  geladen in `state.homeImgs` (loadAll), geprüft mit `jpegSrc`; die angeheftete Ordner-Kachel zeigt dann nur das Bild (Name als Schild) und öffnet den Canvas.
   Kopieren: Auswahl → „Kopieren“ (Leiste/Menü) legt eine Kopie versetzt daneben und merkt sie; langes Drücken/Rechtsklick auf freie Stelle → „Einfügen“ (auch in anderen Ordnern; ohne Titel und Bereiche).
   Termin-Feld (Element `c`, ink-cal.js: Verweis `ev` bzw. `xo` plus Kopie `tt`/`d`/`tm`, Größe `sz` s/m/l wie Kacheln, HTML-Ebene; ziehen = verschieben, antippen = Wochenansicht des Tages, Inhalt immer aktuell aus dem Kalender),
-  Bereiche mit Name `n`, Hintergrund `bg` (lines/dots/blank), Farbe `fc`, Layout `ly` im Dudek-CI (ink-layout.js) mit Angaben `lf` (Titel, Projekt, Nr., Kontakt), Gliederung (Notizen zuerst, Titel unter ihrem Bereich, „Auf der Fläche zeigen“),
+  Seiten mit Name `n`, Muster `bg` (ohne = kariert, lines/dots/blank), Vorlage `ly` im Dudek-CI (ink-layout.js) mit Angaben `lf` (Titel, Projekt, Nr., Kontakt),
   Werkzeugleiste: Umschalter Text/Zeichnen/Radieren, Auswahl als eigener Knopf (solange aktiv ruhen die anderen Werkzeuge),
   Eigenschaften-Leiste unten (`.ink-ctx`, contextHtml in ink.js): je nach Werkzeug/Auswahl Farbe, Stärke, Schrift, Radiergröße, Aktionen; rechts runder Knopf „Ursprungsansicht“,
-  Kopfleiste links (Desktop): Knopf ☰ fährt die Seitenleiste ein/aus (`state.inkSideOff`, gemerkt); rechts: Bereich, Speichern | Raster aus/ein (Bereiche bleiben kariert), Finger, Gliederung | Rückgängig, Wiederholen.
-  Speichern-Fenster: links Bereiche, Vorlage samt Angaben (nachträglich), Format, Hintergrund; rechts große Vorschau.
-  Text mit Schriftart `ff` (FONTS in ink-draw.js, Google Fonts in index.html), Schnitt `fw`, kursiv `i`; Ursprungsansicht = erster Bereich,
+  Kopfleiste links (Desktop): Knopf ☰ fährt die Seitenleiste ein/aus (`state.inkSideOff`, gemerkt); rechts: Neue Seite, Speichern | Finger, Seitenübersicht | Rückgängig, Wiederholen.
+  Speichern-Fenster: links Seiten, Vorlage samt Angaben (nachträglich), Format, Muster; rechts große Vorschau.
+  Text mit Schriftart `ff` (FONTS in ink-draw.js, Google Fonts in index.html), Schnitt `fw`, kursiv `i`;
   Titel aus Strichen und Texten (`tx`). Handballen je Berührung (wie GoodNotes): Hand ist, was aufsetzt, während der Stift schreibt, große
   Auflagen und Berührungen ganz knapp nach dem Stift an seiner Spitze – bis diese Berührung endet; keine Sperre nach Zeit. Verschieben direkt vor dem Stift
   wird zurückgenommen; Loslassen wird am ganzen Dokument gehört (kein Hängenbleiben). Bildschirmtastatur: `#app` auf `visualViewport` begrenzt (ink.js).
