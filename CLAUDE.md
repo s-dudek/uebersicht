@@ -92,7 +92,8 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   Text mit Schriftart `ff` (FONTS in ink-draw.js, Google Fonts in index.html), Schnitt `fw`, kursiv `i`;
   Titel aus Strichen und Texten (`tx`). Handballen je Berührung (wie GoodNotes): Hand ist, was aufsetzt, während der Stift schreibt, große
   Auflagen und Berührungen ganz knapp nach dem Stift an seiner Spitze – bis diese Berührung endet; keine Sperre nach Zeit. Verschieben direkt vor dem Stift
-  wird zurückgenommen; Loslassen wird am ganzen Dokument gehört (kein Hängenbleiben). Bildschirmtastatur: `#app` auf `visualViewport` begrenzt (ink.js).
+  wird zurückgenommen; Loslassen wird am ganzen Dokument gehört (kein Hängenbleiben). Stift neben den Seiten (40 Einheiten Rand) zeichnet nicht, gilt aber als aufgesetzt (Hand bleibt Hand);
+  Safari-Zoomgeste (`gesturechange`) nur ohne Berührung am Bildschirm (Trackpad), sonst zoomten zwei Auflagen der Hand. Bildschirmtastatur: `#app` auf `visualViewport` begrenzt (ink.js).
   Einstieg über den Knopf „Canvas“ in den Notizen; Ordnerwahl in Notizen und Canvas oben über den Titel (dort auch Name, Farbe, Symbol),
   Stifttaste wechselt Werkzeug (nur wo der Browser sie meldet – Apple-Pencil-Doppeltippen/Drücken erreicht Webseiten nicht),
   Export als PDF/PNG/JPEG (eigener PDF-Schreiber in `ink-export.js`). Bilder im privaten Storage-Bucket `ink` (`c/<ordner-id>/…`, `u/<user-id>/…`).

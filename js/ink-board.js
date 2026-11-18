@@ -450,7 +450,7 @@ export function createBoard(opts) {
   const frameList = () => items.filter(isPage);
   const homeItem = () => items.find((it) => it.t === 'f' && it.fmt === 'home');
   const frameName = (f, n) => f.n || f.lf?.t || (f.cov ? 'Deckseite' : `Seite ${n}`);
-  const pageAt = (x, y) => frameList().find((f) => { const b = bbox(f); return x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3]; });
+  const pageAt = (x, y, m = 0) => frameList().find((f) => { const b = bbox(f); return x >= b[0] - m && x <= b[2] + m && y >= b[1] - m && y <= b[3] + m; });
 
   function renderFrames() {
     const list = frameList(), home = homeItem();
@@ -1070,9 +1070,12 @@ export function createBoard(opts) {
   const capture = (el, id) => { try { el.setPointerCapture(id); } catch { /* Zeiger schon weg */ } };
 
   // keine Browser-Gesten (Scrollen, Lupe, Doppeltipp-Zoom) auf der Fläche; Knöpfe und Eingabefelder bleiben antippbar
-  sc.addEventListener('touchstart', (e) => { if (!e.target.closest('button, input, textarea')) e.preventDefault(); }, { passive: false });
+  let touchCount = 0;   // Berührungen am Bildschirm (Hand eingeschlossen); Safari meldet zwei davon sonst als Zoom-Geste
+  sc.addEventListener('touchstart', (e) => { touchCount = e.touches.length; if (!e.target.closest('button, input, textarea')) e.preventDefault(); }, { passive: false });
+  sc.addEventListener('touchcancel', (e) => { touchCount = e.touches.length; });
   sc.addEventListener('touchmove', (e) => { if (!e.target.closest('input, textarea')) e.preventDefault(); }, { passive: false });
-  sc.addEventListener('touchend', () => {
+  sc.addEventListener('touchend', (e) => {
+    touchCount = e.touches.length;
     if (wantFocus?.isConnected && document.activeElement !== wantFocus) wantFocus.focus();
     wantFocus = null;
   });
@@ -1260,9 +1263,15 @@ export function createBoard(opts) {
     }
     if (act) return;                                 // nur eine Geste gleichzeitig
     if (crop) { finishCrop(); return; }              // daneben tippen übernimmt den Zuschnitt
-    // neben den Seiten wird nicht geschrieben, sondern verschoben
+    // neben den Seiten (mit etwas Rand) wird nicht geschrieben: die Maus verschiebt, der Stift tut nichts –
+    // er gilt aber als aufgesetzt, damit die aufliegende Hand weiter als Hand erkannt wird (kein Verschieben, kein Zoomen)
     const eraserTip = e.pointerType === 'pen' && ((e.buttons & 32) || e.button === 5);
-    if (DRAWS.includes(tool) && !eraserTip && !onSel && !pageAt(...pos(e))) { e.preventDefault(); capture(sc, e.pointerId); startPan(e); return; }
+    if (DRAWS.includes(tool) && !eraserTip && !onSel && !pageAt(...pos(e), 40)) {
+      e.preventDefault();
+      capture(sc, e.pointerId);
+      if (e.pointerType === 'pen') { penDown = true; act = { kind: 'idle', id: e.pointerId }; opts.hold(true); } else startPan(e);
+      return;
+    }
     e.preventDefault();
     capture(sc, e.pointerId);
     if (e.pointerType === 'pen') penDown = true;
@@ -1540,11 +1549,13 @@ export function createBoard(opts) {
     settleT = setTimeout(settle, 160);
   }, { passive: false });
 
-  // Safari am Mac meldet das Zwicken am Trackpad als eigene Geste (am iPad übernehmen das die Finger oben)
+  // Safari am Mac meldet das Zwicken am Trackpad als eigene Geste. Am iPad kommt sie auch bei Berührungen (etwa zwei Stellen
+  // der Hand) – dort zoomen nur die Finger oben, darum hier nur ohne Berührung am Bildschirm
   let gz = 1;
+  const trackpad = () => !touchCount && !fingers.size && !palms.size && !penDown;
   sc.addEventListener('gesturestart', (e) => { e.preventDefault(); gz = view.z; });
-  sc.addEventListener('gesturechange', (e) => { e.preventDefault(); if (!fingers.size) zoomAt(e.clientX, e.clientY, gz * e.scale); });
-  sc.addEventListener('gestureend', (e) => { e.preventDefault(); settle(); });
+  sc.addEventListener('gesturechange', (e) => { e.preventDefault(); if (trackpad()) zoomAt(e.clientX, e.clientY, gz * e.scale); });
+  sc.addEventListener('gestureend', (e) => { e.preventDefault(); if (trackpad()) settle(); });
 
   setTool('pen');
 
