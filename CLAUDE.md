@@ -74,6 +74,8 @@ Live: https://s-dudek.github.io/uebersicht/ (GitHub Pages, Branch `main`). Backe
   Sticker (`ink-stickers.js`, Knopf „Sticker“ in der Werkzeugleiste): eigene Sammlung als PNG unter `u/<user-id>/stk-….png` (PNG/SVG hochladen, SVG wird gerastert, `uploadSticker`);
   Antippen setzt eine Kopie in den Ordner des Canvas (`placeSticker`, obenauf); Auswahl → „Als Sticker“ (einzelnes Bild ausgeschnitten in Originalgröße, sonst die gezeichnete Auswahl, Name = Text der Auswahl);
   Namen und Gruppen je Person in `profiles.cat_order` 'stk' = [[datei, name, gruppe]] (`saveProfileList` in folders.js), „Bearbeiten“ im Sticker-Fenster: Name, Gruppe (auch neu), entfernen. Bucket `ink` erlaubt dafür PNG.
+  PDF öffnen (`ink-pdf.js`, Knopf „PDF öffnen“ in der Werkzeugleiste): pdf.js lokal in `js/vendor/pdf.mjs` + `pdf.worker.mjs` (`npm run pdfjs`, legacy-Build 4.x, erst bei Bedarf geladen, ohne eval, Schriften als Formen);
+  jede PDF-Seite (höchstens 60) als JPEG in den Ordner des Canvas, dann je eine neue Seite nach der aktuellen mit `im` (Bild als Hintergrund, gehört zur festen Ebene „Hintergrund“) und Muster leer; Format nach Seitenverhältnis.
   Seitenübersicht (`ink-tree.js`, Knopf „Seiten und Unterseiten“): Vorschaubilder der Seiten (öffnen, verschieben, löschen, neue Seite), darunter Notizen, Seiten und Titel aller Unterseiten.
   Notizen-Bereich (Element `n`, nur Lage) zeigt die Notizen des Ordners als Liste (HTML); jede Notiz hat eine Unterseite mit gleicher ID
   und ihrer Beschreibung oben; Notiz löschen löscht die Unterseite mit (data.js). Auswahl lässt sich nachträglich umgestalten (Farbe, Stärke, Schrift).

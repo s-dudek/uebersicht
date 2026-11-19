@@ -7,7 +7,7 @@ import { esc } from './core.js';
 import { ICON } from './icons.js';
 import { startCrop } from './ink-crop.js';
 import {
-  bbox, canRotate, cropOf, dimLabelAt, distTo, drawDim, drawFrameBg, drawImageItem, drawStroke, drawText, fontCss, FONTS, fontListeners,
+  bbox, canRotate, cropOf, dimLabelAt, distTo, drawDim, drawFrameBg, drawImageItem, drawPageImage, drawStroke, drawText, fontCss, FONTS, fontListeners,
   FRAME_BG, forgetBox, forgetErased, fullRect, GRID, imageSource, LINE_H, nearItem, NOTES_W, rotateItem, shapeStrokes, share, TEXT_FS, textSize, transform, union,
 } from './ink-draw.js';
 import { drawFrameLayout, FRAME_LAYOUTS } from './ink-layout.js';
@@ -314,6 +314,11 @@ export function createBoard(opts) {
     if (it.t === 'f') {   // Seite: weißes Papier mit Muster und Vorlage (Homescreen-Ausschnitt: nur HTML-Rahmen darüber)
       if (it.fmt === 'home') return;
       drawFrameBg(ctx, bbox(it), it.bg || (it.ly ? 'blank' : 'grid'), scale, { pc: it.pc, mc: it.mc, paper: !fix.bg, pattern: !fix.pat });
+      if (it.im && !fix.bg) {   // Seite aus einer PDF: ihr Bild gehört zum Hintergrund
+        const img = loaded.get(it.im);
+        if (img) drawPageImage(ctx, bbox(it), img);
+        else getImage(it.im).then((bmp) => { if (bmp && !loaded.has(it.im)) { loaded.set(it.im, bmp); redrawBox(bbox(it)); } });
+      }
       if (it.ly && !fix.ly) drawFrameLayout(ctx, bbox(it), it.ly, it.lf);
       return;
     }
@@ -477,6 +482,16 @@ export function createBoard(opts) {
     const added = frameList()[n];
     showPage(n);
     if (ly && added) editLayout(added);
+  }
+
+  // Seiten aus einer PDF einfügen (je Seite ihr Bild als Hintergrund, Format nach dem Seitenverhältnis), an Stelle at
+  function addPdfPages(list, at = frameList().length) {
+    const pages = frameList(), n = Math.max(pages[0]?.cov ? 1 : 0, Math.min(at, pages.length));
+    const made = list.map(({ path, w, h }) => { const fmt = w > h ? 'a4l' : 'a4p'; return { t: 'f', fmt, x: -FRAMES[fmt][0] / 2, y: 1e6, bg: 'blank', im: path }; });
+    const before = pages[n], next = [...items];
+    next.splice(before ? next.indexOf(before) : next.indexOf(pages[pages.length - 1]) + 1, 0, ...made);
+    relayout(next);
+    showPage(n);
   }
 
   // Seiten neu untereinander stellen (Reihenfolge wie in der Liste); groups: Inhalt je Seite, falls schon vorher bestimmt
@@ -1591,6 +1606,7 @@ export function createBoard(opts) {
       redrawAll();
     },
     addPage,
+    addPdfPages,
     movePage,
     deletePage,
     currentPage,
@@ -1612,7 +1628,7 @@ export function createBoard(opts) {
       goTo(v.x, v.y, Math.min(v.z, 1));
     },
     // Seiten für Export und Übersicht: Name und Rechteck in Einheiten
-    frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, cov: !!f.cov, bg: f.bg || (f.ly ? 'blank' : 'grid'), ly: f.ly, lf: f.lf, pc: f.pc, mc: f.mc, box: bbox(f) })),
+    frames: () => frameList().map((f, n) => ({ n, name: frameName(f, n + 1), fmt: f.fmt, cov: !!f.cov, bg: f.bg || (f.ly ? 'blank' : 'grid'), ly: f.ly, lf: f.lf, pc: f.pc, mc: f.mc, im: f.im, box: bbox(f) })),
     // Homescreen-Ausschnitt auf der Deckseite zeigen
     showHome() { const f = homeItem(); if (f) { const v = fitView(bbox(f)); goTo(v.x, v.y, v.z); } },
     // Rechteck des Homescreen-Ausschnitts, wenn darin etwas steht (sonst null)
@@ -1652,7 +1668,7 @@ export function createBoard(opts) {
     },
     // Seite bzw. Rechteck als Bild zeichnen (ohne ausgeblendete Ebenen); look: bg 'grid' (Kästchen), 'lines', 'dots', 'blank'
     // oder 'none' (durchsichtig), ly Vorlage mit Angaben lf, pc Farbe des Papiers, mc Farbe des Musters
-    async renderBox(box, pxW, { bg = 'grid', ly, lf, pc, mc } = {}) {
+    async renderBox(box, pxW, { bg = 'grid', ly, lf, pc, mc, im } = {}) {
       const [x0, y0, x1, y1] = box, k = pxW / (x1 - x0);
       const cv = document.createElement('canvas');
       cv.width = Math.round(pxW);
@@ -1661,7 +1677,9 @@ export function createBoard(opts) {
       await Promise.all(inside.filter((it) => it.t === 'i').map(async (it) => { const bmp = await getImage(it.src); if (bmp) loaded.set(it.src, bmp); }));
       const ctx = cv.getContext('2d');
       ctx.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
-      if (bg !== 'none') drawFrameBg(ctx, box, bg, Math.min(1, k), { pc, mc });   // klein (Vorschau): feine Linien und Punkte bleiben sichtbar
+      if (bg !== 'none') drawFrameBg(ctx, box, bg, Math.min(1, k), { pc, mc });
+      const pageImg = im && (await getImage(im));
+      if (pageImg) drawPageImage(ctx, box, pageImg);   // PDF-Seite (auch ohne Muster)   // klein (Vorschau): feine Linien und Punkte bleiben sichtbar
       if (ly) drawFrameLayout(ctx, box, ly, lf);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -1669,7 +1687,7 @@ export function createBoard(opts) {
       inside.filter(isCard).forEach((it) => opts.drawCard?.(ctx, it));   // Felder als Karte
       return cv;
     },
-    imagePaths: () => items.filter((it) => it.t === 'i').map((it) => it.src),
+    imagePaths: () => items.flatMap((it) => (it.t === 'i' ? [it.src] : it.im ? [it.im] : [])),
     // ---------- Ebenen ----------
     meta: () => ({ layers, fix, cols }),
     get cols() { return cols; },

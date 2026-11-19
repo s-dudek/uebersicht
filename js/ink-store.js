@@ -96,7 +96,7 @@ export function serialize(items, h, w, meta = {}) {
       }
       if (it.t === 'f') {
         const f = { t: 'f', fmt: it.fmt, x: it.x, y: it.y };
-        for (const k of ['n', 'bg', 'fc', 'ly', 'lf', 'cov', 'pc', 'mc']) if (it[k]) f[k] = it[k];
+        for (const k of ['n', 'bg', 'fc', 'ly', 'lf', 'cov', 'pc', 'mc', 'im']) if (it[k]) f[k] = it[k];
         return f;
       }
       if (it.t === 'x') return { ...textOut(it), ...g };
@@ -144,6 +144,7 @@ export function deserialize(data) {
       if (it.cov === 1 && it.fmt !== 'home') out.cov = 1;                              // Deckseite
       if (safeColor(it.pc)) out.pc = it.pc;                                             // Farbe des Papiers (Hintergrund)
       if (safeColor(it.mc)) out.mc = it.mc;                                             // Farbe des Musters
+      if (it.fmt !== 'home' && IMG_PATH.test(it.im || '')) out.im = it.im;              // Bild als Hintergrund (Seite aus einer PDF)
       if (FRAME_LAYOUTS.some(([k]) => k && k === it.ly)) out.ly = it.ly;                // Layout im Dudek-CI
       if (it.lf && typeof it.lf === 'object') {                                         // Angaben im Layout
         const lf = {};
@@ -243,7 +244,7 @@ export async function savePage(id, items, h, w, meta) {
 export async function deletePageTree(id) {
   // Bilder aller Seiten des Zweigs einsammeln (die Seite selbst eingeschlossen)
   const imgs = [];
-  const collect = (rows) => rows.forEach((p) => deserialize(p.data).items.forEach((it) => { if (it.t === 'i') imgs.push(it.src); }));
+  const collect = (rows) => rows.forEach((p) => deserialize(p.data).items.forEach((it) => { if (it.t === 'i') imgs.push(it.src); else if (it.im) imgs.push(it.im); }));
   const self = await sb.from('ink_pages').select('id, data').eq('id', id);
   if (self.error) return self.error;
   collect(self.data);
@@ -272,13 +273,18 @@ export async function uploadImage(file, catId) {
   cv.width = w; cv.height = h;
   cv.getContext('2d').drawImage(bmp, 0, 0, w, h);
   bmp.close?.();
-  const blob = await new Promise((res) => cv.toBlob(res, 'image/jpeg', .82));
+  return { ...(await uploadCanvas(cv, catId)), w, h };
+}
+
+// Canvas als JPEG in den Ordner des Canvas hochladen (Fotos, PDF-Seiten)
+export async function uploadCanvas(cv, catId, quality = .82) {
+  const blob = await new Promise((res) => cv.toBlob(res, 'image/jpeg', quality));
   if (!blob) throw new Error('Bild konnte nicht umgewandelt werden.');
   const path = catId ? `c/${catId}/${newId()}.jpg` : `u/${state.me}/${newId()}.jpg`;
   const { error } = await sb.storage.from(BUCKET).upload(path, blob, { contentType: 'image/jpeg', upsert: false });
   if (error) throw error;
   cache.set(path, createImageBitmap(blob));
-  return { path, w, h };
+  return { path };
 }
 
 export function getImage(path) {

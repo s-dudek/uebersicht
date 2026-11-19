@@ -275,6 +275,12 @@ export function drawFrameBg(ctx, box, bg, k = 1, { pc = PAPER, mc = PATTERN, pap
   ctx.restore();
 }
 
+// Bild als Hintergrund einer Seite (PDF-Seite): ganz sichtbar und mittig, Seitenverhältnis bleibt
+export function drawPageImage(ctx, [x0, y0, x1, y1], img) {
+  const k = Math.min((x1 - x0) / img.width, (y1 - y0) / img.height), w = img.width * k, h = img.height * k;
+  ctx.drawImage(img, x0 + (x1 - x0 - w) / 2, y0 + (y1 - y0 - h) / 2, w, h);
+}
+
 // ---------- Formen: werden zu gewöhnlichen Strichen (radierbar, auswählbar, umfärbbar) ----------
 export const SHAPES = [['line', 'Linie'], ['arrow', 'Pfeil'], ['rect', 'Rechteck'], ['ellipse', 'Ellipse'], ['tri', 'Dreieck']];
 const SHAPE_P = .6;   // gleichmäßiger Druck

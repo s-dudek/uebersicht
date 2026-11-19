@@ -5,12 +5,14 @@
   "description": "Übersicht – persönliche Web-App für Todos, Notizen, Kalender und Wochenplan",
   "scripts": {
     "vorschau": "node demo/build.mjs",
-    "supabase": "esbuild tools/supabase-entry.js --bundle --format=esm --minify --platform=browser --outfile=js/vendor/supabase.js"
+    "supabase": "esbuild tools/supabase-entry.js --bundle --format=esm --minify --platform=browser --outfile=js/vendor/supabase.js",
+    "pdfjs": "cp node_modules/pdfjs-dist/legacy/build/pdf.min.mjs js/vendor/pdf.mjs && cp node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs js/vendor/pdf.worker.mjs"
   },
   "devDependencies": {
     "@supabase/supabase-js": "2.118.0",
     "acorn": "^8.19.0",
     "acorn-walk": "^8.3.5",
-    "esbuild": "0.24.0"
+    "esbuild": "0.24.0",
+    "pdfjs-dist": "^4.10.38"
   }
 }

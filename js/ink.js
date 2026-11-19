@@ -10,6 +10,7 @@ import { deliver, exportWidth, fileName, toImage, toPdf } from './ink-export.js'
 import { drawFrameLayout, FRAME_LAYOUTS, LAYOUT_FIELDS } from './ink-layout.js';
 import { bindLayers, layersAction, layersHtml } from './ink-layers.js';
 import { isPage, preparePages } from './ink-pages.js';
+import { importPdf } from './ink-pdf.js';
 import { nameSticker, openStickers } from './ink-stickers.js';
 import { clampSize, cleanText, KINDS, openPenPanel, PALETTE } from './ink-pen.js';
 import { deletePageTree, deserialize, FRAME_NAMES, FRAMES, loadChild, loadRoot, placeSticker, removeImages, savePage, saveSticker, serialize, titleIn, uploadImage } from './ink-store.js';
@@ -387,6 +388,23 @@ picker.addEventListener('change', async () => {
   }
 });
 
+// PDF öffnen: jede Seite als Hintergrund einer neuen Seite nach der aktuellen
+const pdfPicker = Object.assign(document.createElement('input'), { type: 'file', accept: 'application/pdf,.pdf', hidden: true });
+document.body.appendChild(pdfPicker);
+pdfPicker.addEventListener('change', async () => {
+  const file = pdfPicker.files?.[0], page = top();
+  pdfPicker.value = '';
+  if (!file || !page) return;
+  try {
+    const { pages, more } = await busy(importPdf(file, cat, (i, n) => toast(`PDF wird geöffnet … Seite ${i} von ${n}`, 60000)));
+    pages.forEach((p) => page.uploaded.add(p.path));
+    if (top() === page && pages.length) page.board.addPdfPages(pages, page.board.currentPage() + 1);
+    toast(`${pages.length} ${pages.length === 1 ? 'Seite' : 'Seiten'} eingefügt${more ? ' (mehr als 60 Seiten: nur die ersten 60)' : ''}.`);
+  } catch (e) {
+    toast('PDF konnte nicht geöffnet werden: ' + (e.message || e), 5000);
+  }
+});
+
 // Sticker aus der Sammlung auf die Seite (als Kopie im Ordner des Canvas, obenauf)
 async function insertSticker(path) {
   const page = top();
@@ -568,6 +586,7 @@ export async function inkAction(act, id, btn) {
     case 'ink-redo': b?.redo(); return;
     case 'ink-img': picker.click(); return;
     case 'ink-sticker': openStickers({ onPick: insertSticker }); return;
+    case 'ink-pdf': pdfPicker.click(); return;
     case 'ink-cal': pickCalEvent().then((c) => { if (c) top()?.board.addCard(c); }); return;
     case 'ink-page': if (b) openAddPage(b.currentPage() + 1); return;
     case 'ink-cols': b?.setCols(b.cols === 2 ? 1 : 2); break;
@@ -858,6 +877,7 @@ function inkBar() {
       ${tool('dim', 'ruler', 'Bemaßung')}
       ${tb('ink-img', 'image', 'Bild hinzufügen')}
       ${tb('ink-sticker', 'sticker', 'Sticker')}
+      ${tb('ink-pdf', 'pdf', 'PDF öffnen')}
       ${tb('ink-cal', 'calendar', 'Termin einfügen', { cls: 'wide-only' })}
       <div class="ink-right">
         <div class="seg-view ink-seg">${seg('text', 'text', 'Text')}${seg('pen', 'pen', 'Zeichnen')}${seg('eraser', 'eraser', 'Radieren')}</div>

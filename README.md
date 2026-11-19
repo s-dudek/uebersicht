@@ -40,6 +40,7 @@ js/
   ink-pages.js      Canvas: Seiten untereinander, Deckseite, Umbau älterer unendlicher Flächen
   ink-layers.js     Canvas: Fenster „Ebenen“ (eigene Ebenen, Vorlage, Muster, Hintergrund)
   ink-stickers.js   Canvas: Sticker-Sammlung (PNG/SVG ohne Hintergrund)
+  ink-pdf.js        Canvas: PDF öffnen (Seiten als Hintergrund, pdf.js in js/vendor)
   ink-draw.js       Canvas: Geometrie und Zeichnen (Striche, Formen, Maße, Bilder, Kästchen)
   ink-crop.js       Canvas: Bild zuschneiden
   ink-cal.js        Canvas: Termin-Feld (Verweis auf einen Termin, Auswahl, Karte für den Export)
@@ -71,6 +72,7 @@ js/
   reminders.js      Erinnerungen und Push
   panels.js         Schnelle Notiz, Einstellungen
   vendor/supabase.js  Supabase-Bibliothek, lokal gebündelt (kein CDN)
+  vendor/pdf.mjs, pdf.worker.mjs  pdf.js (legacy 4.x) zum Öffnen von PDFs im Canvas, lokal (npm run pdfjs)
 ```
 
 ## Sicherheit
